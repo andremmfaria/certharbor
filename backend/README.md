@@ -1,3 +1,0 @@
-# backend
-
-API and server.
