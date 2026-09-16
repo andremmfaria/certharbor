@@ -1,0 +1,318 @@
+package handlers
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+
+	"step-webui/models"
+
+	appdb "step-webui/db"
+)
+
+type notificationPayload struct {
+	Type      string            `json:"type"`
+	Severity  string            `json:"severity"`
+	Title     string            `json:"title"`
+	Message   string            `json:"message"`
+	Timestamp time.Time         `json:"timestamp"`
+	Source    string            `json:"source"`
+	Version   string            `json:"version"`
+	Meta      map[string]string `json:"meta,omitempty"`
+}
+
+// AdminNotificationsGet renders the notification settings and log page.
+func (h *Handler) AdminNotificationsGet(w http.ResponseWriter, r *http.Request) {
+	settings, err := appdb.GetNotificationSettings(r.Context(), h.db)
+	if err != nil {
+		h.flash(w, r, "err", "Failed to load notification settings: "+err.Error())
+		settings = &models.NotificationSettings{NotifyExpiry: true, ExpiryDays: 30, NotifyFailures: true, NotifyAuthBurst: true}
+	}
+	logs, _ := appdb.GetNotificationLogs(r.Context(), h.db, 25)
+
+	data := h.base(w, r, "admin_notifications")
+	data["Settings"] = settings
+	data["Logs"] = logs
+	h.render(w, "admin_notifications", data)
+}
+
+// AdminNotificationsPost handles saving notification settings (webhook + SMTP).
+func (h *Handler) AdminNotificationsPost(w http.ResponseWriter, r *http.Request) {
+	if !h.requireCSRF(w, r, "/admin/notifications") {
+		return
+	}
+
+	// Load current settings so we can preserve fields the form omits and
+	// retain the stored SMTP password when the password field is left blank.
+	current, err := appdb.GetNotificationSettings(r.Context(), h.db)
+	if err != nil || current == nil {
+		current = &models.NotificationSettings{
+			ID: 1, ExpiryDays: 30, NotifyExpiry: true,
+			NotifyFailures: true, NotifyAuthBurst: true,
+			SMTPPort: 587, SMTPSecurity: "starttls",
+		}
+	}
+
+	expiryDays, _ := strconv.Atoi(r.FormValue("expiry_days"))
+	if expiryDays < 1 {
+		expiryDays = 1
+	}
+	if expiryDays > 365 {
+		expiryDays = 365
+	}
+
+	settings := &models.NotificationSettings{
+		WebhookEnabled:  r.FormValue("webhook_enabled") == "on",
+		WebhookURL:      strings.TrimSpace(r.FormValue("webhook_url")),
+		NotifyExpiry:    r.FormValue("notify_expiry") == "on",
+		ExpiryDays:      expiryDays,
+		NotifyFailures:  r.FormValue("notify_failures") == "on",
+		NotifyAuthBurst: r.FormValue("notify_auth_burst") == "on",
+	}
+
+	settings, err = parseSMTPFields(r, settings, current)
+	if err != nil {
+		h.flash(w, r, "err", err.Error())
+		http.Redirect(w, r, "/admin/notifications", http.StatusSeeOther)
+		return
+	}
+
+	if settings.WebhookEnabled {
+		if _, urlErr := url.ParseRequestURI(settings.WebhookURL); urlErr != nil {
+			h.flash(w, r, "err", "Webhook URL is invalid")
+			http.Redirect(w, r, "/admin/notifications", http.StatusSeeOther)
+			return
+		}
+	}
+	if settings.SMTPEnabled {
+		if settings.SMTPHost == "" || settings.SMTPFrom == "" {
+			h.flash(w, r, "err", "SMTP requires a host and a From address")
+			http.Redirect(w, r, "/admin/notifications", http.StatusSeeOther)
+			return
+		}
+	}
+
+	if err := appdb.SaveNotificationSettings(r.Context(), h.db, settings); err != nil {
+		h.flash(w, r, "err", "Failed to save settings: "+err.Error())
+	} else {
+		h.auditSecurity(r, fmt.Sprintf(
+			"notifications.save webhook_enabled=%t smtp_enabled=%t smtp_host=%s smtp_security=%s notify_expiry=%t notify_failures=%t notify_auth_burst=%t expiry_days=%d",
+			settings.WebhookEnabled, settings.SMTPEnabled, settings.SMTPHost, settings.SMTPSecurity,
+			settings.NotifyExpiry, settings.NotifyFailures, settings.NotifyAuthBurst, settings.ExpiryDays,
+		))
+		h.flash(w, r, "ok", "Notification settings saved")
+	}
+	http.Redirect(w, r, "/admin/notifications", http.StatusSeeOther)
+}
+
+// parseSMTPFields extracts and validates the SMTP form fields from r, merging
+// them into dst. current is the live DB row and is used to:
+//   - keep the stored password when the submitted smtp_password field is blank
+//     (security: never force-clear a credential on ambiguous form submissions)
+//   - fill in defaults when the SMTP panel fields are absent (e.g. old webhooks form)
+//
+// Returns the modified dst or an error if validation fails.
+func parseSMTPFields(r *http.Request, dst *models.NotificationSettings, current *models.NotificationSettings) (*models.NotificationSettings, error) {
+	dst.SMTPEnabled = r.FormValue("smtp_enabled") == "on"
+	dst.SMTPHost = strings.TrimSpace(r.FormValue("smtp_host"))
+	dst.SMTPUsername = strings.TrimSpace(r.FormValue("smtp_username"))
+	dst.SMTPFrom = strings.TrimSpace(r.FormValue("smtp_from"))
+
+	portStr := strings.TrimSpace(r.FormValue("smtp_port"))
+	if portStr == "" {
+		dst.SMTPPort = current.SMTPPort
+	} else {
+		p, _ := strconv.Atoi(portStr)
+		if p < 1 || p > 65535 {
+			return nil, fmt.Errorf("SMTP port must be between 1 and 65535")
+		}
+		dst.SMTPPort = p
+	}
+
+	sec := strings.ToLower(strings.TrimSpace(r.FormValue("smtp_security")))
+	switch sec {
+	case "none", "starttls", "tls":
+		dst.SMTPSecurity = sec
+	case "":
+		dst.SMTPSecurity = current.SMTPSecurity
+	default:
+		return nil, fmt.Errorf("SMTP security must be one of: none, starttls, tls")
+	}
+
+	// Password-preserve-on-blank: only update when a new non-empty value is submitted.
+	// This prevents an accidental save from erasing a stored credential.
+	newPwd := strings.TrimSpace(r.FormValue("smtp_password"))
+	if newPwd == "" {
+		dst.SMTPPassword = current.SMTPPassword
+	} else {
+		dst.SMTPPassword = newPwd
+	}
+
+	return dst, nil
+}
+
+// AdminNotificationsTest sends a test webhook notification.
+func (h *Handler) AdminNotificationsTest(w http.ResponseWriter, r *http.Request) {
+	if !h.requireCSRF(w, r, "/admin/notifications") {
+		return
+	}
+	settings, err := appdb.GetNotificationSettings(r.Context(), h.db)
+	if err != nil {
+		h.flash(w, r, "err", "Failed to load settings: "+err.Error())
+		http.Redirect(w, r, "/admin/notifications", http.StatusSeeOther)
+		return
+	}
+	if !settings.WebhookEnabled || strings.TrimSpace(settings.WebhookURL) == "" {
+		h.flash(w, r, "err", "Please enable the webhook and provide a URL first")
+		http.Redirect(w, r, "/admin/notifications", http.StatusSeeOther)
+		return
+	}
+	err = h.sendNotification(r.Context(), "", "system.test", "info", "Step-CA WebUI test notification", "Test webhook dispatch from admin panel", map[string]string{
+		"remote_addr": r.RemoteAddr,
+	})
+	if err != nil {
+		h.auditSecurity(r, "notifications.test status=failed")
+		h.flash(w, r, "err", "Webhook test failed: "+err.Error())
+	} else {
+		h.auditSecurity(r, "notifications.test status=sent")
+		h.flash(w, r, "ok", "Webhook test sent")
+	}
+	http.Redirect(w, r, "/admin/notifications", http.StatusSeeOther)
+}
+
+func (h *Handler) notifyAsync(eventKey, eventType, severity, title, message string, meta map[string]string) {
+	safeGo("notify:"+eventType, func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 7*time.Second)
+		defer cancel()
+		if err := h.sendNotification(ctx, eventKey, eventType, severity, title, message, meta); err != nil {
+			log.Printf("notification %s failed: %v", eventType, err)
+		}
+	})
+}
+
+func (h *Handler) sendNotification(ctx context.Context, eventKey, eventType, severity, title, message string, meta map[string]string) error {
+	settings, err := appdb.GetNotificationSettings(ctx, h.db)
+	if err != nil {
+		return err
+	}
+	if !settings.WebhookEnabled || strings.TrimSpace(settings.WebhookURL) == "" {
+		return nil
+	}
+	if !notificationAllowed(settings, eventType) {
+		return nil
+	}
+	if eventKey != "" && appdb.NotificationEventExists(ctx, h.db, eventKey) {
+		return nil
+	}
+
+	payload := notificationPayload{
+		Type:      eventType,
+		Severity:  severity,
+		Title:     title,
+		Message:   message,
+		Timestamp: time.Now(),
+		Source:    "step-ca-webui",
+		Version:   Version,
+		Meta:      meta,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, settings.WebhookURL, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "step-ca-webui/"+Version)
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	logEntry := &models.NotificationLog{
+		EventKey:  eventKey,
+		EventType: eventType,
+		Severity:  severity,
+		Title:     title,
+		Message:   message,
+	}
+	if err != nil {
+		logEntry.Success = false
+		logEntry.Error = err.Error()
+		_ = appdb.AddNotificationLog(ctx, h.db, logEntry)
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		err = fmt.Errorf("webhook returned HTTP %d", resp.StatusCode)
+		logEntry.Success = false
+		logEntry.Error = err.Error()
+		_ = appdb.AddNotificationLog(ctx, h.db, logEntry)
+		return err
+	}
+	logEntry.Success = true
+	_ = appdb.AddNotificationLog(ctx, h.db, logEntry)
+	return nil
+}
+
+func notificationAllowed(settings *models.NotificationSettings, eventType string) bool {
+	switch {
+	case strings.HasPrefix(eventType, "certificate.expir"):
+		return settings.NotifyExpiry
+	case strings.HasPrefix(eventType, "certificate.") && strings.HasSuffix(eventType, "_failed"):
+		return settings.NotifyFailures
+	case strings.HasPrefix(eventType, "auth."):
+		return settings.NotifyAuthBurst
+	default:
+		return true
+	}
+}
+
+// StartNotificationWorker starts a background goroutine that checks for expiring
+// certificates once daily and emits webhook notifications.
+func (h *Handler) StartNotificationWorker() {
+	safeGo("notification-worker", func() {
+		h.checkExpiringCertificates(context.Background())
+		t := time.NewTicker(24 * time.Hour)
+		defer t.Stop()
+		for range t.C {
+			h.checkExpiringCertificates(context.Background())
+		}
+	})
+}
+
+func (h *Handler) checkExpiringCertificates(ctx context.Context) {
+	settings, err := appdb.GetNotificationSettings(ctx, h.db)
+	if err != nil || !settings.NotifyExpiry || settings.ExpiryDays <= 0 {
+		return
+	}
+	certs, err := appdb.GetCerts(h.db, "active")
+	if err != nil {
+		return
+	}
+	now := time.Now()
+	limit := now.Add(time.Duration(settings.ExpiryDays) * 24 * time.Hour)
+	for _, c := range certs {
+		if c.ExpiresAt == nil || c.ExpiresAt.Before(now) || c.ExpiresAt.After(limit) {
+			continue
+		}
+		eventKey := fmt.Sprintf("cert-expiry:%d:%s", c.ID, c.ExpiresAt.Format("2006-01-02"))
+		days := int(time.Until(*c.ExpiresAt).Hours() / 24)
+		_ = h.sendNotification(ctx, eventKey, "certificate.expiring", "warn",
+			"Certificate expires soon",
+			fmt.Sprintf("Certificate %s (%s) expires in %d day(s).", c.Name, c.Domain, days),
+			map[string]string{
+				"id":      strconv.Itoa(c.ID),
+				"name":    c.Name,
+				"domain":  c.Domain,
+				"expires": c.ExpiresAt.Format(time.RFC3339),
+			})
+	}
+}

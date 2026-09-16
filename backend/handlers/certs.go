@@ -1,0 +1,566 @@
+package handlers
+
+import (
+	"bytes"
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"time"
+
+	"step-webui/models"
+
+	appdb "step-webui/db"
+)
+
+// Home renders the application home/landing page.
+func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
+	// CA status: checked via the stepca client's Health call.
+	caOnline := true
+	caClient, caErr := h.caClient()
+	if caErr != nil || caClient.Health(r.Context()) != nil {
+		caOnline = false
+	}
+
+	// Quick stats for active certificates
+	certs, _ := appdb.GetCerts(h.db, "active")
+	var activeCount, expiringCount int
+	for _, c := range certs {
+		d := daysLeftVal(c.ExpiresAt)
+		if d > 0 && d <= 30 {
+			expiringCount++
+		}
+		if d > 0 {
+			activeCount++
+		}
+	}
+
+	var leCount int
+	_ = h.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM le_certificates WHERE status='active'").Scan(&leCount)
+
+	data := h.base(w, r, "home")
+	data["CAOnline"] = caOnline
+	data["Uptime"] = fmtUptime(time.Since(StartedAt))
+	data["ActiveCerts"] = activeCount
+	data["ExpiringCerts"] = expiringCount
+	data["LECerts"] = leCount
+	data["Version"] = Version
+	h.render(w, "home", data)
+}
+
+// Dashboard renders the certificates activity dashboard.
+func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
+	certs, _ := appdb.GetCerts(h.db, "active")
+	total := len(certs)
+	okC, warnC, expC := 0, 0, 0
+	for _, c := range certs {
+		d := daysLeftVal(c.ExpiresAt)
+		switch {
+		case d <= 0:
+			expC++
+		case d <= 30:
+			warnC++
+		default:
+			okC++
+		}
+	}
+
+	ctx := r.Context()
+
+	// ── CA activity by time window ──
+	act := map[string]map[string]int{
+		"24h": dashCountActions(ctx, h.db, 24*time.Hour),
+		"7d":  dashCountActions(ctx, h.db, 7*24*time.Hour),
+		"30d": dashCountActions(ctx, h.db, 30*24*time.Hour),
+	}
+
+	// ── Overall statistics ──
+	var allCerts, leCerts, usersCount int
+	_ = h.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM certificates").Scan(&allCerts)
+	_ = h.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM le_certificates").Scan(&leCerts)
+	_ = h.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users WHERE is_active = true").Scan(&usersCount)
+
+	// ── Server uptime ──
+	uptime := time.Since(StartedAt)
+
+	data := h.base(w, r, "dash")
+	data["Certs"] = certs
+	data["Total"] = total
+	data["OkC"] = okC
+	data["WarnC"] = warnC
+	data["ExpC"] = expC
+	data["Activity"] = act
+	data["AllCerts"] = allCerts
+	data["LECerts"] = leCerts
+	data["UsersCount"] = usersCount
+	data["Uptime"] = fmtUptime(uptime)
+	data["StartedAt"] = StartedAt.Format("2006-01-02 15:04")
+	data["Version"] = Version
+	data["BuildDate"] = BuildDate
+	data["GitCommit"] = GitCommit
+	h.render(w, "dashboard", data)
+}
+
+// dashCountActions counts cert_history actions grouped by type for the given time window.
+func dashCountActions(ctx context.Context, db *sql.DB, since time.Duration) map[string]int {
+	result := map[string]int{"issue": 0, "renew": 0, "revoke": 0, "import": 0, "total": 0}
+	rows, err := db.QueryContext(
+		ctx,
+		`SELECT action, COUNT(*) FROM cert_history WHERE created_at >= $1 GROUP BY action`,
+		time.Now().Add(-since),
+	)
+	if err != nil {
+		return result
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var action string
+		var count int
+		if err := rows.Scan(&action, &count); err == nil {
+			if _, ok := result[action]; ok {
+				result[action] = count
+			}
+			result["total"] += count
+		}
+	}
+	return result
+}
+
+// ─── helper: formats a duration as a human-readable uptime string ────────────
+func fmtUptime(d time.Duration) string {
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	mins := int(d.Minutes()) % 60
+	if days > 0 {
+		return fmt.Sprintf("%dd %dh %dm", days, hours, mins)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm", hours, mins)
+	}
+	return fmt.Sprintf("%dm", mins)
+}
+
+// Certificates renders the certificate list page.
+func (h *Handler) Certificates(w http.ResponseWriter, r *http.Request) {
+	certs, _ := appdb.GetCerts(h.db, "")
+	data := h.base(w, r, "certs")
+	data["Certs"] = certs
+	h.render(w, "certificates", data)
+}
+
+// IssueGet renders the certificate issuance form.
+func (h *Handler) IssueGet(w http.ResponseWriter, r *http.Request) {
+	h.render(w, "issue", h.base(w, r, "issue"))
+}
+
+// IssuePost handles the certificate issuance form submission.
+func (h *Handler) IssuePost(w http.ResponseWriter, r *http.Request) {
+	if !h.requireCSRF(w, r, "/issue") {
+		return
+	}
+	si := h.sessionInfo(r)
+	name := trimStr(r.FormValue("name"))
+	domain := trimStr(r.FormValue("domain"))
+	policy, policyErr := normalizeIssuePolicy(r.FormValue("template"), r.FormValue("duration"), r.FormValue("key_type"), domain)
+	data := h.base(w, r, "issue")
+	if name == "" || domain == "" {
+		data["Msgs"] = []models.FlashMsg{{Type: "err", Text: "Please fill in all fields"}}
+		h.render(w, "issue", data)
+		return
+	}
+	if policyErr != nil {
+		data["Msgs"] = []models.FlashMsg{{Type: "err", Text: "Policy error: " + policyErr.Error()}}
+		h.render(w, "issue", data)
+		return
+	}
+	safeCertName, nameErr := safeName(name)
+	if nameErr != nil {
+		data["Msgs"] = []models.FlashMsg{{Type: "err", Text: "Invalid certificate name: " + nameErr.Error()}}
+		h.render(w, "issue", data)
+		return
+	}
+	certDir := filepath.Join(h.cfg.CertsDir, safeCertName)
+	if err := os.MkdirAll(certDir, 0o750); err != nil { //nolint:gosec // G703: safeName validated the component; certDir is h.cfg.CertsDir+safeName
+		data["Msgs"] = []models.FlashMsg{{Type: "err", Text: "Failed to create directory: " + err.Error()}}
+		h.render(w, "issue", data)
+		return
+	}
+	certPath := filepath.Join(certDir, "certificate.crt")
+	keyPath := filepath.Join(certDir, "private.key")
+	caClient, caErr := h.caClient()
+	if caErr != nil {
+		data["Msgs"] = []models.FlashMsg{{Type: "err", Text: "CA unreachable: " + caErr.Error()}}
+		h.render(w, "issue", data)
+		return
+	}
+	if err := issueCert(r.Context(), caClient, domain, certPath, keyPath, policy.Duration, policy.KeyType, h.cfg); err != nil {
+		h.notifyAsync("", "certificate.issue_failed", "error",
+			"Certificate issue failed",
+			fmt.Sprintf("Failed to issue certificate %s for %s: %s", name, domain, err.Error()),
+			map[string]string{"name": name, "domain": domain, "template": policy.Template, "key_type": policy.KeyType})
+		data["Msgs"] = []models.FlashMsg{{Type: "err", Text: "Error: " + err.Error()}}
+		h.render(w, "issue", data)
+		return
+	}
+	issued, expires, serial, _ := parseCertDates(certPath)
+	if err := appdb.InsertCert(h.db, &models.Certificate{
+		Name: name, Domain: domain, CertPath: certPath, KeyPath: keyPath,
+		IssuedAt: issued, ExpiresAt: expires, Serial: serial, KeyType: policy.KeyType,
+		IssueDuration: policy.Duration, // stored so Renew can reuse it
+	}); err != nil {
+		data["Msgs"] = []models.FlashMsg{{Type: "err", Text: "Database write error: " + err.Error()}}
+		h.render(w, "issue", data)
+		return
+	}
+	_ = appdb.InsertHistory(h.db, "issue", name, domain, fmt.Sprintf("Template: %s, type: %s, duration: %s", policy.Template, policy.KeyType, policy.Duration), si.Username, si.Role)
+	h.flash(w, r, "ok", fmt.Sprintf("Certificate %s for %s issued (%s)!", name, domain, policy.KeyType))
+	http.Redirect(w, r, "/issue", http.StatusFound)
+}
+
+// Renew handles a certificate renewal POST request.
+func (h *Handler) Renew(w http.ResponseWriter, r *http.Request) {
+	if !h.requireCSRF(w, r, "/certificates") {
+		return
+	}
+	si := h.sessionInfo(r)
+	c, ok := h.certFromURL(w, r)
+	if !ok {
+		return
+	}
+	if c != nil {
+		keyType := c.KeyType
+		if keyType == "" {
+			keyType = "EC:P-256"
+		}
+		// Reuse the stored issuance duration; fall back to 8760h only when the
+		// certificate predates the issue_duration column (P3-8).
+		duration := c.IssueDuration
+		if duration == "" {
+			duration = "8760h"
+		}
+		caClient, caErr := h.caClient()
+		var issueErr error
+		if caErr != nil {
+			issueErr = caErr
+		} else {
+			issueErr = issueCert(r.Context(), caClient, c.Domain, c.CertPath, c.KeyPath, duration, keyType, h.cfg)
+		}
+		if issueErr == nil {
+			issued, expires, serial, _ := parseCertDates(c.CertPath)
+			_ = appdb.InsertCert(h.db, &models.Certificate{
+				Name: c.Name, Domain: c.Domain, CertPath: c.CertPath, KeyPath: c.KeyPath,
+				IssuedAt: issued, ExpiresAt: expires, Serial: serial, KeyType: keyType,
+				IssueDuration: duration,
+			})
+			_ = appdb.InsertHistory(h.db, "renew", c.Name, c.Domain, "Renewal, type: "+keyType, si.Username, si.Role)
+			h.flash(w, r, "ok", "Certificate renewed")
+		} else {
+			h.notifyAsync("", "certificate.renew_failed", "error",
+				"Certificate renew failed",
+				fmt.Sprintf("Failed to renew certificate %s for %s: %s", c.Name, c.Domain, issueErr.Error()),
+				map[string]string{"id": strconv.Itoa(c.ID), "name": c.Name, "domain": c.Domain, "key_type": keyType})
+			h.flash(w, r, "err", "Error: "+issueErr.Error())
+		}
+	}
+	http.Redirect(w, r, "/certificates", http.StatusFound)
+}
+
+// Revoke handles a certificate revocation POST request.
+func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
+	if !h.requireCSRF(w, r, "/certificates") {
+		return
+	}
+	si := h.sessionInfo(r)
+	c, ok := h.certFromURL(w, r)
+	if !ok {
+		return
+	}
+	if c != nil {
+		caClient, caErr := h.caClient()
+		var revokeErr error
+		if caErr != nil {
+			revokeErr = caErr
+		} else {
+			revokeErr = revokeStep(r.Context(), caClient, c.CertPath, c.KeyPath, h.cfg)
+		}
+		if revokeErr != nil {
+			h.flash(w, r, "err", "Revocation error: "+revokeErr.Error())
+			http.Redirect(w, r, "/certificates", http.StatusFound)
+			return
+		}
+		_ = appdb.UpdateCertStatus(h.db, c.ID, "revoked")
+		_ = appdb.InsertHistory(h.db, "revoke", c.Name, c.Domain, "Revoked (CRL)", si.Username, si.Role)
+		h.flash(w, r, "ok", "Certificate revoked")
+	}
+	http.Redirect(w, r, "/certificates", http.StatusFound)
+}
+
+// DownloadCA serves the root CA certificate for download.
+func (h *Handler) DownloadCA(w http.ResponseWriter, r *http.Request) {
+	h.serveCAFile(w, r, h.cfg.RootCert, "home-ca-root.crt")
+}
+
+// DownloadIntermediateCA serves the intermediate CA certificate for download.
+func (h *Handler) DownloadIntermediateCA(w http.ResponseWriter, r *http.Request) {
+	h.serveCAFile(w, r, h.intermediateCertPath(), "home-ca-intermediate.crt")
+}
+
+// DownloadFullChain serves the full certificate chain (intermediate + root) for download.
+func (h *Handler) DownloadFullChain(w http.ResponseWriter, r *http.Request) {
+	intermediatePath := h.intermediateCertPath()
+	//nolint:gosec // G304: intermediateCertPath() returns a fixed path under the step-ca volume
+	intermediate, err := os.ReadFile(intermediatePath)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	root, err := os.ReadFile(h.cfg.RootCert)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	var chain bytes.Buffer
+	chain.Write(intermediate)
+	if len(intermediate) > 0 && intermediate[len(intermediate)-1] != '\n' {
+		chain.WriteByte('\n')
+	}
+	chain.Write(root)
+
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	w.Header().Set("Content-Disposition", "attachment; filename=home-ca-full-chain.crt")
+	http.ServeContent(w, r, "home-ca-full-chain.crt", time.Now(), bytes.NewReader(chain.Bytes()))
+}
+
+func (h *Handler) intermediateCertPath() string {
+	return filepath.Join(filepath.Dir(h.cfg.RootCert), "intermediate_ca.crt")
+}
+
+func (h *Handler) serveCAFile(w http.ResponseWriter, r *http.Request, path, filename string) {
+	if _, err := os.Stat(path); err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	http.ServeFile(w, r, path)
+}
+
+// DownloadCert serves the certificate file for a managed certificate.
+func (h *Handler) DownloadCert(w http.ResponseWriter, r *http.Request) {
+	c, ok := h.certFromURL(w, r)
+	if !ok {
+		return
+	}
+	if c == nil || c.CertPath == "" {
+		http.NotFound(w, r)
+		return
+	}
+	fn := "certificate.crt"
+	if safe, nameErr := safeName(c.Name); nameErr == nil {
+		fn = safe + ".crt"
+	}
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fn))
+	http.ServeFile(w, r, c.CertPath)
+}
+
+// DownloadKey serves the private key file for a managed certificate.
+func (h *Handler) DownloadKey(w http.ResponseWriter, r *http.Request) {
+	c, ok := h.certFromURL(w, r)
+	if !ok {
+		return
+	}
+	if c == nil || c.KeyPath == "" {
+		http.NotFound(w, r)
+		return
+	}
+	fn := "private.key"
+	if safe, nameErr := safeName(c.Name); nameErr == nil {
+		fn = safe + ".key"
+	}
+	h.auditSecurity(r, fmt.Sprintf("certificate.key_download id=%d name=%s domain=%s", c.ID, c.Name, c.Domain))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fn))
+	http.ServeFile(w, r, c.KeyPath)
+}
+
+// ImportGet renders the certificate import page.
+func (h *Handler) ImportGet(w http.ResponseWriter, r *http.Request) {
+	data := h.base(w, r, "import")
+	data["Unregistered"] = scanExistingCerts(h.cfg.CertsDir, h.db)
+	data["ActiveTab"] = r.URL.Query().Get("tab")
+	h.render(w, "import", data)
+}
+
+// ImportPost handles certificate import (file upload or manual path entry).
+func (h *Handler) ImportPost(w http.ResponseWriter, r *http.Request) {
+	if !h.requireCSRF(w, r, "/import") {
+		return
+	}
+	si := h.sessionInfo(r)
+	switch r.FormValue("action") {
+	case "upload":
+		h.importUpload(w, r, si)
+	case "scan":
+		h.importScan(w, r, si)
+	case "manual":
+		h.importManual(w, r, si)
+	default:
+		http.Redirect(w, r, "/import", http.StatusFound)
+	}
+}
+
+func (h *Handler) importUpload(w http.ResponseWriter, r *http.Request, si *models.SessionInfo) {
+	//nolint:gosec // G120: 10 MiB bound is explicit; ParseMultipartForm enforces it
+	_ = r.ParseMultipartForm(10 << 20)
+	name := trimStr(r.FormValue("name"))
+	domain := trimStr(r.FormValue("domain"))
+	data := h.base(w, r, "import")
+	data["ActiveTab"] = "upload"
+	certFile, _, err := r.FormFile("cert_file")
+	if name == "" || domain == "" || err != nil {
+		data["Msgs"] = []models.FlashMsg{{Type: "err", Text: "Please provide a name, domain, and upload a .crt file"}}
+		h.render(w, "import", data)
+		return
+	}
+	defer func() { _ = certFile.Close() }()
+	safeUploadName, nameErr := safeName(name)
+	if nameErr != nil {
+		data["Msgs"] = []models.FlashMsg{{Type: "err", Text: "Invalid certificate name: " + nameErr.Error()}}
+		h.render(w, "import", data)
+		return
+	}
+	certDir := filepath.Join(h.cfg.CertsDir, safeUploadName)
+	if err := os.MkdirAll(certDir, 0o750); err != nil { //nolint:gosec // G703: safeName validated the component; certDir is h.cfg.CertsDir+safeName
+		data["Msgs"] = []models.FlashMsg{{Type: "err", Text: "Failed to create directory"}}
+		h.render(w, "import", data)
+		return
+	}
+	certPath := filepath.Join(certDir, "certificate.crt")
+	keyPath := filepath.Join(certDir, "private.key")
+	if err := saveUploadedFile(certFile, certPath); err != nil {
+		data["Msgs"] = []models.FlashMsg{{Type: "err", Text: "Failed to save file"}}
+		h.render(w, "import", data)
+		return
+	}
+	if kf, _, err := r.FormFile("key_file"); err == nil {
+		_ = saveUploadedFile(kf, keyPath)
+		_ = kf.Close()
+	} else {
+		keyPath = ""
+	}
+	issued, expires, serial, err := parseCertDates(certPath)
+	if err != nil || serial == "" {
+		data["Msgs"] = []models.FlashMsg{{Type: "err", Text: "Failed to read certificate"}}
+		h.render(w, "import", data)
+		return
+	}
+	kt := getCertKeyType(certPath)
+	if err := appdb.InsertCert(h.db, &models.Certificate{
+		Name: name, Domain: domain, CertPath: certPath, KeyPath: keyPath,
+		IssuedAt: issued, ExpiresAt: expires, Serial: serial, KeyType: kt,
+	}); err != nil {
+		data["Msgs"] = []models.FlashMsg{{Type: "err", Text: "Certificate already exists in database"}}
+		h.render(w, "import", data)
+		return
+	}
+	_ = appdb.InsertHistory(h.db, "import", name, domain, "Upload from PC, type: "+kt, si.Username, si.Role)
+	h.flash(w, r, "ok", fmt.Sprintf("Certificate %s uploaded!", name))
+	http.Redirect(w, r, "/import?tab=upload", http.StatusFound)
+}
+
+func (h *Handler) importScan(w http.ResponseWriter, r *http.Request, si *models.SessionInfo) {
+	count := 0
+	for _, item := range scanExistingCerts(h.cfg.CertsDir, h.db) {
+		issued, expires, serial, err := parseCertDates(item["cert_path"])
+		if err != nil {
+			continue
+		}
+		kt := getCertKeyType(item["cert_path"])
+		if appdb.InsertCert(h.db, &models.Certificate{
+			Name: item["name"], Domain: item["name"],
+			CertPath: item["cert_path"], KeyPath: item["key_path"],
+			IssuedAt: issued, ExpiresAt: expires, Serial: serial, KeyType: kt,
+		}) == nil {
+			_ = appdb.InsertHistory(h.db, "import", item["name"], item["name"], "Server scan", si.Username, si.Role)
+			count++
+		}
+	}
+	if count > 0 {
+		h.flash(w, r, "ok", fmt.Sprintf("Found and imported: %d", count))
+	} else {
+		h.flash(w, r, "ok", "No new certificates found")
+	}
+	http.Redirect(w, r, "/import?tab=scan", http.StatusFound)
+}
+
+func (h *Handler) importManual(w http.ResponseWriter, r *http.Request, si *models.SessionInfo) {
+	name := trimStr(r.FormValue("name"))
+	domain := trimStr(r.FormValue("domain"))
+	rawCertPath := trimStr(r.FormValue("cert_path"))
+	rawKeyPath := trimStr(r.FormValue("key_path"))
+	data := h.base(w, r, "import")
+	data["ActiveTab"] = "manual"
+	if name == "" || domain == "" || rawCertPath == "" {
+		data["Msgs"] = []models.FlashMsg{{Type: "err", Text: "Please fill in all fields"}}
+		h.render(w, "import", data)
+		return
+	}
+	// Restrict cert and key paths to cfg.CertsDir to prevent arbitrary file reads.
+	certPath, err := containedPath(h.cfg.CertsDir, rawCertPath)
+	if err != nil {
+		data["Msgs"] = []models.FlashMsg{{Type: "err", Text: "Invalid certificate path: " + err.Error()}}
+		h.render(w, "import", data)
+		return
+	}
+	var keyPath string
+	if rawKeyPath != "" {
+		keyPath, err = containedPath(h.cfg.CertsDir, rawKeyPath)
+		if err != nil {
+			data["Msgs"] = []models.FlashMsg{{Type: "err", Text: "Invalid key path: " + err.Error()}}
+			h.render(w, "import", data)
+			return
+		}
+	}
+	if _, err := os.Stat(certPath); err != nil {
+		data["Msgs"] = []models.FlashMsg{{Type: "err", Text: "File not found: " + certPath}}
+		h.render(w, "import", data)
+		return
+	}
+	issued, expires, serial, _ := parseCertDates(certPath)
+	kt := getCertKeyType(certPath)
+	if err := appdb.InsertCert(h.db, &models.Certificate{
+		Name: name, Domain: domain, CertPath: certPath, KeyPath: keyPath,
+		IssuedAt: issued, ExpiresAt: expires, Serial: serial, KeyType: kt,
+	}); err != nil {
+		data["Msgs"] = []models.FlashMsg{{Type: "err", Text: "Already in database"}}
+		h.render(w, "import", data)
+		return
+	}
+	_ = appdb.InsertHistory(h.db, "import", name, domain, "Manual path", si.Username, si.Role)
+	h.flash(w, r, "ok", fmt.Sprintf("Certificate %s imported", name))
+	http.Redirect(w, r, "/import?tab=manual", http.StatusFound)
+}
+
+// APIStatus returns a JSON summary of active/expiring certificates.
+func (h *Handler) APIStatus(w http.ResponseWriter, _ *http.Request) {
+	certs, _ := appdb.GetCerts(h.db, "active")
+	type exp struct {
+		Name   string `json:"name"`
+		Domain string `json:"domain"`
+		Days   int    `json:"days"`
+	}
+	var expiring []exp
+	for _, c := range certs {
+		if d := daysLeftVal(c.ExpiresAt); d <= 30 {
+			expiring = append(expiring, exp{c.Name, c.Domain, d})
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"total": len(certs), "expiring_soon": expiring,
+	})
+}
