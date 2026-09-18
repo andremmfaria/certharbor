@@ -1,0 +1,67 @@
+{{define "content"}}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">let's encrypt &middot; logs</div>
+        <h1>Let's Encrypt Log</h1>
+    </div>
+</div>
+<div class="card card-mb-12">
+    <div class="card-body p-12-16">
+        <form method="GET"
+              action="/le/logs"
+              id="leLogsForm"
+              class="flex-filter-form-sm">
+            <label class="mb-0 w-auto">Domain:</label>
+            <input type="text"
+                   name="domain"
+                   id="leDomainFilter"
+                   placeholder="example.com"
+                   value="{{.FilterDomain}}"
+                   class="mw-320-flex1"
+                   autocomplete="off">
+            {{if .FilterDomain}}
+            <a href="/le/logs" class="btn btn-ghost btn-sm">Reset</a>
+            {{end}}
+        </form>
+    </div>
+</div>
+<div class="card">
+    <div class="tbl-wrap">
+        <table class="tbl">
+            <colgroup>
+                <col class="col-w160">
+                <col class="col-w180">
+                <col class="col-w120">
+                <col>
+            </colgroup>
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Domain</th>
+                    <th>Event</th>
+                    <th>Message</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .LELogs}}
+                <tr>
+                    <td class="td-muted-ts">{{fmtLog .CreatedAt}}</td>
+                    <td>
+                        <code>{{.Domain}}</code>
+                    </td>
+                    <td>
+                        <span class="badge {{if eq .Action "error"}}danger{{else if eq .Action "issue"}}ok{{else if eq .Action "renew"}}blue{{else if eq .Action "delete"}}danger{{else}}gray{{end}}">{{.Action}}</span>
+                    </td>
+                    <td class="text-muted">{{.Message}}</td>
+                </tr>
+            {{else}}
+                <tr>
+                    <td colspan="4" class="muted-center-p24">No records</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+<script src="/static/js/pages/le-logs.js"></script>
+{{end}}
