@@ -1,0 +1,35 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Compiled binaries (build happens inside the container)
+step-webui
+*.exe
+*.test
+
+# Documentation (not needed in the image)
+README.md
+CHANGELOG.md
+LICENSE
+docs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs and temporary files
+*.log
+tmp/
+data/
+backups/
+
+# Secrets
+.env
+.env.local
+*.env.local
+
+# SSL (mounted as a volume)
+ssl/

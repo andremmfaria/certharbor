@@ -1,0 +1,62 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    # Original set (kept)
+    - errcheck
+    - govet
+    - staticcheck
+    - ineffassign
+    - unused
+    - misspell
+    # Added in PR-0
+    - revive
+    - gocritic
+    - errorlint
+    - bodyclose
+    - noctx
+    - gosec
+    - unconvert
+    - unparam
+    # Added in PR-23 now that log/slog is adopted
+    - sloglint
+
+  settings:
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+        - style
+      disabled-tags:
+        - opinionated
+        - experimental
+    gosec:
+      excludes:
+        # errcheck already covers unchecked errors (G104)
+        - G104
+
+  exclusions:
+    paths:
+      # node_modules installed locally for frontend linters — not Go source
+      - node_modules/
+    rules:
+      # Suppress deprecated-symbol warnings on existing code — burn down in PR-23
+      - linters: [staticcheck]
+        text: "SA1019:"
+      # Suppress style/quickfix staticcheck hints in existing code
+      - linters: [staticcheck]
+        text: "^QF"
+      - linters: [staticcheck]
+        text: "ST1005:"
+      - linters: [staticcheck]
+        text: "S1039:"
+
+formatters:
+  enable:
+    - gofumpt
+  settings:
+    gofumpt:
+      # module-path tells gofumpt which import prefix is "local" so it can
+      # produce the three-group layout (stdlib | external | local).
+      module-path: step-webui
