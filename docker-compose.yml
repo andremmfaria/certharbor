@@ -1,0 +1,156 @@
+services:
+
+  # ─── PostgreSQL ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      TZ: "${TZ:-UTC}"
+      POSTGRES_DB:            stepwebui
+      POSTGRES_USER:          stepwebui
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - step-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stepwebui -d stepwebui"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ─── Step-CA ───────────────────────────────────────────────────────────────
+  step-ca:
+    image: "${STEP_CA_IMAGE:-smallstep/step-ca:0.30.2}"
+    container_name: step-ca
+    restart: unless-stopped
+    ports:
+      - "9443:9443"
+    volumes:
+      - step-ca-data:/home/step
+      - ./scripts/step-ca-bootstrap.sh:/usr/local/bin/step-ca-bootstrap.sh:ro
+    environment:
+      TZ: "${TZ:-UTC}"
+      DOCKER_STEPCA_INIT_NAME:             "Home CA"
+      DOCKER_STEPCA_INIT_DNS_NAMES:        "step-ca,${HOST_IP:-127.0.0.1}"
+      DOCKER_STEPCA_INIT_ADDRESS:          ":9443"
+      DOCKER_STEPCA_INIT_PROVISIONER_NAME: "${PROVISIONER:-admin}"
+      DOCKER_STEPCA_INIT_PASSWORD_FILE:    /run/secrets/ca_password
+      DOCKER_STEPCA_INIT_SSH:              "false"
+      STEPCA_DEFAULT_TLS_CERT_DURATION:    "${STEPCA_DEFAULT_TLS_CERT_DURATION:-8760h}"
+      STEPCA_MAX_TLS_CERT_DURATION:        "${STEPCA_MAX_TLS_CERT_DURATION:-87600h}"
+    secrets:
+      - ca_password
+    command: ["/bin/sh", "/usr/local/bin/step-ca-bootstrap.sh", "/usr/local/bin/step-ca", "--password-file", "/home/step/secrets/password", "/home/step/config/ca.json"]
+    networks:
+      - step-net
+    healthcheck:
+      test: ["CMD", "curl", "-sk", "https://localhost:9443/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  # ─── Step-CA WebUI (Go) ───────────────────────────────────────────────────────
+  step-webui:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: step-webui
+    restart: unless-stopped
+    ports:
+      - "${UI_HTTPS_PORT:-443}:8443"
+    volumes:
+      - step-webui-certs:/opt/step-webui/certs
+      - step-webui-ssl:/opt/step-webui/ssl
+      - step-webui-data:/opt/step-webui/data
+      - step-webui-uploads:/opt/step-webui/uploads
+      - step-ca-data:/home/step:ro
+    secrets:
+      - postgres_password
+      - secret_key
+      - ca_password
+    environment:
+      TZ: "${TZ:-UTC}"
+      # DATABASE_URL is constructed in entrypoint.sh from POSTGRES_PASSWORD_FILE
+      # so the password never appears in `docker inspect` or /proc/<pid>/environ.
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_HOST:    postgres
+      POSTGRES_PORT:    "5432"
+      POSTGRES_USER:    stepwebui
+      POSTGRES_DB:      stepwebui
+      CA_URL:           "https://step-ca:9443"
+      ROOT_CERT:        "/home/step/certs/root_ca.crt"
+      PROVISIONER:      "${PROVISIONER:-admin}"
+      PASSWORD_FILE:    "/opt/step-webui/data/provisioner_password"
+      # In-process TLS bootstrap (main.go/tlsbootstrap.go) — see .env.example.
+      # UI_TLS_MODE=stepca's CA_FINGERPRINT fetch is effectively a no-op here
+      # because step-ca-data is already mounted read-only at ROOT_CERT's
+      # parent path above, so the root cert is present before step-webui's
+      # bootstrap even runs; CA_FINGERPRINT/CA_ROOT_CERT_PEM matter for
+      # deployments that don't share that volume (ECS/Kubernetes).
+      UI_TLS_MODE:      "${UI_TLS_MODE:-self-signed}"
+      CA_FINGERPRINT:   "${CA_FINGERPRINT:-}"
+      CA_ROOT_CERT_PEM: "${CA_ROOT_CERT_PEM:-}"
+      UI_HOSTNAME:      "${UI_HOSTNAME:-}"
+      PROVISIONER_PASSWORD_FILE: /run/secrets/ca_password
+      SECRET_KEY_FILE:  /run/secrets/secret_key
+      SESSION_SECURE:   "${SESSION_SECURE:-true}"
+      ENABLE_HSTS:      "${ENABLE_HSTS:-false}"
+      # Required for password recovery; emailed links are built from this and
+      # never from the request. See PUBLIC_BASE_URL in .env.example.
+      PUBLIC_BASE_URL:  "${PUBLIC_BASE_URL:-}"
+      STEP_CA_IMAGE:    "${STEP_CA_IMAGE:-smallstep/step-ca:0.30.2}"
+      HOST_IP:          "${HOST_IP:-127.0.0.1}"
+      PORT:             "8443"
+      STEPWEBUI_ADMIN_PASSWORD: "${STEPWEBUI_ADMIN_PASSWORD:-}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      step-ca:
+        condition: service_healthy
+    networks:
+      - step-net
+    healthcheck:
+      test: ["CMD", "curl", "-sk", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "3", "https://localhost:8443/login"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+# ─── Secrets ───────────────────────────────────────────────────────────────
+# Each secret is a host file mounted read-only at /run/secrets/<name>.
+# Values do NOT appear in `docker inspect` environment or /proc/<pid>/environ.
+# Create them once with: make setup
+# Or manually:
+#   mkdir -p secrets && chmod 700 secrets
+#   printf '%s' 'strong-pg-pass'  > secrets/postgres_password && chmod 600 secrets/postgres_password
+#   printf '%s' 'strong-ca-pass'  > secrets/ca_password       && chmod 600 secrets/ca_password
+#   printf '%s' 'strong-48char-key' > secrets/secret_key      && chmod 600 secrets/secret_key
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password
+  secret_key:
+    file: ./secrets/secret_key
+  ca_password:
+    file: ./secrets/ca_password
+
+# ─── Volumes ───────────────────────────────────────────────────────────────
+volumes:
+  postgres-data:
+  step-ca-data:
+  step-webui-certs:
+  step-webui-ssl:
+  step-webui-data:
+  step-webui-uploads:
+
+# ─── Networks ──────────────────────────────────────────────────────────────
+networks:
+  step-net:
+    driver: bridge
+    name: step-network
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "true"
