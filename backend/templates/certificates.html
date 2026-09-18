@@ -1,0 +1,127 @@
+{{define "content"}}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">certificates</div>
+        <h1>All Certificates</h1>
+    </div>
+</div>
+<!-- Filter panel -->
+<div class="card cert-filter-card">
+    <div class="card-body cert-filter-grid">
+        <div>
+            <label>Search by name or domain</label>
+            <input type="text"
+                   id="f-search"
+                   placeholder="start.example.com"
+                   autocomplete="off">
+        </div>
+        <div>
+            <label>Status</label>
+            <select id="f-status">
+                <option value="">All</option>
+                <option value="active">Active</option>
+                <option value="expired">Expired</option>
+                <option value="revoked">Revoked</option>
+            </select>
+        </div>
+        <div>
+            <label>Key Type</label>
+            <select id="f-type">
+                <option value="">All</option>
+            </select>
+        </div>
+        <div class="row-end-gap8">
+            <span id="f-counter"
+                  class="muted-fs11 nowrap">Total: 0</span>
+            <button type="button" id="f-reset" class="btn btn-ghost btn-sm">Reset</button>
+        </div>
+    </div>
+</div>
+<div class="card">
+    <div class="tbl-wrap">
+        <table class="tbl cert-table" id="certsTable">
+            <colgroup>
+                <col class="cert-col-name">
+                <col class="cert-col-domain">
+                <col class="cert-col-date">
+                <col class="cert-col-date">
+                <col class="cert-col-status">
+                <col class="cert-col-type">
+                <col class="cert-col-serial">
+                <col class="cert-col-actions">
+            </colgroup>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Domain</th>
+                    <th>Issued</th>
+                    <th>Expires</th>
+                    <th>Status</th>
+                    <th>Type</th>
+                    <th>Serial</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Certs}}
+                <tr data-name="{{.Name}}"
+                    data-domain="{{.Domain}}"
+                    data-status="{{.Status}}"
+                    data-type="{{.KeyType}}">
+                    <td class="cert-name-cell" data-label="Name">
+                        <a href="/certificates/{{.ID}}"><strong>{{.Name}}</strong></a>
+                    </td>
+                    <td class="cert-domain-cell" data-label="Domain">
+                        <code>{{.Domain}}</code>
+                    </td>
+                    <td class="text-muted" data-label="Issued">{{fmtTime .IssuedAt}}</td>
+                    <td data-label="Expires">{{fmtTime .ExpiresAt}}</td>
+                    <td data-label="Status">
+                        <span class="badge {{if eq .Status "active"}}{{badgeClass .ExpiresAt}}{{else}}danger{{end}}">{{.Status}}</span>
+                    </td>
+                    <td data-label="Type">
+                        <span class="badge gray">{{.KeyType}}</span>
+                    </td>
+                    <td class="cert-serial-cell" data-label="Serial">
+                        <code title="{{.Serial}}">{{.Serial}}</code>
+                    </td>
+                    <td class="cert-actions-cell" data-label="Actions">
+                        <div class="cert-actions">
+                            <a href="/certificates/{{.ID}}" class="btn btn-ghost btn-sm">Details</a>
+                            {{if hasRole $.Session.Role "manager"}}
+                            <form method="POST"
+                                  action="/renew/{{.ID}}"
+                                  class="inline-form confirm-renew-form"
+                                  data-name="{{.Name}}">
+                                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                                <button type="submit"
+                                        class="btn btn-warn btn-sm"
+                                        title="Renew"
+                                        aria-label="Renew certificate">&#x21BA;</button>
+                            </form>
+                            <a href="/download/cert/{{.ID}}" class="btn btn-ghost btn-sm">CRT</a>
+                            {{if .KeyPath}}<a href="/download/key/{{.ID}}" class="btn btn-ghost btn-sm">KEY</a>{{end}}
+                            {{end}}
+                            {{if eq $.Session.Role "admin"}}{{if eq .Status "active"}}
+                            <form method="POST"
+                                  action="/revoke/{{.ID}}"
+                                  class="inline-form confirm-revoke-form"
+                                  data-name="{{.Name}}">
+                                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                                <button type="submit" class="btn btn-danger btn-sm">Revoke</button>
+                            </form>
+                            {{end}}{{end}}
+                        </div>
+                    </td>
+                </tr>
+            {{else}}
+                <tr id="emptyRow">
+                    <td colspan="8" class="muted-center-p24">No certificates</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+<script src="/static/js/pages/certificates.js"></script>
+{{end}}

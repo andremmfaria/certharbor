@@ -1,0 +1,207 @@
+{{define "content"}}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">certificates &middot; details</div>
+        <h1>{{.Cert.Name}}</h1>
+    </div>
+    <div class="row-gap8-center">
+        <a href="/certificates" class="btn btn-ghost">← Back</a>
+        <a href="/download/cert/{{.Cert.ID}}" class="btn btn-ghost">CRT</a>
+        {{if .Cert.KeyPath}}<a href="/download/key/{{.Cert.ID}}" class="btn btn-ghost">KEY</a>{{end}}
+    </div>
+</div>
+{{if .Detail}}
+<div class="grid-4col-minmax-gap12">
+    <div class="stat-card">
+        <div class="stat-label">Status</div>
+    <div class="stat-value {{if eq .Cert.Status "active"}}ok{{else}}danger{{end}}">{{.Cert.Status}}</div>
+</div>
+<div class="stat-card">
+    <div class="stat-label">Days Remaining</div>
+    <div class="stat-value {{badgeClass .Cert.ExpiresAt}}">{{.Detail.DaysLeft}}</div>
+</div>
+<div class="stat-card">
+    <div class="stat-label">Key</div>
+    <div class="stat-value fs-18">{{.Detail.PublicKey}}</div>
+</div>
+<div class="stat-card">
+    <div class="stat-label">Domain</div>
+    <div class="stat-value fs-18 ow-anywhere">{{.Cert.Domain}}</div>
+</div>
+</div>
+{{end}}
+<div class="card">
+    <div class="card-header">
+        <h3>Validation</h3>
+    </div>
+    <div class="card-body p-0">
+        <div class="tbl-wrap">
+            <table class="tbl">
+                <thead>
+                    <tr>
+                        <th>Check</th>
+                        <th>Status</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Validations}}
+                    <tr>
+                        <td>
+                            <strong>{{.Name}}</strong>
+                        </td>
+                        <td>
+                            {{if eq .Status "ok"}}<span class="badge ok">OK</span>{{end}}
+                            {{if eq .Status "warn"}}<span class="badge warn">WARN</span>{{end}}
+                            {{if eq .Status "err"}}<span class="badge danger">ERROR</span>{{end}}
+                        </td>
+                        <td>
+                            <code class="ow-anywhere">{{.Detail}}</code>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{{if .Detail}}
+<div class="card">
+    <div class="card-header">
+        <h3>Certificate</h3>
+    </div>
+    <div class="card-body">
+        <div class="info-row">
+            <div class="info-key">Subject</div>
+            <div class="info-val">
+                <code>{{.Detail.Subject}}</code>
+            </div>
+        </div>
+        <div class="info-row">
+            <div class="info-key">Issuer</div>
+            <div class="info-val">
+                <code>{{.Detail.Issuer}}</code>
+            </div>
+        </div>
+        <div class="info-row">
+            <div class="info-key">Serial</div>
+            <div class="info-val">
+                <code>{{.Detail.Serial}}</code>
+            </div>
+        </div>
+        <div class="info-row">
+            <div class="info-key">Serial hex</div>
+            <div class="info-val">
+                <code>{{.Detail.SerialHex}}</code>
+            </div>
+        </div>
+        <div class="info-row">
+            <div class="info-key">SHA-256</div>
+            <div class="info-val">
+                <code>{{.Detail.Fingerprint256}}</code>
+            </div>
+        </div>
+        <div class="info-row">
+            <div class="info-key">SHA-1</div>
+            <div class="info-val">
+                <code>{{.Detail.FingerprintSHA1}}</code>
+            </div>
+        </div>
+        <div class="info-row">
+            <div class="info-key">Valid from</div>
+            <div class="info-val">{{fmtLog .Detail.NotBefore}}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-key">Valid until</div>
+            <div class="info-val">{{fmtLog .Detail.NotAfter}}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-key">Signature</div>
+            <div class="info-val">{{.Detail.Signature}}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-key">Cert path</div>
+            <div class="info-val">
+                <code>{{.Detail.CertPath}}</code>
+            </div>
+        </div>
+        <div class="info-row">
+            <div class="info-key">Key path</div>
+            <div class="info-val">
+                <code>{{.Detail.KeyPath}}</code>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="grid-2col-gap14">
+    <div class="card">
+        <div class="card-header">
+            <h3>Subject Alternative Names</h3>
+        </div>
+        <div class="card-body">
+            <div class="info-row">
+                <div class="info-key">DNS</div>
+                <div class="info-val">
+                    {{range .Detail.DNSNames}}<span class="badge blue badge-m2">{{.}}</span>{{else}}<span class="text-muted">—</span>{{end}}
+                </div>
+            </div>
+            <div class="info-row">
+                <div class="info-key">IP</div>
+                <div class="info-val">
+                    {{range .Detail.IPAddresses}}<span class="badge purple badge-m2">{{.}}</span>{{else}}<span class="text-muted">—</span>{{end}}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header">
+            <h3>Key Usage</h3>
+        </div>
+        <div class="card-body">
+            <div class="info-row">
+                <div class="info-key">Key usage</div>
+                <div class="info-val">
+                    {{range .Detail.KeyUsage}}<span class="badge gray badge-m2">{{.}}</span>{{else}}<span class="text-muted">—</span>{{end}}
+                </div>
+            </div>
+            <div class="info-row">
+                <div class="info-key">Extended</div>
+                <div class="info-val">
+                    {{range .Detail.ExtKeyUsage}}<span class="badge gray badge-m2">{{.}}</span>{{else}}<span class="text-muted">—</span>{{end}}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}
+<div class="card">
+    <div class="card-header">
+        <h3>Deploy snippets</h3>
+    </div>
+    <div class="card-body">
+        <div class="grid-3col-minmax-gap12">
+            <div>
+                <label>nginx</label>
+                <textarea readonly rows="6">ssl_certificate {{.Cert.CertPath}};
+ssl_certificate_key {{.Cert.KeyPath}};
+ssl_trusted_certificate /path/to/home-ca-full-chain.crt;
+ssl_protocols TLSv1.2 TLSv1.3;</textarea>
+            </div>
+            <div>
+                <label>Apache</label>
+                <textarea readonly rows="6">SSLCertificateFile {{.Cert.CertPath}}
+SSLCertificateKeyFile {{.Cert.KeyPath}}
+SSLCertificateChainFile /path/to/home-ca-full-chain.crt
+SSLProtocol all -SSLv3 -TLSv1 -TLSv1.1</textarea>
+            </div>
+            <div>
+                <label>Traefik file provider</label>
+                <textarea readonly rows="6">tls:
+  certificates:
+    - certFile: {{.Cert.CertPath}}
+      keyFile: {{.Cert.KeyPath}}</textarea>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}
