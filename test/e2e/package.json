@@ -16,7 +16,7 @@
     "@playwright/test": "1.62.1",
     "@types/node": "22.10.2",
     "@types/pngjs": "6.0.5",
-    "eslint": "9.17.0",
+    "eslint": "10.14.0",
     "jsqr": "1.4.0",
     "otplib": "13.4.1",
     "pngjs": "7.0.0",
