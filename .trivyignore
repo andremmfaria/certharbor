@@ -1,0 +1,2 @@
+# go-jose/v3 JWK RSA parsing DoS. No fixed v3 release exists, the module is pulled in by smallstep's go.step.sm/crypto, and govulncheck reports no reachable call path. The expiry forces a re-check.
+CVE-2026-116587 exp:2026-12-06
