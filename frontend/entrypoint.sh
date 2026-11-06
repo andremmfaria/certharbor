@@ -168,6 +168,11 @@ wait_for_certs() {
 	log "still missing after ${WEB_CERT_WAIT_SECONDS}s: $_m. Serving 503 naming it until it arrives"
 	WEB_MISSING=$_m
 	export WEB_MISSING
+	# Made here, never at build time: a key baked into the image is the same key
+	# in every deployment.
+	openssl req -x509 -nodes -newkey ec -pkeyopt ec_paramgen_curve:P-256 -days 30 \
+		-subj "/CN=step-webui-web waiting for its certificate" \
+		-keyout /etc/step-webui/ephemeral/waiting.key -out /etc/step-webui/ephemeral/waiting.crt 2>/dev/null
 	render "$WAITING_TEMPLATE" "$NGINX_CONF"
 	STATE=waiting
 }

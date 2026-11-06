@@ -36,17 +36,7 @@ SHELL ["/bin/ash", "-o", "pipefail", "-c"]
 RUN npm install --no-save ../clients/ts/dist/client.tgz \
  && CONTRACT_SHA="${CONTRACT_SHA:-$(sha256sum ../backend/openapi/openapi.json | cut -d' ' -f1)}" npm run build
 
-# ── Stage 2: the waiting-mode certificate ────────────────────────────────────
-# Bundled so the origin can answer with a 503 naming the missing web leaf
-# instead of refusing connections. It only ever fronts that 503.
-FROM alpine:3.23 AS ephemeral
-# hadolint ignore=DL3018
-RUN apk add --no-cache openssl \
- && openssl req -x509 -nodes -newkey ec -pkeyopt ec_paramgen_curve:P-256 -days 3650 \
-      -subj "/CN=step-webui-web waiting for its certificate" \
-      -keyout /waiting.key -out /waiting.crt
-
-# ── Stage 3: nginx with the config, no SPA ───────────────────────────────────
+# ── Stage 2: nginx with the config, no SPA ───────────────────────────────────
 # Pinned to a minor. The master process must run as root: it reads web.key,
 # which the backend writes 0600 as uid 10001, before dropping to the worker
 # user. nginx-unprivileged or a USER line breaks TLS startup.
@@ -55,11 +45,10 @@ RUN apk add --no-cache openssl \
 # that must be the backend's uid 10001 directory, never a root-owned one here.
 FROM nginx:1.29-alpine AS runtime-base
 # hadolint ignore=DL3018
-RUN apk add --no-cache curl \
+RUN apk add --no-cache curl openssl \
  && rm -f /etc/nginx/conf.d/default.conf \
  && rm -rf /usr/share/nginx/html/* \
  && mkdir -p /etc/step-webui/ephemeral
-COPY --from=ephemeral /waiting.crt /waiting.key /etc/step-webui/ephemeral/
 COPY frontend/nginx.conf.template frontend/nginx.waiting.conf.template frontend/conf.d/doc-headers.conf.template /etc/step-webui/
 COPY frontend/conf.d/proxy-headers.conf /etc/nginx/conf.d/
 COPY --chmod=0755 frontend/entrypoint.sh /usr/local/bin/step-webui-web-entrypoint
