@@ -32,7 +32,12 @@
       selected.forEach(function (v) {
         var chip = document.createElement('span');
         chip.className = 'ms-chip';
-        chip.innerHTML = (LABELS[v] || v) + ' <span class="ms-chip-x" data-v="' + v + '">&times;</span>';
+        var x = document.createElement('span');
+        x.className = 'ms-chip-x';
+        x.setAttribute('data-v', v);
+        x.textContent = '\u00d7';
+        chip.appendChild(document.createTextNode((LABELS[v] || v) + ' '));
+        chip.appendChild(x);
         chips.appendChild(chip);
       });
     }
