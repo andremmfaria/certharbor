@@ -11,4 +11,7 @@ regexes = [
   # not a secret). Historical commit 3f0259581dba6b47f60e67f60606096b66fbe266,
   # backend/le/lego.go:90, rule generic-api-key.
   '''Certificate\.KeyType\s*=\s*certcrypto\.''',
+  # A fixture string in commits 9a054c4 and b037021,
+  # backend/security/session_keys_test.go:12, rule generic-api-key.
+  '''testSecret = "a-long-test-secret-key-32charsXX"''',
 ]

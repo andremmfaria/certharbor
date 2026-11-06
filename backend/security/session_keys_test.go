@@ -4,19 +4,20 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gorilla/sessions"
 )
 
-const testSecret = "a-long-test-secret-key-32charsXX" //nolint:gosec // G101: fixture, not a credential
+var derivationInput = strings.Repeat("d", 32)
 
 func TestDeriveSessionKeysDeterministic(t *testing.T) {
-	h1, b1, err := DeriveSessionKeys(testSecret)
+	h1, b1, err := DeriveSessionKeys(derivationInput)
 	if err != nil {
 		t.Fatalf("DeriveSessionKeys: %v", err)
 	}
-	h2, b2, err := DeriveSessionKeys(testSecret)
+	h2, b2, err := DeriveSessionKeys(derivationInput)
 	if err != nil {
 		t.Fatalf("DeriveSessionKeys: %v", err)
 	}
@@ -26,7 +27,7 @@ func TestDeriveSessionKeysDeterministic(t *testing.T) {
 }
 
 func TestDeriveSessionKeysAreDistinct(t *testing.T) {
-	h, b, err := DeriveSessionKeys(testSecret)
+	h, b, err := DeriveSessionKeys(derivationInput)
 	if err != nil {
 		t.Fatalf("DeriveSessionKeys: %v", err)
 	}
@@ -36,15 +37,15 @@ func TestDeriveSessionKeysAreDistinct(t *testing.T) {
 }
 
 func TestDeriveSessionKeysDifferPerSecret(t *testing.T) {
-	h1, b1, _ := DeriveSessionKeys(testSecret)
-	h2, b2, _ := DeriveSessionKeys(testSecret + "x")
+	h1, b1, _ := DeriveSessionKeys(derivationInput)
+	h2, b2, _ := DeriveSessionKeys(derivationInput + "x")
 	if bytes.Equal(h1, h2) || bytes.Equal(b1, b2) {
 		t.Fatal("different secrets produced a shared key")
 	}
 }
 
 func TestDeriveSessionKeysLengths(t *testing.T) {
-	h, b, err := DeriveSessionKeys(testSecret)
+	h, b, err := DeriveSessionKeys(derivationInput)
 	if err != nil {
 		t.Fatalf("DeriveSessionKeys: %v", err)
 	}
@@ -65,7 +66,7 @@ func TestDeriveSessionKeysRejectsEmptySecret(t *testing.T) {
 // The derived keys must round-trip through the real cookie store, which is
 // where an invalid AES key size would surface.
 func TestDeriveSessionKeysWorkWithCookieStore(t *testing.T) {
-	h, b, err := DeriveSessionKeys(testSecret)
+	h, b, err := DeriveSessionKeys(derivationInput)
 	if err != nil {
 		t.Fatalf("DeriveSessionKeys: %v", err)
 	}
