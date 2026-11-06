@@ -14,7 +14,7 @@
 
 ---
 
-A small-team-friendly web UI on top of `smallstep/step-ca`. No SaaS, no telemetry, no vendor lock-in, runs on your own server in three Docker containers (step-webui, PostgreSQL, step-ca). The UI talks to step-ca through the Go `smallstep/certificates` library, not the `step` CLI.
+A small-team-friendly web UI on top of `smallstep/step-ca`. No SaaS, no telemetry, no vendor lock-in, runs on your own server in four Docker containers (the nginx origin step-webui-web, the Go backend step-webui, PostgreSQL, step-ca). The UI talks to step-ca through the Go `smallstep/certificates` library, not the `step` CLI.
 
 ## Features
 
@@ -32,11 +32,11 @@ A small-team-friendly web UI on top of `smallstep/step-ca`. No SaaS, no telemetr
 git clone https://github.com/andremmfaria/step-ca-webui.git
 cd step-ca-webui
 make setup   # copies .env.example → .env and generates secrets/
-# edit .env: set HOST_IP, UI_HTTPS_PORT, PROVISIONER, TZ, and STEPWEBUI_ADMIN_PASSWORD
+# edit .env: set HOST_IP, WEB_HOSTNAME, UI_HTTPS_PORT, PROVISIONER, TZ, and STEPWEBUI_ADMIN_PASSWORD
 make up      # docker compose up -d --build
 ```
 
-`STEPWEBUI_ADMIN_PASSWORD` is not optional on a first boot, see [docs/deployment.md](docs/deployment.md). Run `make help` for every other target.
+`STEPWEBUI_ADMIN_PASSWORD` is not optional on a first boot, and neither is `WEB_HOSTNAME`, the name browsers use for the nginx origin, see [docs/deployment.md](docs/deployment.md). Run `make help` for every other target.
 
 ## Documentation
 

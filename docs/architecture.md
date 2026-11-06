@@ -4,11 +4,12 @@ What runs in production today, the request path, and the state of the SPA migrat
 
 ## Components today
 
-Three containers, wired by `docker-compose.yml`:
+Four containers, wired by `docker-compose.yml`:
 
 | Container | Image / build | Role |
 |---|---|---|
-| `step-webui` | built from `backend/Dockerfile` | Go binary. Server-rendered HTML UI (chi router, `html/template`) plus a small versioned JSON API. Owns sessions, CSRF, rate limiting, and all step-ca/database access |
+| `step-webui-web` | built from `frontend/Dockerfile` | nginx, the only public origin. Terminates TLS for `WEB_HOSTNAME` with its own leaf, serves the React SPA under `/app/`, and proxies everything else to `step-webui` over TLS, verifying the backend's leaf against the CA root. Holds no session or database access |
+| `step-webui` | built from `backend/Dockerfile` | Go binary, publishing no host port. Server-rendered HTML UI (chi router, `html/template`) plus a small versioned JSON API. Owns sessions, CSRF, rate limiting, and all step-ca/database access |
 | `postgres` | `postgres:16-alpine` | Users, certificate history, Let's Encrypt state, notification settings, password-reset tokens |
 | `step-ca` | `smallstep/step-ca:0.30.2` (pinned via `STEP_CA_IMAGE`) | The actual PKI. step-webui never runs the `step` CLI against it: `backend/stepca/` wraps `github.com/smallstep/certificates/ca` and `github.com/smallstep/certificates/api` directly (pinned to the same v0.30.2), so certificate issuance and revocation are Go library calls, not shelled-out subprocesses. Renewal has no separate call path in `backend/stepca/`, it is a re-issue through the same `issueCert` helper handlers use for a fresh certificate (`backend/handlers/cert_ops.go:118`, `backend/handlers/certs.go:225-250`) |
 
@@ -17,29 +18,31 @@ Three containers, wired by `docker-compose.yml`:
 ## Request flow
 
 ```
-                          ┌────────────┐
-   Browser  ─── HTTPS ───►│  step-webui   │  Go binary, chi router, port 8443
-                          │  (chi)     │
-                          └──┬─────┬───┘
-                             │     │
-                  SQL ◄──────┘     └──────► HTTPS API (ca library)
-                             │     │
-                          ┌──▼──┐ ┌▼──────────┐
-                          │ pg  │ │ step-ca   │  port 9443
-                          │ 16  │ │ (PKI)     │
-                          └─────┘ └───────────┘
+                       ┌────────────────┐            ┌──────────────┐
+   Browser ── HTTPS ──►│ step-webui-web │── HTTPS ──►│  step-webui  │  Go, chi router, port 8443
+                       │ (nginx)        │            │              │
+                       └────────────────┘            └──┬───────┬───┘
+                        /app/ : the SPA bundle          │       │
+                        everything else : proxied  SQL ◄┘       └► HTTPS API (ca library)
+                                                     ┌──▼──┐ ┌────▼──────┐
+                                                     │ pg  │ │ step-ca   │  port 9443
+                                                     │ 16  │ │ (PKI)     │
+                                                     └─────┘ └───────────┘
 
-   step-webui exposes :443 (UI_HTTPS_PORT) → internally listens on :8443
+   step-webui-web publishes :443 (UI_HTTPS_PORT) → listens on :8443
+   step-webui publishes nothing, nginx reaches it as step-webui:8443 on step-network
    step-ca exposes :9443, published on the host by default (docker-compose.yml
    maps "9443:9443") → remove that port mapping yourself to keep it internal-only
 ```
+
+nginx sends the prefixes in `frontend/proxy-prefixes.json` (`/api`, `/auth`, `/health`, `/ready`, `/openapi.json`) to the backend, serves `/app/` from the bundle with an `index.html` fallback for deep links, and passes every other path, the server-rendered pages and `/static/` included, to the backend through a block marked `PHASE9-DELETE`. Every proxying block includes `frontend/conf.d/proxy-headers.conf`, which replaces `X-Forwarded-For` and `X-Real-IP` with the real peer and clears `True-Client-IP` and `Forwarded`. The backend trusts that header only from the address `WEB_UPSTREAM_HOST` resolves to. nginx re-resolves `step-webui` per request, so a restarted backend is followed without restarting nginx, and answers a problem document with type `upstream-unavailable` when the backend is unreachable.
 
 Inside `step-webui`, one `chi.Router` serves two things on the same port:
 
 - The server-rendered UI: `/login`, `/dashboard`, `/certificates`, `/admin/*`, `/le/*`, `/profile/*`, and so on, rendered from `backend/templates/` with `html/template`.
 - A versioned JSON API mounted at `/api/v1` by `humaapi.Mount` (`backend/api/`), described by an OpenAPI 3.1 document at `backend/openapi/openapi.json`.
 
-`/health` (liveness, always 200 while the process is up) and `/ready` (readiness, checks a database ping and step-ca reachability, answers 503 with a body naming which one failed) sit outside both, unauthenticated.
+`/health` (liveness, always 200 while the process is up) and `/ready` (readiness, checks a database ping, step-ca reachability and both TLS leaves, reporting each leaf's `notAfter`, and answers 503 with a body naming what failed, including the self-signed fallback marker, a missing web leaf, or a leaf overdue for renewal) sit outside both, unauthenticated.
 
 ## Roles
 
@@ -57,6 +60,8 @@ This is genuinely small. `backend/api/register.go` registers exactly:
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
+| POST | `/api/v1/session` | public (CSRF-checked, rate-limited) | Log in with a username and password |
+| POST | `/api/v1/session/mfa` | public (CSRF-checked, rate-limited) | Complete a login with a second factor |
 | GET | `/api/v1/session` | optional | Current session state, exempt from idle-timeout renewal so an open tab cannot keep a session alive forever |
 | DELETE | `/api/v1/session` | public (CSRF-checked only when a session is present) | Log out, expiring the session and CSRF cookies |
 | GET | `/api/v1/config` | public | Public runtime flags: `oidcEnabled`, `oidcButtonLabel`, `acmeEnabled`, `appVersion`, `contractSha`, `roleLevels`, `sessionIdleTimeoutSeconds`, `expiringSoonDays`. Note `oidcButtonLabel` and `acmeEnabled` are spike placeholders with no backing config field yet |
@@ -68,9 +73,11 @@ An unmatched path under `/api/v1` gets an RFC 9457 problem document instead of a
 
 ## Migration state
 
-The repository is partway through [plans/frontend-backend-split.md](../plans/frontend-backend-split.md) (revision 10 at time of writing), which replaces the server-rendered UI above with a React SPA served by its own container, talking to `step-webui` only through the versioned JSON API. Phases 0, 1 and 2 are complete and merged. **The server-rendered UI described above is what actually serves users today**, nothing in `frontend/` is deployed.
+The repository is partway through [plans/frontend-backend-split.md](../plans/frontend-backend-split.md), which replaces the server-rendered UI above with the React SPA, talking to `step-webui` only through the versioned JSON API. **The server-rendered UI is what serves users today**: the SPA under `/app/` has its shell, login with two-step MFA, navigation and every route, each leaf still a placeholder.
 
-`frontend/` is a Phase 0 throwaway spike: it boots, calls `getSession` through the generated client, and renders the session-state discriminator, nothing more. It uses React 19.2.0, Vite 8.3.5 and `@vitejs/plugin-react` 6.1.1. It also carries the nginx spike configs (`frontend/nginx.spike.conf`, `frontend/conf.d/proxy-headers.conf`) mounted by `compose.phase0-spike.yml:20-21` for the `step-webui-web` container.
+The `/app/` base is temporary: `base` in `frontend/vite.config.ts` sets it, the router's `basename` follows it, and nginx's `/app/` blocks and the legacy passthrough carry `PHASE9-DELETE` markers for removal once the SPA owns the root. `/reset-password` and the OIDC callback stay at the root throughout, because reset links are emailed and the OIDC redirect URI is registered with the IdP.
+
+`frontend/` is the Vite, React and TypeScript app (React 19.3.1, Vite 8.3.5, `@vitejs/plugin-react` 6.2.1), its nginx config (`nginx.conf.template`, `conf.d/`), its entrypoint (`entrypoint.sh`: certificate wait, reload watcher, CSP hashes of the served `index.html`'s inline blocks) and `frontend/Dockerfile`.
 
 ### The generated TypeScript client
 

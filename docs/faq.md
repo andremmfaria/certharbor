@@ -5,7 +5,7 @@ Only entries still true against the current codebase.
 <details>
 <summary><b>How do I change the HTTPS port from 443?</b></summary>
 
-Set `UI_HTTPS_PORT` in `.env`:
+Set `UI_HTTPS_PORT` in `.env`. It is the host port nginx (`step-webui-web`) publishes, the only published port of the UI:
 
 ```env
 UI_HTTPS_PORT=8443
@@ -23,7 +23,7 @@ Use the admin UI: **Admin > Backup > Download backup bundle**, or the CLI:
 make backup
 ```
 
-Both produce a SHA-256-checksummed manifest, through two separate implementations that cover different ground. The admin UI (`backend/handlers/backup.go`) archives a `pg_dump`, `/home/step` (the step-ca-data mount), `/opt/step-webui/data`, certificates and uploads. `make backup` archives all six named Docker volumes, including `postgres-data` and `step-webui-ssl` (the UI's own TLS material), which the admin-UI export does not cover, alongside its own `pg_dump`. Restore is manual by design: unpack the archive, restore the PostgreSQL dump, and restore the Docker volumes.
+Both produce a SHA-256-checksummed manifest, through two separate implementations that cover different ground. The admin UI (`backend/handlers/backup.go`) archives a `pg_dump`, `/home/step` (the step-ca-data mount), `/opt/step-webui/data`, certificates and uploads. `make backup` archives all seven named Docker volumes, including `postgres-data`, `step-webui-ssl` (the backend's TLS material) and `step-webui-web-ssl` (nginx's), which the admin-UI export does not cover, alongside its own `pg_dump`. Restore is manual by design: unpack the archive, restore the PostgreSQL dump, and restore the Docker volumes.
 </details>
 
 <details>
@@ -46,23 +46,23 @@ The `totp_enabled`/`totp_secret` reset and `is_active = true` matter even if you
 </details>
 
 <details>
-<summary><b>The browser warns about a self-signed certificate. How do I use my own?</b></summary>
+<summary><b>The browser does not trust the certificate. How do I use my own?</b></summary>
 
-Three approaches, depending on how you obtain the certificate:
+The browser sees nginx's leaf, `web.crt`, never the backend's. By default (`WEB_TLS_MODE=stepca`) the backend issues it for `WEB_HOSTNAME` from the bundled step-ca and renews it, and nginx reloads on change with no restart, so it chains to this stack's private root. Two approaches:
 
-**Option 1, operator-provided cert (static):** set `UI_TLS_MODE=provided` and mount your certificate and key into the `step-webui-ssl` volume at `/opt/step-webui/ssl/server.crt` and `server.key`. `SSL_CERT` and `SSL_KEY` are not environment variables the app reads, despite appearing in `.env.example`, these paths are hardcoded in `backend/config/config.go`, so setting them in `.env` has no effect. The entrypoint does not touch those files. Recreate the container to pick up the change.
+**Option 1, trust the root:** import step-ca's root certificate (`/home/step/certs/root_ca.crt` in the `step-ca` container, or `/download/ca` in the UI) into the browsers and operating systems that use the UI.
 
-**Option 2, manual replacement (hot-swap, no restart required):** replace the cert and key files inside the `step-webui-ssl` volume with your own. The TLS hot-reloader (`backend/tlsreload.go`) re-stats both files on every handshake and reloads them automatically when their modification time changes.
+**Option 2, operator-provided cert:** set `WEB_TLS_MODE=provided` and mount `web.crt`, `web.key` and the root that signed the backend's leaf as `root_ca.crt`, read-only at `/etc/step-webui/ssl` in `step-webui-web`, for example by replacing its `step-webui-web-ssl` mount with a bind mount. nginx exits at once naming any of the three that is missing. See [docs/configuration.md](configuration.md#the-web-origins-certificate).
 
-**Option 3, cert from step-ca itself:** set `UI_TLS_MODE=stepca`. The Go app requests a signed leaf from step-ca on startup and renews it in a background goroutine, the hot-reloader picks up each renewal with zero downtime. Requires `CA_URL`, `CA_FINGERPRINT` (or a pre-populated `ROOT_CERT`), and the provisioner password.
+The backend's own leaf (`UI_TLS_MODE`, `step-webui-ssl`) serves only the hop from nginx, which verifies it against the CA root as `step-webui`, so leave `UI_TLS_MODE=stepca` unless you provide a backend leaf for that name chaining to the root nginx is given.
 </details>
 
 <details>
 <summary><b>Can I run this behind Cloudflare / Caddy / nginx?</b></summary>
 
-Yes. Point your reverse proxy at `step-webui:8443` (HTTPS upstream).
+The stack already runs one: `step-webui-web` is an nginx origin with its own certificate in front of the backend, and the backend trusts it by resolving its name, see [docs/configuration.md](configuration.md#web-origin-nginx).
 
-Set `TRUST_PROXY=true` and `TRUSTED_PROXY_CIDRS` to the proxy's own address (a `/32` or `/128` unless it's a pool) in `.env`. Both reach the container through `docker-compose.yml`'s `environment:` block already. `TRUST_PROXY=true` with an empty or unusable `TRUSTED_PROXY_CIDRS` is a startup fatal, by design, see [docs/security.md](security.md#application-security-controls).
+To put another proxy in front of that, point it at nginx's published port and add nginx's realip module (`set_real_ip_from`, `real_ip_header`, `real_ip_recursive on`) for the new hop, so nginx's `$remote_addr` stays the true client. Widening `TRUSTED_PROXY_CIDRS` instead collapses the login rate limiter to one bucket for everyone. For a proxy that replaces nginx, set `TRUST_PROXY=true` and `TRUSTED_PROXY_CIDRS` to the proxy's own address (a `/32` or `/128` unless it's a pool) in `.env`. Both reach the container through `docker-compose.yml`'s `environment:` block already. Only `X-Forwarded-For` is read, so the proxy must replace it with the address it sees rather than append to it. A malformed `TRUSTED_PROXY_CIDRS` entry is a startup fatal, by design. With the list empty, the app trusts whatever `WEB_UPSTREAM_HOST` (default `step-webui-web`) resolves to, see [docs/security.md](security.md#application-security-controls).
 
 Set `PUBLIC_BASE_URL` to the origin your users actually reach, e.g. `https://ca.example.com`. Emailed password-reset links are built from it, deliberately never from `Host` or `X-Forwarded-Proto`, so forwarding those headers does not affect the links.
 </details>
