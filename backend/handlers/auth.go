@@ -19,7 +19,7 @@ import (
 // key regardless of TCP connection cycling.
 // When TrustProxy=true the middleware.RealIP middleware may have normalised
 // RemoteAddr to a bare IP, so SplitHostPort returns an error and we fall back
-// to the raw value — both cases produce the correct host-only string.
+// to the raw value, both cases produce the correct host-only string.
 func clientIP(r *http.Request) string {
 	return middleware.ClientIP(r)
 }
@@ -202,7 +202,7 @@ func (h *Handler) completeLogin(w http.ResponseWriter, r *http.Request, user *mo
 	s.Values["csrf_token"] = csrfToken
 	_ = s.Save(r, w)
 	h.SetCSRFCookie(w, csrfToken)
-	_ = appdb.LogAuth(h.db, user.Username, clientIP(r), true, reason)
+	_ = h.authStore().LogAuth(user.Username, clientIP(r), true, reason)
 }
 
 // LogoutGet answers an old bookmark. Logging out revokes every session the

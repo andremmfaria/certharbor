@@ -338,7 +338,7 @@ func TestOIDCCallback_ValidStateThenDBError(t *testing.T) {
 	cfg := testConfig(issuer)
 	provider := discoverProvider(t, issuer)
 
-	// Wire handler with nil DB — all OIDC logic runs, DB call fails cleanly.
+	// Wire handler with nil DB, all OIDC logic runs, DB call fails cleanly.
 	h := &Handler{
 		db:    (*sql.DB)(nil),
 		cfg:   cfg,
@@ -382,13 +382,13 @@ func TestOIDCCallback_ValidStateThenDBError(t *testing.T) {
 // VerifyPassword must reject the OIDC sentinel password_hash.
 func TestVerifyPasswordRejectsOIDCSentinel(t *testing.T) {
 	const sentinel = "oidc:jumpcloud"
-	// Import security inline — we're in the handlers package so import directly.
+	// Import security inline, we're in the handlers package so import directly.
 	// Use a blank import to call the package-level function.
 	// Since security is a separate package, we call it via the test binary's
 	// linked code.
 	ok := oidcSentinelNotVerifiable(sentinel)
 	if !ok {
-		t.Fatal("VerifyPassword accepted the OIDC sentinel hash — it must not")
+		t.Fatal("VerifyPassword accepted the OIDC sentinel hash, it must not")
 	}
 }
 
@@ -411,7 +411,7 @@ func oidcSentinelNotVerifiable(hash string) bool {
 				}
 			}
 			if allHex {
-				return false // looks like SHA-256 — sentinel is not
+				return false // looks like SHA-256, sentinel is not
 			}
 		}
 		// sentinel "oidc:jumpcloud" matches neither → VerifyPassword returns false

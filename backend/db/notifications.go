@@ -41,7 +41,7 @@ func InitNotificationSchema(d *sql.DB) error {
 		return err
 	}
 
-	// Forward migrations — ADD COLUMN IF NOT EXISTS is idempotent; one Exec per column
+	// Forward migrations, ADD COLUMN IF NOT EXISTS is idempotent; one Exec per column
 	// so a partial failure is unambiguous and the completed columns are not re-applied.
 
 	// migration: smtp_enabled
@@ -59,7 +59,7 @@ func InitNotificationSchema(d *sql.DB) error {
 		`ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS smtp_port INT NOT NULL DEFAULT 587`); err != nil {
 		return err
 	}
-	// migration: smtp_security — valid values: none / starttls / tls
+	// migration: smtp_security, valid values: none / starttls / tls
 	if _, err := d.ExecContext(context.Background(),
 		`ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS smtp_security VARCHAR(20) NOT NULL DEFAULT 'starttls'`); err != nil {
 		return err
@@ -69,7 +69,7 @@ func InitNotificationSchema(d *sql.DB) error {
 		`ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS smtp_username TEXT NOT NULL DEFAULT ''`); err != nil {
 		return err
 	}
-	// migration: smtp_password — stored as-is; never echoed to templates
+	// migration: smtp_password, stored as-is; never echoed to templates
 	if _, err := d.ExecContext(context.Background(),
 		`ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS smtp_password TEXT NOT NULL DEFAULT ''`); err != nil {
 		return err

@@ -100,7 +100,7 @@ func TestGenerateToken(t *testing.T) {
 	}
 	tok2 := GenerateToken()
 	if tok == tok2 {
-		t.Error("GenerateToken returned identical tokens — entropy suspect")
+		t.Error("GenerateToken returned identical tokens, entropy suspect")
 	}
 }
 

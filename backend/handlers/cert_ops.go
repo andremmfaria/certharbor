@@ -40,7 +40,7 @@ func (h *Handler) certFromURL(w http.ResponseWriter, r *http.Request) (*models.C
 
 // leCertFromURL is the LE-certificate equivalent of certFromURL.
 // Returns (cert, true) on success; on DB error it writes 500 and returns (nil, false).
-// A missing cert returns (nil, true) — callers redirect to /le.
+// A missing cert returns (nil, true), callers redirect to /le.
 func (h *Handler) leCertFromURL(w http.ResponseWriter, r *http.Request) (*models.LECertificate, bool) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	c, err := appdb.GetLECert(r.Context(), h.db, id)
@@ -116,7 +116,7 @@ func checkDomainPolicy(domain string, suffixes []string) error {
 }
 
 func issueCert(ctx context.Context, caClient stepca.CA, domain, certPath, keyPath, duration, keyType string, cfg *config.Config) error {
-	// Validate domain before it reaches the CA library — the same guard that
+	// Validate domain before it reaches the CA library, the same guard that
 	// previously protected against flag injection into the step CLI's argv.
 	if err := validateIdentifier(domain); err != nil {
 		return err
@@ -176,7 +176,7 @@ func revokeStep(ctx context.Context, caClient stepca.CA, certPath, keyPath strin
 }
 
 func parseCertDates(certPath string) (issued, expires *time.Time, serial string, err error) {
-	//nolint:gosec // G304: certPath is the stored DB path for a managed certificate — containedPath-checked on import
+	//nolint:gosec // G304: certPath is the stored DB path for a managed certificate, containedPath-checked on import
 	data, err := os.ReadFile(certPath)
 	if err != nil {
 		return issued, expires, serial, err
@@ -199,7 +199,7 @@ func parseCertDates(certPath string) (issued, expires *time.Time, serial string,
 }
 
 func getCertKeyType(certPath string) string {
-	//nolint:gosec // G304: certPath is the stored DB path for a managed certificate — containedPath-checked on import
+	//nolint:gosec // G304: certPath is the stored DB path for a managed certificate, containedPath-checked on import
 	data, err := os.ReadFile(certPath)
 	if err != nil {
 		return ""

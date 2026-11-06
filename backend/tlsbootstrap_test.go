@@ -13,10 +13,11 @@ import (
 	"time"
 
 	"step-webui/config"
+	"step-webui/leafcert"
 	"step-webui/stepca"
 )
 
-// fakeCA is a minimal stepca.CA test double for package main — a plain copy
+// fakeCA is a minimal stepca.CA test double for package main, a plain copy
 // of handlers.FakeCA's shape since the two packages' test files cannot share
 // an unexported test-only type (see plan Phase 1.4).
 type fakeCA struct {
@@ -209,7 +210,7 @@ func TestEnsureUICert_Stepca_NilCAClientFallsBackToSelfSigned(t *testing.T) {
 		UIHostname: "ui.internal.example.com",
 		HostIP:     "127.0.0.1",
 	}
-	// A nil stepca.CA simulates R2's "CA client construction failed" case —
+	// A nil stepca.CA simulates R2's "CA client construction failed" case,
 	// must not panic on a nil-interface method call.
 	if err := ensureUICert(context.Background(), cfg, nil); err != nil {
 		t.Fatalf("ensureUICert: %v", err)
@@ -217,6 +218,7 @@ func TestEnsureUICert_Stepca_NilCAClientFallsBackToSelfSigned(t *testing.T) {
 	if _, err := tls.LoadX509KeyPair(cfg.SSLCert, cfg.SSLKey); err != nil {
 		t.Errorf("expected a self-signed fallback cert, got: %v", err)
 	}
+	assertMarker(t, cfg.SSLCert, true)
 }
 
 func TestEnsureUICert_Stepca_FallsBackToSelfSigned(t *testing.T) {
@@ -247,6 +249,7 @@ func TestEnsureUICert_Stepca_FallsBackToSelfSigned(t *testing.T) {
 	if _, err := tls.LoadX509KeyPair(cfg.SSLCert, cfg.SSLKey); err != nil {
 		t.Errorf("expected a self-signed fallback cert, got: %v", err)
 	}
+	assertMarker(t, cfg.SSLCert, true)
 }
 
 // ─── renewUICertOnce ────────────────────────────────────────────────────────
@@ -263,7 +266,7 @@ func TestRenewUICertOnce(t *testing.T) {
 	certPEM, keyPEM := newFakeIssuedCert(t, validity)
 	ca := &fakeCA{issueCertPEM: certPEM, issueKeyPEM: keyPEM}
 
-	nextSleep, err := renewUICertOnce(context.Background(), cfg, ca)
+	nextSleep, err := renewUICertOnce(context.Background(), cfg, ca, cfg.SSLCert, cfg.SSLKey, cfg.UIHostname)
 	if err != nil {
 		t.Fatalf("renewUICertOnce: %v", err)
 	}
@@ -288,7 +291,7 @@ func TestRenewUICertOnce_IssueError(t *testing.T) {
 	}
 	ca := &fakeCA{issueErr: errors.New("boom")}
 
-	if _, err := renewUICertOnce(context.Background(), cfg, ca); err == nil {
+	if _, err := renewUICertOnce(context.Background(), cfg, ca, cfg.SSLCert, cfg.SSLKey, "x"); err == nil {
 		t.Fatal("expected an error from renewUICertOnce when issuance fails")
 	}
 }
@@ -344,5 +347,266 @@ func TestEnsureRootCert_NoOpWhenFingerprintUnset(t *testing.T) {
 	}
 	if _, err := os.Stat(cfg.RootCert); err == nil {
 		t.Error("expected no root cert file when CAFingerprint is unset (assume volume-mounted)")
+	}
+}
+
+// ─── Fallback marker, web leaf, renewer ────────────────────────────────────
+
+func assertMarker(t *testing.T, certPath string, want bool) {
+	t.Helper()
+	_, err := os.Stat(leafcert.FallbackMarker(certPath))
+	if got := err == nil; got != want {
+		t.Errorf("fallback marker present = %v, want %v", got, want)
+	}
+}
+
+func fastBootstrap(t *testing.T) {
+	t.Helper()
+	restoreRetries, restoreInterval := caBootstrapRetries, caBootstrapInterval
+	caBootstrapRetries = 2
+	caBootstrapInterval = time.Millisecond
+	t.Cleanup(func() {
+		caBootstrapRetries = restoreRetries
+		caBootstrapInterval = restoreInterval
+	})
+}
+
+// stepcaConfig is both leaves in stepca mode under one temp dir.
+func stepcaConfig(t *testing.T) *config.Config {
+	t.Helper()
+	dir := t.TempDir()
+	root := filepath.Join(dir, "root_ca.crt")
+	if err := os.WriteFile(root, []byte("ROOT PEM\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return &config.Config{
+		UITLSMode:      "stepca",
+		SSLCert:        filepath.Join(dir, "ssl", "server.crt"),
+		SSLKey:         filepath.Join(dir, "ssl", "server.key"),
+		UIHostname:     "step-webui",
+		HostIP:         "127.0.0.1",
+		WebTLSMode:     "stepca",
+		WebHostname:    "ca.example.com",
+		WebSSLCert:     filepath.Join(dir, "web-ssl", "web.crt"),
+		WebSSLKey:      filepath.Join(dir, "web-ssl", "web.key"),
+		WebRootCA:      filepath.Join(dir, "web-ssl", "root_ca.crt"),
+		RootCert:       root,
+		UICertDuration: time.Hour,
+	}
+}
+
+// hostCA issues a real leaf for whatever hostname it is asked for, so the
+// renewer's hostname check sees the name it requested.
+type hostCA struct {
+	fakeCA
+	t        *testing.T
+	validity time.Duration
+	domains  []string
+}
+
+func (h *hostCA) IssueCertificate(_ context.Context, req stepca.IssueRequest) ([]byte, []byte, error) {
+	h.issueCalls++
+	h.domains = append(h.domains, req.Domain)
+	if h.issueErr != nil {
+		return nil, nil, h.issueErr
+	}
+	dir := h.t.TempDir()
+	c, k := filepath.Join(dir, "c"), filepath.Join(dir, "k")
+	if err := generateSelfSignedCertWithValidity(c, k, req.Domain, "", h.validity); err != nil {
+		return nil, nil, err
+	}
+	cp, _ := os.ReadFile(c) //nolint:gosec // G304: t.TempDir()-derived path
+	kp, _ := os.ReadFile(k) //nolint:gosec // G304: t.TempDir()-derived path
+	return cp, kp, nil
+}
+
+func TestEnsureUICert_Stepca_SuccessClearsStaleMarker(t *testing.T) {
+	cfg := stepcaConfig(t)
+	if err := os.MkdirAll(filepath.Dir(cfg.SSLCert), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeFallbackMarker(cfg.SSLCert); err != nil {
+		t.Fatal(err)
+	}
+	ca := &hostCA{t: t, validity: time.Hour}
+	if err := ensureUICert(context.Background(), cfg, ca); err != nil {
+		t.Fatalf("ensureUICert: %v", err)
+	}
+	assertMarker(t, cfg.SSLCert, false)
+}
+
+func TestEnsureWebCert_IssuesForWebHostname(t *testing.T) {
+	cfg := stepcaConfig(t)
+	ca := &hostCA{t: t, validity: time.Hour}
+	if err := ensureWebCert(context.Background(), cfg, ca); err != nil {
+		t.Fatalf("ensureWebCert: %v", err)
+	}
+	if len(ca.domains) != 1 || ca.domains[0] != "ca.example.com" {
+		t.Fatalf("issued for %v; want exactly [ca.example.com]", ca.domains)
+	}
+	if _, err := tls.LoadX509KeyPair(cfg.WebSSLCert, cfg.WebSSLKey); err != nil {
+		t.Errorf("web leaf not loadable: %v", err)
+	}
+}
+
+// TestEnsureWebCert_NeverSelfSigns: no browser accepts a self-signed web leaf,
+// so CA failure must leave no file rather than a useless one.
+func TestEnsureWebCert_NeverSelfSigns(t *testing.T) {
+	fastBootstrap(t)
+	cfg := stepcaConfig(t)
+	if err := ensureWebCert(context.Background(), cfg, &fakeCA{issueErr: errors.New("CA unreachable")}); err == nil {
+		t.Fatal("expected an error")
+	}
+	if err := ensureWebCert(context.Background(), cfg, nil); err == nil {
+		t.Fatal("expected an error with no CA client")
+	}
+	if _, err := os.Stat(cfg.WebSSLCert); !os.IsNotExist(err) {
+		t.Errorf("web.crt written on failure: %v", err)
+	}
+	assertMarker(t, cfg.WebSSLCert, false)
+}
+
+func TestEnsureWebCert_ProvidedIsNoOp(t *testing.T) {
+	cfg := stepcaConfig(t)
+	cfg.WebTLSMode = "provided"
+	ca := &hostCA{t: t, validity: time.Hour}
+	if err := ensureWebCert(context.Background(), cfg, ca); err != nil {
+		t.Fatal(err)
+	}
+	if err := syncWebRootCA(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if ca.issueCalls != 0 {
+		t.Errorf("provided mode issued %d certificates", ca.issueCalls)
+	}
+	if _, err := os.Stat(cfg.WebRootCA); !os.IsNotExist(err) {
+		t.Error("provided mode wrote root_ca.crt into the operator's directory")
+	}
+}
+
+func TestSyncWebRootCA_CopiesAndIsIdempotent(t *testing.T) {
+	cfg := stepcaConfig(t)
+	if err := syncWebRootCA(cfg); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(cfg.WebRootCA)
+	if err != nil || string(got) != "ROOT PEM\n" {
+		t.Fatalf("root copy = %q, err %v", got, err)
+	}
+	before, _ := os.Stat(cfg.WebRootCA)
+	time.Sleep(10 * time.Millisecond)
+	if err := syncWebRootCA(cfg); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.Stat(cfg.WebRootCA)
+	if !before.ModTime().Equal(after.ModTime()) {
+		t.Error("unchanged root was rewritten")
+	}
+}
+
+// TestRenewLeavesOnce_RecoversFromFallback is the late-CA path: the marker
+// and the missing web leaf are both repaired by one iteration, with no
+// restart.
+func TestRenewLeavesOnce_RecoversFromFallback(t *testing.T) {
+	cfg := stepcaConfig(t)
+	if err := selfSignFallback(cfg); err != nil {
+		t.Fatal(err)
+	}
+	ca := &hostCA{t: t, validity: time.Hour}
+	sleep := renewLeavesOnce(context.Background(), cfg, ca, time.Now())
+	if ca.issueCalls != 2 {
+		t.Errorf("issued %d leaves, want both", ca.issueCalls)
+	}
+	assertMarker(t, cfg.SSLCert, false)
+	if _, err := tls.LoadX509KeyPair(cfg.WebSSLCert, cfg.WebSSLKey); err != nil {
+		t.Errorf("web leaf not issued: %v", err)
+	}
+	if _, err := os.Stat(cfg.WebRootCA); err != nil {
+		t.Errorf("root CA not copied: %v", err)
+	}
+	// The fake CA backdates NotBefore by an hour, so a 1h leaf spans two
+	// hours and is due 20 minutes from now.
+	if sleep < 19*time.Minute || sleep > 21*time.Minute {
+		t.Errorf("sleep %v; want the new leaf's due point, ~20m away", sleep)
+	}
+}
+
+func TestRenewLeavesOnce_NotDueSleepsOnMinimum(t *testing.T) {
+	cfg := stepcaConfig(t)
+	ca := &hostCA{t: t, validity: time.Hour}
+	_ = renewLeavesOnce(context.Background(), cfg, ca, time.Now())
+	ca.issueCalls = 0
+	sleep := renewLeavesOnce(context.Background(), cfg, ca, time.Now())
+	if ca.issueCalls != 0 {
+		t.Errorf("fresh leaves re-issued %d times", ca.issueCalls)
+	}
+	if sleep <= 0 || sleep > 45*time.Minute {
+		t.Errorf("sleep %v", sleep)
+	}
+}
+
+// TestRenewLeavesOnce_BothDueRenewTogether: one cycle, one change per file.
+func TestRenewLeavesOnce_BothDueRenewTogether(t *testing.T) {
+	cfg := stepcaConfig(t)
+	ca := &hostCA{t: t, validity: time.Hour}
+	_ = renewLeavesOnce(context.Background(), cfg, ca, time.Now())
+	ca.issueCalls = 0
+	_ = renewLeavesOnce(context.Background(), cfg, ca, time.Now().Add(40*time.Minute))
+	if ca.issueCalls != 2 {
+		t.Errorf("issued %d leaves at the due point, want both in one pass", ca.issueCalls)
+	}
+}
+
+func TestRenewLeavesOnce_FailureBackoffs(t *testing.T) {
+	cfg := stepcaConfig(t)
+	ca := &hostCA{t: t, validity: time.Hour}
+	_ = renewLeavesOnce(context.Background(), cfg, ca, time.Now())
+
+	ca.issueErr = errors.New("CA down")
+	if got := renewLeavesOnce(context.Background(), cfg, ca, time.Now().Add(40*time.Minute)); got != uiCertRenewFailureBackoff {
+		t.Errorf("due-renewal failure slept %v, want the %v backoff", got, uiCertRenewFailureBackoff)
+	}
+	if err := os.Remove(cfg.WebSSLCert); err != nil {
+		t.Fatal(err)
+	}
+	if got := renewLeavesOnce(context.Background(), cfg, ca, time.Now()); got != caRecoveryInterval {
+		t.Errorf("missing-leaf failure slept %v, want the %v recovery interval", got, caRecoveryInterval)
+	}
+	if got := renewLeavesOnce(context.Background(), cfg, nil, time.Now()); got != caRecoveryInterval {
+		t.Errorf("nil client slept %v, want %v", got, caRecoveryInterval)
+	}
+}
+
+func TestRenewLeavesOnce_HostnameChangeReissues(t *testing.T) {
+	cfg := stepcaConfig(t)
+	ca := &hostCA{t: t, validity: time.Hour}
+	_ = renewLeavesOnce(context.Background(), cfg, ca, time.Now())
+	cfg.WebHostname = "new.example.com"
+	ca.domains = nil
+	_ = renewLeavesOnce(context.Background(), cfg, ca, time.Now())
+	if len(ca.domains) != 1 || ca.domains[0] != "new.example.com" {
+		t.Errorf("re-issued for %v; want only the web leaf for the new name", ca.domains)
+	}
+}
+
+func TestManagedLeaves(t *testing.T) {
+	cfg := stepcaConfig(t)
+	if n := len(managedLeaves(cfg)); n != 2 {
+		t.Errorf("both stepca: %d leaves", n)
+	}
+	cfg.UITLSMode = "self-signed"
+	cfg.WebTLSMode = "provided"
+	if n := len(managedLeaves(cfg)); n != 0 {
+		t.Errorf("neither stepca: %d leaves, the renewer must not run", n)
+	}
+}
+
+func TestBootstrapFilesNeverWrittenInPlace(t *testing.T) {
+	src, err := os.ReadFile("tlsbootstrap.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(src, []byte("os.WriteFile")) {
+		t.Error("tlsbootstrap.go calls os.WriteFile: certificate and key writes must go through leafcert.WriteAtomic")
 	}
 }

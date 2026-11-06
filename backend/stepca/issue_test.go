@@ -38,7 +38,7 @@ type caFixture struct {
 
 // newCAFixture generates a self-signed CA signing key and an encrypted
 // provisioner JWK (the same JWE format step-ca stores and decryptProvisionerJWK
-// parses — see stepca/doc.go), without starting any server.
+// parses, see stepca/doc.go), without starting any server.
 func newCAFixture(t *testing.T) *caFixture {
 	t.Helper()
 
@@ -94,7 +94,7 @@ func newCAFixture(t *testing.T) *caFixture {
 	}
 }
 
-// baseMux registers /health, /provisioners, and /sign — the three endpoints
+// baseMux registers /health, /provisioners, and /sign, the three endpoints
 // every fake-CA test needs regardless of what else it exercises.
 func (f *caFixture) baseMux() *http.ServeMux {
 	mux := http.NewServeMux()
@@ -152,7 +152,7 @@ func (f *caFixture) issue(csr *x509.CertificateRequest, notAfter time.Time) (*x5
 }
 
 // start launches mux behind an httptest.NewTLSServer and returns a
-// *config.Config pointing at it — RootCert trusts the server's own TLS leaf
+// *config.Config pointing at it, RootCert trusts the server's own TLS leaf
 // (self-signed, so RootFingerprintWithContext's chain-of-one verifies), and
 // PasswordFile/Provisioner match this fixture's encrypted provisioner key.
 func (f *caFixture) start(t *testing.T, mux *http.ServeMux) *config.Config {

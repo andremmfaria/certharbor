@@ -1,5 +1,5 @@
 /*
- * issue.js — interactive certificate-issue form: template cards, key-type
+ * issue.js, interactive certificate-issue form: template cards, key-type
  * cards, duration chips, and the live preview panel.
  */
 (function () {
@@ -37,9 +37,9 @@
   if (!pvName) { return; }
 
   function updatePreview() {
-    pvName.textContent = fName.value || '—';
+    pvName.textContent = fName.value || '-';
     pvName.style.color = fName.value ? 'var(--text)' : 'var(--muted)';
-    pvDomain.textContent = fDomain.value || '—';
+    pvDomain.textContent = fDomain.value || '-';
     pvTemplate.textContent = TEMPLATE_LABEL[tplInput.value] || tplInput.value;
     var kt = keyInput.value;
     pvType.textContent = KEYTYPE_LABEL[kt] || kt;

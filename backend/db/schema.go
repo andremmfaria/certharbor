@@ -182,7 +182,7 @@ func InitSchema(d *sql.DB) error {
 
 // resolveAdminPassword returns the value of STEPWEBUI_ADMIN_PASSWORD from the
 // provided lookup function, or an error if it is empty. The caller must treat
-// the error as fatal — seeding a literal password would create a known
+// the error as fatal, seeding a literal password would create a known
 // network-reachable credential. The getenv parameter allows injection in tests.
 func resolveAdminPassword(getenv func(string) string) (string, error) {
 	pw := getenv("STEPWEBUI_ADMIN_PASSWORD")

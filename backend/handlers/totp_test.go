@@ -60,7 +60,7 @@ func TestGenerateRecoveryCodes_DifferentEachCall(t *testing.T) {
 	}
 }
 
-// ─── verifyRecoveryCode — early-exit paths ───────────────────────────────────
+// ─── verifyRecoveryCode, early-exit paths ───────────────────────────────────
 
 // TestVerifyRecoveryCode_EmptyCode confirms that an empty or whitespace-only
 // code is rejected before the DB is consulted (the empty guard runs first).
@@ -68,7 +68,7 @@ func TestGenerateRecoveryCodes_DifferentEachCall(t *testing.T) {
 func TestVerifyRecoveryCode_EmptyCode(t *testing.T) {
 	// We cannot use a nil db without panicking; use the empty-code guard
 	// which returns false before any DB call.  We verify this via the
-	// handler with a nil db — the empty check fires first.
+	// handler with a nil db, the empty check fires first.
 	h := &Handler{db: nil}
 	if h.verifyRecoveryCode(1, "") {
 		t.Error("expected false for empty recovery code")
@@ -78,7 +78,7 @@ func TestVerifyRecoveryCode_EmptyCode(t *testing.T) {
 	}
 }
 
-// ─── TOTP replay — timestep invariants ───────────────────────────────────────
+// ─── TOTP replay, timestep invariants ───────────────────────────────────────
 // (The core invariants are already in totp_replay_test.go; here we add the
 // nil-DB open-fail path for validateTOTPWithReplayCtx and the acceptance
 // condition for a zero lastStep.)
@@ -95,7 +95,7 @@ func TestValidateTOTPWithReplay_NilDB_FailsOpen(t *testing.T) {
 
 	// Nil-DB path: GetTOTPLastStep with nil db returns error → fail open.
 	// We verify this by calling verifyRecoveryCode (same nil-DB pattern) and
-	// confirming false is returned — the DB error propagation is covered there.
+	// confirming false is returned, the DB error propagation is covered there.
 	// For validateTOTPWithReplay the fail-open contract means the function
 	// should return true despite the DB error; we can only test that by
 	// injecting a real TOTP code.  Without a live secret we document the
@@ -104,7 +104,7 @@ func TestValidateTOTPWithReplay_NilDB_FailsOpen(t *testing.T) {
 }
 
 // TestRecoveryCodeHashRoundtrip confirms that a generated code verifies against
-// its bcrypt hash — this is the invariant that single-use enforcement depends on
+// its bcrypt hash, this is the invariant that single-use enforcement depends on
 // (the DB marks the hash used; a used hash is never returned by GetUnusedRecoveryCodes).
 func TestRecoveryCodeHashRoundtrip(t *testing.T) {
 	codes, hashes := generateRecoveryCodes(1)
@@ -119,6 +119,6 @@ func TestRecoveryCodeHashRoundtrip(t *testing.T) {
 	other := strings.ToUpper(strings.ReplaceAll(code, "A", "B"))
 	if security.VerifyPassword(other, hash) {
 		t.Logf("mutated code %q unexpectedly verified (rare collision)", other)
-		// Not a hard failure — bcrypt collision is astronomically unlikely.
+		// Not a hard failure, bcrypt collision is astronomically unlikely.
 	}
 }

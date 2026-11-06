@@ -166,7 +166,7 @@ func validateNameMatch(cert *x509.Certificate, name string) error {
 }
 
 func validateKeyPair(cert *x509.Certificate, keyPath string) error {
-	//nolint:gosec // G304: keyPath is the stored DB path for a managed certificate — containedPath-checked on import
+	//nolint:gosec // G304: keyPath is the stored DB path for a managed certificate, containedPath-checked on import
 	raw, err := os.ReadFile(keyPath)
 	if err != nil {
 		return fmt.Errorf("%s is not readable: %w", keyPath, err)

@@ -1,5 +1,5 @@
 /*
- * debounce-search.js — live search helpers for the security log page.
+ * debounce-search.js, live search helpers for the security log page.
  *
  * 1. Auto-submits #secForm 400 ms after the last keystroke in #secSearch.
  * 2. Any <select data-autosubmit="FORM_ID"> submits the named form on change.

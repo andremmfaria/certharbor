@@ -13,7 +13,7 @@ var validIdentifier = regexp.MustCompile(`^(\*\.)?[A-Za-z0-9]([A-Za-z0-9\-]*[A-Z
 
 // validateIdentifier rejects blank values, values starting with '-', and
 // anything that does not look like a hostname or wildcard hostname. Every
-// CSR-bound domain must pass this before it reaches the CA library — it is
+// CSR-bound domain must pass this before it reaches the CA library, it is
 // the same guard that previously protected against flag injection into the
 // step CLI's argv, and remains load-bearing now that domains flow into
 // x509.CertificateRequest fields instead.

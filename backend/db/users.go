@@ -313,7 +313,7 @@ func UpsertOIDCUser(d *sql.DB, username, displayName, role string, syncRole bool
 
 // ─── Temporary users ──────────────────────────────────────────────────────────
 
-// TempUserRow — a row representing a temporary user for list views
+// TempUserRow is a row representing a temporary user for list views.
 type TempUserRow struct {
 	ID        int
 	Username  string

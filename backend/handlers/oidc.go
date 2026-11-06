@@ -90,7 +90,7 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 	savedState, _ := s.Values["oidc_state"].(string)
 	if savedState == "" || r.URL.Query().Get("state") != savedState {
 		_ = appdb.LogAuth(h.db, "", ip, false, "OIDC callback: state mismatch")
-		h.flash(w, r, "err", "OIDC state mismatch — possible CSRF attack")
+		h.flash(w, r, "err", "OIDC state mismatch, possible CSRF attack")
 		http.Redirect(w, r, "/login", http.StatusFound)
 		return
 	}
@@ -124,7 +124,7 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	idToken, err := h.oidcVerifier.Verify(ctx, rawIDToken)
 	if err != nil {
-		// Raw JWT content may appear in verification errors — keep it server-side.
+		// Raw JWT content may appear in verification errors, keep it server-side.
 		log.Printf("[oidc] id_token verification failed ip=%q: %v", ip, err) //nolint:gosec // G706: ip already stored in auth_log
 		_ = appdb.LogAuth(h.db, "", ip, false, "OIDC id_token verification failed")
 		h.flash(w, r, "err", "OIDC token verification failed")
@@ -135,7 +135,7 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 	// --- check nonce ---
 	if idToken.Nonce != savedNonce {
 		_ = appdb.LogAuth(h.db, "", ip, false, "OIDC nonce mismatch")
-		h.flash(w, r, "err", "OIDC nonce mismatch — replay attack detected")
+		h.flash(w, r, "err", "OIDC nonce mismatch, replay attack detected")
 		http.Redirect(w, r, "/login", http.StatusFound)
 		return
 	}
@@ -143,7 +143,7 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 	// --- extract claims ---
 	var claims map[string]interface{}
 	if err := idToken.Claims(&claims); err != nil {
-		// Claim values from the IdP may contain PII — log server-side only.
+		// Claim values from the IdP may contain PII, log server-side only.
 		log.Printf("[oidc] claims parse failed ip=%q: %v", ip, err) //nolint:gosec // G706: ip already stored in auth_log
 		_ = appdb.LogAuth(h.db, "", ip, false, "OIDC claims parse failed")
 		h.flash(w, r, "err", "OIDC claims error")
@@ -218,7 +218,7 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// --- complete login (reuses auth.go:154 — sets session, clears rate limit, logs) ---
+	// --- complete login (reuses auth.go:154, sets session, clears rate limit, logs) ---
 	h.completeLogin(w, r, user, "OIDC login")
 	http.Redirect(w, r, "/", http.StatusFound)
 }

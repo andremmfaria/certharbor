@@ -7,9 +7,9 @@
  *   </div>
  *
  * Attributes:
- *   data-name        — name of the hidden field submitted with the form
- *   data-min         — "now" or an ISO string for the earliest allowed date
- *   data-placeholder — placeholder text
+ *   data-name       , name of the hidden field submitted with the form
+ *   data-min        , "now" or an ISO string for the earliest allowed date
+ *   data-placeholder, placeholder text
  *
  * Submitted value format: "YYYY-MM-DD HH:MM"
  * Empty value = field is not submitted.
@@ -44,7 +44,7 @@
 
     const name        = wrap.dataset.name || 'custom_datetime';
     const placeholder = wrap.dataset.placeholder || 'Select date and time';
-    const minMode     = wrap.dataset.min || ''; // "now" — disallows past dates
+    const minMode     = wrap.dataset.min || ''; // "now", disallows past dates
 
     // State
     let viewYear, viewMonth;

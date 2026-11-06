@@ -1,5 +1,5 @@
 /*
- * dashboard.js — confirm dialogs for the renew links on the dashboard.
+ * dashboard.js, confirm dialogs for the renew links on the dashboard.
  */
 document.querySelectorAll('.confirm-renew').forEach(function (el) {
   el.addEventListener('click', function (e) {

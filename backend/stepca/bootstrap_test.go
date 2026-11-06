@@ -81,7 +81,7 @@ func TestFetchRootByFingerprint_Success(t *testing.T) {
 }
 
 // TestFetchRootByFingerprint_Mismatch confirms a wrong fingerprint is
-// rejected — this is the trust-on-first-use verification the library
+// rejected, this is the trust-on-first-use verification the library
 // performs before returning, per doc.go's re-confirmed R findings.
 func TestFetchRootByFingerprint_Mismatch(t *testing.T) {
 	rootCert := newTestRootCert(t)

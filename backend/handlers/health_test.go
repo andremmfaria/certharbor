@@ -115,7 +115,7 @@ func TestReadiness_CAOk(t *testing.T) {
 		RootCert: "",
 	})
 	// Allow insecure TLS for the fake test server by patching the check directly.
-	// checkCAReachability falls back gracefully when RootCert is empty — but the
+	// checkCAReachability falls back gracefully when RootCert is empty, but the
 	// fake TLS server uses a self-signed cert not in any pool.  We need to accept it.
 	// Override: use the fake server's own TLS config.
 	_ = fake // fake CA is TLS; our code loads RootCert from file; empty → system pool.
@@ -137,7 +137,7 @@ func TestReadiness_CAOk(t *testing.T) {
 
 // TestLiveness_NoDependencies confirms the liveness endpoint never reads DB or CA config.
 func TestLiveness_NoDependencies(t *testing.T) {
-	// Zero-value config — if the handler touched CAURL or db it would panic/error.
+	// Zero-value config, if the handler touched CAURL or db it would panic/error.
 	h := newMinimalHandler(&config.Config{})
 
 	for i := 0; i < 3; i++ {

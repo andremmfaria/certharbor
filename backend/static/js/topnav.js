@@ -1,4 +1,4 @@
-/* topnav.js — responsive navigation: <details> dropdowns + burger toggle */
+/* topnav.js, responsive navigation: <details> dropdowns + burger toggle */
 (function () {
   /* Close all sibling <details> dropdowns when one opens */
   function closeOthers(current) {
@@ -17,7 +17,7 @@
     closeOthers(item);
   }, true);
 
-  /* Click outside any open dropdown — close all */
+  /* Click outside any open dropdown, close all */
   document.addEventListener('click', function (event) {
     if (event.target.closest('.mobile-dd, .admin-dd')) return;
     document.querySelectorAll('.mobile-dd[open], .admin-dd[open]').forEach(function (item) {
@@ -25,7 +25,7 @@
     });
   });
 
-  /* Esc key — close all open dropdowns */
+  /* Esc key, close all open dropdowns */
   document.addEventListener('keydown', function (event) {
     if (event.key !== 'Escape') return;
     document.querySelectorAll('.mobile-dd[open], .admin-dd[open]').forEach(function (item) {

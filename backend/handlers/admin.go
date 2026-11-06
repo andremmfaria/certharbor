@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// AdminStats — aggregate counters for /admin.
+// AdminStats holds aggregate counters for /admin.
 type AdminStats struct {
 	TotalUsers    int
 	ActiveUsers   int
@@ -20,14 +20,14 @@ type AdminStats struct {
 	LeCerts       int
 }
 
-// AdminLogin — a row of recent login events.
+// AdminLogin is a row of recent login events.
 type AdminLogin struct {
 	Username  string
 	IP        string
 	CreatedAt time.Time
 }
 
-// AdminGet — admin overview page.
+// AdminGet renders the admin overview page.
 func (h *Handler) AdminGet(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var s AdminStats
@@ -59,8 +59,8 @@ func (h *Handler) AdminGet(w http.ResponseWriter, r *http.Request) {
 
 	var recent []AdminLogin
 	rows, err := h.db.QueryContext(ctx, `
-		SELECT COALESCE(username, '—') AS username,
-		       COALESCE(ip, '—')       AS ip,
+		SELECT COALESCE(username, '-') AS username,
+		       COALESCE(ip, '-')       AS ip,
 		       created_at
 		FROM auth_log
 		WHERE success = true
@@ -83,12 +83,12 @@ func (h *Handler) AdminGet(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "admin", data)
 }
 
-// AdminActivityGet — stub.
+// AdminActivityGet is a stub.
 func (h *Handler) AdminActivityGet(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "admin_activity", h.base(w, r, "admin_activity"))
 }
 
-// AdminAboutGet — system information page.
+// AdminAboutGet renders the system information page.
 func (h *Handler) AdminAboutGet(w http.ResponseWriter, r *http.Request) {
 	data := h.base(w, r, "admin_about")
 	checks, summary := h.preflight(r.Context())
@@ -98,7 +98,7 @@ func (h *Handler) AdminAboutGet(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "admin_about", data)
 }
 
-// AdminIntegrityGet — CA integrity and update guardrails.
+// AdminIntegrityGet renders CA integrity and update guardrails.
 func (h *Handler) AdminIntegrityGet(w http.ResponseWriter, r *http.Request) {
 	data := h.base(w, r, "admin_integrity")
 	checks, summary := h.caIntegrity(r.Context())

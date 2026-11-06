@@ -24,7 +24,7 @@ func (h *Handler) Provisioners(w http.ResponseWriter, r *http.Request) {
 
 // provisionerMaps converts the typed stepca.ProvisionerInfo list into the
 // []map[string]interface{}{"name":..., "type":...} shape provisioners.html
-// (index . "name" / index . "type") already expects — kept as the template
+// (index . "name" / index . "type") already expects, kept as the template
 // contract instead of switching the template to typed struct access, since
 // the template has no other dependents that would benefit (see plan's
 // Reasoning Transparency).

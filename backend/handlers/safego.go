@@ -7,7 +7,7 @@ import (
 
 // safeGo launches fn in a new goroutine wrapped with panic recovery.
 // A panic is caught, logged with a stack trace, and the goroutine exits
-// cleanly — the process survives.  Use it for every fire-and-forget goroutine
+// cleanly, the process survives.  Use it for every fire-and-forget goroutine
 // so a bug in background work cannot crash the server.
 func safeGo(name string, fn func()) {
 	go func() {

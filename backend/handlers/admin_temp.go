@@ -14,7 +14,7 @@ import (
 	appdb "step-webui/db"
 )
 
-// AdminUsersTempGet — temporary user list page.
+// AdminUsersTempGet renders the temporary user list page.
 func (h *Handler) AdminUsersTempGet(w http.ResponseWriter, r *http.Request) {
 	data := h.adminUsersTempData(w, r)
 	// take deletes on read, so a refresh of this URL shows nothing (V7).
@@ -78,7 +78,7 @@ func (h *Handler) adminUsersTempData(w http.ResponseWriter, r *http.Request) map
 	return data
 }
 
-// AdminUsersTempPost — creates a temporary user.
+// AdminUsersTempPost creates a temporary user.
 func (h *Handler) AdminUsersTempPost(w http.ResponseWriter, r *http.Request) {
 	if !h.requireCSRF(w, r, "/admin/users-temp") {
 		return
@@ -156,7 +156,7 @@ func generateTempUsername() string {
 	return "guest-" + string(b)
 }
 
-// generateTempPassword — cryptographically secure password of length n, excluding ambiguous characters
+// generateTempPassword, cryptographically secure password of length n, excluding ambiguous characters
 func generateTempPassword(n int) string {
 	const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%&*+-=?"
 	b := make([]byte, n)

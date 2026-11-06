@@ -1,5 +1,5 @@
 /*
- * profile.js — theme selector widget on the profile page.
+ * profile.js, theme selector widget on the profile page.
  */
 (function () {
   var sel = document.getElementById('themeSelect');

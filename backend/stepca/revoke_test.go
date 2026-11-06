@@ -15,14 +15,14 @@ import (
 )
 
 // TestRevoke_RejectsSubsequentUse is R7's mitigation test: issuing a cert,
-// revoking it, and then attempting to use it again (renew) must fail — a
+// revoking it, and then attempting to use it again (renew) must fail, a
 // Go-level "no error" from Revoke() alone does not prove the CA actually
 // marked the certificate revoked (see plan's "what would have to be true for
 // this to fail silently").
 //
 // The fake CA's /revoke handler enforces the same two server-side rules R7
 // found in the v0.30.2 source: req.Serial must match the mTLS peer
-// certificate's serial, and req.Passive must be true — a wrong
+// certificate's serial, and req.Passive must be true, a wrong
 // Client.Revoke implementation (e.g. a zero-value RevokeRequest, or the
 // wrong transport) is rejected here exactly as it would be by a real CA.
 func TestRevoke_RejectsSubsequentUse(t *testing.T) {
@@ -121,7 +121,7 @@ func TestRevoke_RejectsSubsequentUse(t *testing.T) {
 	}
 
 	// Attempt to use the revoked cert again (renew, mTLS auth) and assert
-	// rejection — the actual proof the revocation took effect server-side.
+	// rejection, the actual proof the revocation took effect server-side.
 	pair, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
 		t.Fatalf("LoadX509KeyPair: %v", err)
@@ -143,7 +143,7 @@ func TestRevoke_RejectsSubsequentUse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New (renew client): %v", err)
 	}
-	// Package-internal access to the wrapped *ca.Client — this test lives in
+	// Package-internal access to the wrapped *ca.Client, this test lives in
 	// package stepca specifically to reach Renew, which stepca.CA does not
 	// expose (renewal isn't in this migration's scope; see plan's Out of Scope).
 	if _, err := renewClient.ca.RenewWithContext(t.Context(), transport); err == nil {

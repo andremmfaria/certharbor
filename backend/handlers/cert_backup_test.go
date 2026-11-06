@@ -66,7 +66,7 @@ func TestWriteBundleTGZ_RoundTrip(t *testing.T) {
 }
 
 // TestWriteBundleTGZ_SkipsMissingFiles confirms that missing paths are silently
-// skipped (not an error) — consistent with the backup best-effort contract.
+// skipped (not an error), consistent with the backup best-effort contract.
 func TestWriteBundleTGZ_SkipsMissingFiles(t *testing.T) {
 	dir := t.TempDir()
 	realFile := filepath.Join(dir, "real.txt")
@@ -124,7 +124,7 @@ func TestFileStatSHA256(t *testing.T) {
 	}
 	// SHA-256 of "hello world" is a well-known value.
 	const wantSum = "b94d27b9934d3e08a52e52d7da7dabfac484efe04294e576e8f44b3d7e7e8be0"
-	// (Note: actual SHA-256("hello world") has no trailing zero padding — just compare non-empty)
+	// (Note: actual SHA-256("hello world") has no trailing zero padding, just compare non-empty)
 	if len(sum) != 64 {
 		t.Errorf("sum should be 64 hex chars, got %d", len(sum))
 	}

@@ -28,7 +28,7 @@
 //   - ca.NewProvisioner(name, kid, caURL string, password []byte, opts ...ClientOption) (*Provisioner, error)
 //     confirmed; password is []byte. Provisioner.Token(subject string, sans ...string) (string, error)
 //     confirmed; per ca/provisioner.go source, when len(sans) == 0 it defaults
-//     sans to []string{subject} — Token(domain, domain) and Token(domain) are
+//     sans to []string{subject}, Token(domain, domain) and Token(domain) are
 //     therefore equivalent, but this package passes both explicitly (matches
 //     the plan's stated call shape).
 //
@@ -38,18 +38,18 @@
 //     shows that when kid == "", NewProvisioner internally calls
 //     loadProvisionerJWKByName(client, name, password), which looks up the
 //     named provisioner's encrypted key from the CA itself and decrypts it
-//     with the supplied password — i.e. NewProvisioner(name, "", caURL, password, ...)
+//     with the supplied password, i.e. NewProvisioner(name, "", caURL, password, ...)
 //     is a complete, self-sufficient "dedicated lookup" (the plan's task 3.1
 //     explicitly allowed "Provisioners() (or a dedicated lookup)"). This
 //     package therefore calls NewProvisioner with an empty kid and skips a
-//     separate Provisioners()-based kid resolution step — simpler, same
+//     separate Provisioners()-based kid resolution step, simpler, same
 //     network-call count, same password-handling contract (R9: password read
 //     per-issuance, never stored on a struct, zeroed after use).
 //
 //   - api.SignRequest{CsrPEM api.CertificateRequest, OTT string, NotAfter TimeDuration, ...}.
 //     Correction to the plan's shorthand "api.SignRequest{CsrPEM: <PEM bytes>, OTT: ...}":
 //     CsrPEM's type is api.CertificateRequest (a struct wrapping *x509.CertificateRequest
-//     with custom JSON marshaling), not a raw PEM byte slice or string — build
+//     with custom JSON marshaling), not a raw PEM byte slice or string, build
 //     the DER CSR via x509.CreateCertificateRequest, parse it back with
 //     x509.ParseCertificateRequest, and wrap it with api.NewCertificateRequest(csr)
 //     (confirmed present: func NewCertificateRequest(cr *x509.CertificateRequest) CertificateRequest).
@@ -63,12 +63,12 @@
 //     source). Reading createCertificateRequest's template also confirms the
 //     exact SAN/CN shape this package replicates: Subject.CommonName = the
 //     domain, DNSNames = the SAN list (defaulting to []string{commonName} when
-//     no SANs are given) — see Open Questions in the plan, "resolved".
+//     no SANs are given), see Open Questions in the plan, "resolved".
 //
 //   - api.RevokeRequest{Serial, OTT, ReasonCode, Reason, Passive} confirmed
 //     with those exact field names/types (Serial, Reason string; ReasonCode int;
 //     Passive bool). Client.Revoke(req *api.RevokeRequest, tr http.RoundTripper) (*api.RevokeResponse, error)
-//     confirmed — a plain http.RoundTripper (e.g. an *http.Transport built from
+//     confirmed, a plain http.RoundTripper (e.g. an *http.Transport built from
 //     tls.LoadX509KeyPair) satisfies it; RevokeWithContext(ctx, ...) also
 //     exists and is used here. Server-side Serial/Passive enforcement (R7) was
 //     not independently re-verified against a live CA in this spike (that is
@@ -76,13 +76,13 @@
 //     are confirmed.
 //
 //   - Client.Root(sha256Sum string) (*api.RootResponse, error) and
-//     RootWithContext(ctx, sha256Sum string) both confirmed present — an
+//     RootWithContext(ctx, sha256Sum string) both confirmed present, an
 //     unauthenticated, fingerprint-verified root-fetch primitive exists in the
 //     library exactly as the plan states, consumed by bootstrap.go's
 //     FetchRootByFingerprint (Phase 5.2). One addendum found while
 //     implementing it: RootWithContext always issues its request over its
 //     own internal newInsecureClient() (TLS InsecureSkipVerify) regardless of
-//     how the wrapping *ca.Client was configured — but ca.NewClient itself
+//     how the wrapping *ca.Client was configured, but ca.NewClient itself
 //     still rejects a ClientOption set with no transport/root-cert/root-sha256
 //     at all, so FetchRootByFingerprint must pass ca.WithInsecure() purely to
 //     satisfy that constructor check; it is never consulted for the actual

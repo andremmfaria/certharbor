@@ -1,5 +1,5 @@
 /*
- * le-issue.js — show/hide provider-specific help panels on the LE issue page.
+ * le-issue.js, show/hide provider-specific help panels on the LE issue page.
  * The initial provider value is read from data-initial on #providerSelect.
  */
 function showProviderHelp(v) {

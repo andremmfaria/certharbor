@@ -21,12 +21,15 @@ type Config struct {
 	StepCAImage   string
 	SecretKey     string
 	SessionSecure bool
-	EnableHSTS    bool
 	TrustProxy    bool
 
-	// Raw value; main.go parses it and refuses to start when TrustProxy is set
-	// and it names no usable block (V4).
+	// Raw value. When set, main.go parses it and refuses to start on a bad
+	// entry (V4). When empty, WebUpstreamHost is resolved instead (D5 rule 3).
 	TrustedProxyCIDRs string
+
+	// The name nginx answers to on the compose network. Resolved, never
+	// pinned, because a recreated container comes back on a new address.
+	WebUpstreamHost string
 
 	// Empty means issuance is unrestricted, the behaviour that predates the key (V6).
 	AllowedDomainSuffixes []string
@@ -58,7 +61,7 @@ type Config struct {
 	// Local password login (break-glass when OIDC is primary)
 	LocalLoginEnabled bool
 
-	// In-process TLS bootstrap (Phase 5) — replaces entrypoint.sh's former
+	// In-process TLS bootstrap (Phase 5), replaces entrypoint.sh's former
 	// root-cert-fetch/leaf-issuance/renew-daemon shell logic.
 	UITLSMode     string
 	CAFingerprint string
@@ -69,6 +72,16 @@ type Config struct {
 	// Validity requested for the UI's own leaf when UITLSMode == "stepca".
 	// The renewal loop sleeps ~2/3 of it.
 	UICertDuration time.Duration
+
+	// nginx's own leaf (D5 rule 5): "stepca" issues it here and writes it to
+	// the step-webui-web-ssl volume, "provided" leaves the operator to mount
+	// it. WebHostname has no fallback: a container id as the only SAN would
+	// survive on the volume and be served to browsers that reject it.
+	WebTLSMode  string
+	WebHostname string
+	WebSSLCert  string
+	WebSSLKey   string
+	WebRootCA   string
 
 	// Env-only: a manager-editable DB setting must not be able to repoint
 	// where LE issuance actually dials.
@@ -96,10 +109,10 @@ func Load() *Config {
 		StepCAImage:   getEnv("STEP_CA_IMAGE", "smallstep/step-ca:0.30.2"),
 		SecretKey:     getEnvOrFile("SECRET_KEY", "SECRET_KEY_FILE", "change-me-in-production-32chars!"),
 		SessionSecure: getEnvBool("SESSION_SECURE", true),
-		EnableHSTS:    getEnvBool("ENABLE_HSTS", false),
 		TrustProxy:    getEnvBool("TRUST_PROXY", false),
 
 		TrustedProxyCIDRs:     getEnv("TRUSTED_PROXY_CIDRS", ""),
+		WebUpstreamHost:       strings.TrimSpace(getEnv("WEB_UPSTREAM_HOST", "step-webui-web")),
 		AllowedDomainSuffixes: getEnvList("ALLOWED_DOMAIN_SUFFIXES"),
 
 		PublicBaseURL: strings.TrimRight(strings.TrimSpace(getEnv("PUBLIC_BASE_URL", "")), "/"),
@@ -133,7 +146,14 @@ func Load() *Config {
 		UIHostname:    getEnv("UI_HOSTNAME", ""),
 		HostIP:        getEnv("HOST_IP", "127.0.0.1"),
 
-		UICertDuration:     getEnvDuration("UI_CERT_DURATION", defaultUICertDuration),
+		UICertDuration: getEnvDuration("UI_CERT_DURATION", defaultUICertDuration),
+
+		WebTLSMode:  getEnv("WEB_TLS_MODE", "stepca"),
+		WebHostname: strings.TrimSpace(getEnv("WEB_HOSTNAME", "")),
+		WebSSLCert:  "/opt/step-webui/web-ssl/web.crt",
+		WebSSLKey:   "/opt/step-webui/web-ssl/web.key",
+		WebRootCA:   "/opt/step-webui/web-ssl/root_ca.crt",
+
 		LEACMEDirectoryURL: getEnv("LE_ACME_DIRECTORY_URL", LEProductionDirectoryURL),
 	}
 }

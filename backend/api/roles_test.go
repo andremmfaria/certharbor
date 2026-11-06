@@ -235,15 +235,20 @@ func TestRateLimitedSetsTheScopeTheMiddlewareReads(t *testing.T) {
 	}
 }
 
-// TestNoOperationIsRateLimitedYet records why rateLimitMiddleware has no
-// end-to-end test in this phase: the four operations 5.5 scopes it to
-// (createSession, submitMfa, requestPasswordReset, confirmPasswordReset) do
-// not exist until the auth domain is ported. This test fails when the first
-// one lands, which is the moment to write that coverage.
-func TestNoOperationIsRateLimitedYet(t *testing.T) {
-	for _, row := range registeredRows(t) {
-		if row.ratelimit == "yes" {
-			t.Fatalf("%s %s is rate-limited; add end-to-end coverage of rateLimitMiddleware and delete this test", row.method, row.path)
+// TestRateLimitIsScopedToAuthOperations asserts 5.5's rule that the login
+// limiter is attached to nothing but the four auth operations. Two of them
+// (the password-reset pair) are not ported yet, so the set may be a subset.
+func TestRateLimitIsScopedToAuthOperations(t *testing.T) {
+	allowed := map[string]bool{
+		"createSession": true, "submitMfa": true,
+		"requestPasswordReset": true, "confirmPasswordReset": true,
+	}
+	spec := NewForSpec().OpenAPI()
+	for path, item := range spec.Paths {
+		for method, op := range operationsOf(item) {
+			if scope, _ := op.Metadata[metaRateLimit].(string); scope == rateLimitAuth && !allowed[op.OperationID] {
+				t.Errorf("%s %s (%s) is rate-limited; only the auth operations may be", method, path, op.OperationID)
+			}
 		}
 	}
 }

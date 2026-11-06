@@ -96,7 +96,7 @@ type NotificationSettings struct {
 	ExpiryDays      int
 	NotifyFailures  bool
 	NotifyAuthBurst bool
-	// SMTP fields — used for password recovery email delivery.
+	// SMTP fields, used for password recovery email delivery.
 	SMTPEnabled  bool
 	SMTPHost     string
 	SMTPPort     int

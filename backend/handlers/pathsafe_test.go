@@ -67,7 +67,7 @@ func TestContainedPath(t *testing.T) {
 			name:      "slash-only candidate treated as root itself",
 			root:      root,
 			candidate: "/",
-			wantErr:   true, // root itself — not strictly inside
+			wantErr:   true, // root itself, not strictly inside
 		},
 	}
 

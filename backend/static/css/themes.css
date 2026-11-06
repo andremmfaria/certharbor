@@ -1,10 +1,10 @@
 /*
- * themes.css — CSS custom properties for all themes
+ * themes.css, CSS custom properties for all themes
  *
- * :root                 — base (dark) theme
- * [data-theme="light"]  — light theme
- * [data-theme="blue"]   — blue theme
- * [data-theme="auto"]   — no-op (JS applies dark/light based on system preference)
+ * :root                , base (dark) theme
+ * [data-theme="light"] , light theme
+ * [data-theme="blue"]  , blue theme
+ * [data-theme="auto"]  , no-op (JS applies dark/light based on system preference)
  *
  * Also contains --admin-* variables for the admin namespace.
  */

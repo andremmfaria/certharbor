@@ -25,7 +25,7 @@ const (
 
 // adminConsoleCommand describes a single allowlisted diagnostic command.
 // A command is either an OS subprocess (Name/Args, run via
-// exec.CommandContext) or Native (NativeFn, run as a plain Go call) — never
+// exec.CommandContext) or Native (NativeFn, run as a plain Go call), never
 // both. This is the only place either kind is defined (see
 // runAdminConsoleCommand's shared timeout/truncation/audit wrapper).
 type adminConsoleCommand struct {
@@ -50,7 +50,7 @@ type adminConsoleResult struct {
 }
 
 // pgIsReadyArgs parses a postgres DSN and returns the pg_isready flag list
-// (-h, -p, -U, -d).  The password is deliberately excluded — pg_isready does
+// (-h, -p, -U, -d).  The password is deliberately excluded, pg_isready does
 // not accept one and it must never appear on the command line.
 // On a malformed or empty DSN the function returns safe defaults.
 func pgIsReadyArgs(dsn string) []string {
@@ -183,7 +183,7 @@ func appVersionNativeFn(_ context.Context, _ stepca.CA) (string, error) {
 
 // caHealthNativeFn replaces "step ca health --ca-url ... --root ..." with a
 // direct stepca.CA.Health call. ca may be nil when Handler.caClient() failed
-// to construct a client (e.g. root cert not yet present) — report that as
+// to construct a client (e.g. root cert not yet present), report that as
 // the command's result text instead of panicking.
 func caHealthNativeFn(ctx context.Context, ca stepca.CA) (string, error) {
 	if ca == nil {
@@ -219,7 +219,7 @@ func (h *Handler) AdminConsolePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	commandID := strings.TrimSpace(r.FormValue("command_id"))
-	// nil on error is fine — native commands report it as their result text
+	// nil on error is fine, native commands report it as their result text
 	caClient, _ := h.caClient()
 
 	c, ok := findAdminConsoleCommand(h.cfg, commandID)

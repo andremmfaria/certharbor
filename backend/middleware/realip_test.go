@@ -1,14 +1,18 @@
 package middleware
 
 import (
+	"context"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
+	"time"
 )
 
 // mustTrust parses CIDRs a test controls and fails loudly on a typo.
-func mustTrust(t *testing.T, raw string) []*net.IPNet {
+func mustTrust(t *testing.T, raw string) StaticProxies {
 	t.Helper()
 	nets, err := ParseTrustedProxies(raw)
 	if err != nil {
@@ -19,7 +23,7 @@ func mustTrust(t *testing.T, raw string) []*net.IPNet {
 
 // remoteAddrAfterRealIP runs one request through RealIP and reports the
 // RemoteAddr the wrapped handler saw.
-func remoteAddrAfterRealIP(t *testing.T, trusted []*net.IPNet, peer string, headers map[string]string) string {
+func remoteAddrAfterRealIP(t *testing.T, trusted ProxySet, peer string, headers map[string]string) string {
 	t.Helper()
 	var seen string
 	handler := RealIP(trusted)(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -107,17 +111,37 @@ func TestRealIP_ChainReadRightToLeft(t *testing.T) {
 	}
 }
 
-func TestRealIP_SingleValueHeaders(t *testing.T) {
+// TestRealIP_FourForgeryHeaders is the four-header forgery table (Section 2):
+// from a trusted peer, with no X-Forwarded-For at all, none of the other
+// forwarding headers may move the recorded address. A table forging only
+// X-Forwarded-For would pass while a single-value fallback was wide open.
+func TestRealIP_FourForgeryHeaders(t *testing.T) {
 	trusted := mustTrust(t, "10.0.0.7/32")
-	cases := map[string]string{"X-Real-IP": "5.6.7.8", "True-Client-IP": "9.10.11.12"}
-	for header, want := range cases {
+	forged := map[string]string{
+		"X-Real-IP":      "5.6.7.8",
+		"True-Client-IP": "9.10.11.12",
+		"Forwarded":      "for=13.14.15.16",
+	}
+	for header, value := range forged {
 		t.Run(header, func(t *testing.T) {
-			got := remoteAddrAfterRealIP(t, trusted, "10.0.0.7:9999", map[string]string{header: want})
-			if got != want {
-				t.Errorf("RemoteAddr got %q want %q", got, want)
+			got := remoteAddrAfterRealIP(t, trusted, "10.0.0.7:9999", map[string]string{header: value})
+			if got != "10.0.0.7:9999" {
+				t.Errorf("%s moved RemoteAddr to %q; it must be ignored", header, got)
 			}
 		})
 	}
+	// nginx replaces X-Forwarded-For with $remote_addr, so beside it every
+	// other forged header must lose to the proxy-set value.
+	t.Run("X-Forwarded-For_with_all_three", func(t *testing.T) {
+		headers := map[string]string{"X-Forwarded-For": "198.51.100.4"}
+		for k, v := range forged {
+			headers[k] = v
+		}
+		got := remoteAddrAfterRealIP(t, trusted, "10.0.0.7:9999", headers)
+		if got != "198.51.100.4" {
+			t.Errorf("RemoteAddr got %q want the proxy-set X-Forwarded-For", got)
+		}
+	})
 }
 
 // TestRealIP_NoUsableHeader leaves RemoteAddr alone rather than blanking it:
@@ -156,4 +180,108 @@ func TestRealIP_PortedEntriesAndIPv6(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ─── ResolvedProxies (D5 rule 3) ─────────────────────────────────────────────
+
+type fakeLookup struct {
+	mu    sync.Mutex
+	addrs []string
+	err   error
+	calls int
+}
+
+func (f *fakeLookup) lookup(_ context.Context, _ string) ([]net.IPAddr, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	if f.err != nil {
+		return nil, f.err
+	}
+	out := make([]net.IPAddr, 0, len(f.addrs))
+	for _, a := range f.addrs {
+		out = append(out, net.IPAddr{IP: net.ParseIP(a)})
+	}
+	return out, nil
+}
+
+func (f *fakeLookup) set(err error, addrs ...string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.err, f.addrs = err, addrs
+}
+
+func TestResolvedProxies_TrustsNothingUntilResolved(t *testing.T) {
+	f := &fakeLookup{err: errors.New("no such host")}
+	p := NewResolvedProxies("step-webui-web", f.lookup)
+	if err := p.Refresh(context.Background()); err == nil {
+		t.Fatal("expected the failed lookup to surface")
+	}
+	if p.Resolved() {
+		t.Fatal("Resolved() true after a failed first lookup")
+	}
+	got := remoteAddrAfterRealIP(t, p, "172.30.0.5:40000", map[string]string{"X-Forwarded-For": "1.2.3.4"})
+	if got != "172.30.0.5:40000" {
+		t.Errorf("unresolved set believed a header: RemoteAddr %q", got)
+	}
+}
+
+func TestResolvedProxies_TrustsExactAddressOnly(t *testing.T) {
+	f := &fakeLookup{addrs: []string{"172.30.0.5"}}
+	p := NewResolvedProxies("step-webui-web", f.lookup)
+	if err := p.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := remoteAddrAfterRealIP(t, p, "172.30.0.5:40000", map[string]string{"X-Forwarded-For": "1.2.3.4"}); got != "1.2.3.4" {
+		t.Errorf("resolved proxy: RemoteAddr %q want 1.2.3.4", got)
+	}
+	// A neighbour on the same subnet (the bridge gateway, say) is not trusted.
+	if got := remoteAddrAfterRealIP(t, p, "172.30.0.1:40000", map[string]string{"X-Forwarded-For": "1.2.3.4"}); got != "172.30.0.1:40000" {
+		t.Errorf("subnet neighbour trusted: RemoteAddr %q", got)
+	}
+}
+
+// TestResolvedProxies_FollowsRecreate is why the set is refreshed rather than
+// resolved once: a recreated proxy container comes back on a new address.
+func TestResolvedProxies_FollowsRecreate(t *testing.T) {
+	f := &fakeLookup{addrs: []string{"172.30.0.5"}}
+	p := NewResolvedProxies("step-webui-web", f.lookup)
+	if err := p.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	f.set(errors.New("no such host"))
+	_ = p.Refresh(context.Background())
+	if !p.Contains(net.ParseIP("172.30.0.5")) {
+		t.Error("a failed refresh dropped the last good address")
+	}
+	f.set(nil, "172.30.0.9")
+	if err := p.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if p.Contains(net.ParseIP("172.30.0.5")) || !p.Contains(net.ParseIP("172.30.0.9")) {
+		t.Error("refresh did not move trust to the recreated address")
+	}
+}
+
+func TestResolvedProxies_RunRefreshesUntilCancelled(t *testing.T) {
+	f := &fakeLookup{err: errors.New("no such host")}
+	p := NewResolvedProxies("step-webui-web", f.lookup)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { p.Run(ctx, time.Millisecond); close(done) }()
+	deadline := time.Now().Add(5 * time.Second)
+	for !p.Resolved() {
+		if time.Now().After(deadline) {
+			t.Fatal("Run never picked up the name once it started resolving")
+		}
+		f.mu.Lock()
+		n := f.calls
+		f.mu.Unlock()
+		if n >= 3 {
+			f.set(nil, "172.30.0.5")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	cancel()
+	<-done
 }

@@ -11,7 +11,7 @@ const auditPrefix = "Audit: "
 
 // auditSecurity records an administrative action in the security/auth log.
 // It is a no-op when the session carries no authenticated user or the reason
-// is empty — keeping the call sites unconditional.
+// is empty, keeping the call sites unconditional.
 func (h *Handler) auditSecurity(r *http.Request, reason string) {
 	si := h.sessionInfo(r)
 	if si.UserID == 0 || si.Username == "" || reason == "" {

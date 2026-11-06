@@ -23,6 +23,25 @@ func Register(humaAPI huma.API, h *handlers.Handler) {
 		Summary:     "Get the current session state",
 	}), getSession(h))
 
+	// Public because there is no session to validate yet: the handler reads the
+	// pending state itself. CSRF applies, and the login rate limiter is scoped
+	// to exactly these two operations (5.5).
+	huma.Register(humaAPI, rateLimited(publicOp(huma.Operation{
+		OperationID: "createSession",
+		Method:      http.MethodPost,
+		Path:        BasePath + "/session",
+		Tags:        []string{"session"},
+		Summary:     "Log in with a username and password",
+	})), createSession(h))
+
+	huma.Register(humaAPI, rateLimited(publicOp(huma.Operation{
+		OperationID: "submitMfa",
+		Method:      http.MethodPost,
+		Path:        BasePath + "/session/mfa",
+		Tags:        []string{"session"},
+		Summary:     "Complete a login with a second factor",
+	})), submitMfa(h))
+
 	// Public: logging out must work from a session the server has already
 	// rejected, and the only effect is expiring the caller's own cookies.
 	huma.Register(humaAPI, csrfWhenSession(publicOp(huma.Operation{

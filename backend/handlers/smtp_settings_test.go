@@ -80,7 +80,7 @@ func TestParseSMTPFields(t *testing.T) {
 			},
 			current:     defaultCurrent(),
 			wantEnabled: true,
-			// SMTPPassword must stay "stored-secret" — not be cleared
+			// SMTPPassword must stay "stored-secret", not be cleared
 			wantPwd: "stored-secret",
 		},
 		{

@@ -25,13 +25,13 @@ func TestTOTPReplayStepComparison(t *testing.T) {
 		wantAccept  bool
 	}{
 		{
-			name:        "first use — no prior step",
+			name:        "first use, no prior step",
 			currentStep: step,
 			lastStep:    0,
 			wantAccept:  true,
 		},
 		{
-			name:        "replay in same window — exact match",
+			name:        "replay in same window, exact match",
 			currentStep: step,
 			lastStep:    step,
 			wantAccept:  false,
@@ -43,13 +43,13 @@ func TestTOTPReplayStepComparison(t *testing.T) {
 			wantAccept:  false,
 		},
 		{
-			name:        "next window — fresh code",
+			name:        "next window, fresh code",
 			currentStep: step + 1,
 			lastStep:    step,
 			wantAccept:  true,
 		},
 		{
-			name:        "much later — obviously fresh",
+			name:        "much later, obviously fresh",
 			currentStep: step + 100,
 			lastStep:    step,
 			wantAccept:  true,

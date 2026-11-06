@@ -2,7 +2,7 @@
 set -e
 
 echo "======================================="
-echo "  Step-CA WebUI (Go) — starting up"
+echo "  Step-CA WebUI (Go), starting up"
 echo "======================================="
 
 # ─── Secret-file helpers ──────────────────────────────────────────────────
@@ -14,7 +14,7 @@ read_secret_file() {
   _file="$2"
   eval "_current=\${${_var}:-}"
   if [ -n "$_current" ]; then
-    return 0  # plain env already set — honour it
+    return 0  # plain env already set, honour it
   fi
   if [ -f "$_file" ]; then
     _val="$(cat "$_file")"
@@ -44,7 +44,7 @@ if [ -z "${DATABASE_URL:-}" ]; then
   _pg_db="${POSTGRES_DB:-stepwebui}"
   if [ -z "${POSTGRES_PASSWORD:-}" ]; then
     echo "[!] Neither DATABASE_URL nor POSTGRES_PASSWORD/POSTGRES_PASSWORD_FILE is set."
-    echo "[!] Cannot construct the database connection string — aborting."
+    echo "[!] Cannot construct the database connection string, aborting."
     exit 1
   fi
   export DATABASE_URL="postgres://${_pg_user}:${POSTGRES_PASSWORD}@${_pg_host}:${_pg_port}/${_pg_db}?sslmode=disable"
@@ -78,10 +78,10 @@ done
 if [ "$_ok" -eq 1 ]; then
   echo "[*] PostgreSQL is ready!"
 else
-  echo "[!] PostgreSQL not reachable at ${_db_host}:${_db_port} after ${_i}s — continuing; the app will retry."
+  echo "[!] PostgreSQL not reachable at ${_db_host}:${_db_port} after ${_i}s, continuing; the app will retry."
 fi
 
-echo "[*] CA readiness is now reported via /ready — not blocking startup on Step-CA"
+echo "[*] CA readiness is now reported via /ready, not blocking startup on Step-CA"
 
 # ─── Provisioner password file ─────────────────────────────────────────────
 # The Go app reads this file per-issuance (stepca.Client.IssueCertificate);
@@ -105,7 +105,7 @@ echo "[*] Starting Step-CA WebUI on port ${PORT:-8443}"
 # Seed initial admin password from STEPWEBUI_ADMIN_PASSWORD if provided.
 # The Go app reads this on first boot when no admin user exists.
 if [ -n "${STEPWEBUI_ADMIN_PASSWORD:-}" ]; then
-  echo "[*] STEPWEBUI_ADMIN_PASSWORD detected — will seed first admin with it"
+  echo "[*] STEPWEBUI_ADMIN_PASSWORD detected, will seed first admin with it"
   export STEPWEBUI_ADMIN_PASSWORD
 fi
 

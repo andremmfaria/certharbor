@@ -84,7 +84,7 @@ func MarkPasswordResetTokenUsed(d *sql.DB, id int) error {
 }
 
 // GetUserByLoginOrEmail returns the user whose username or email (case-insensitive)
-// matches identifier. Returns (nil, nil) when no account exists — callers must not
+// matches identifier. Returns (nil, nil) when no account exists, callers must not
 // distinguish this case from a found user in user-facing responses (no enumeration).
 func GetUserByLoginOrEmail(d *sql.DB, identifier string) (*models.User, error) {
 	u := &models.User{}

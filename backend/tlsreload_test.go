@@ -36,7 +36,7 @@ func writeTestSelfSignedCert(t *testing.T, certPath, keyPath string) *big.Int {
 		t.Fatalf("x509.CreateCertificate: %v", err)
 	}
 
-	//nolint:gosec // G304: certPath comes from t.TempDir() — operator-controlled test helper
+	//nolint:gosec // G304: certPath comes from t.TempDir(), operator-controlled test helper
 	certF, err := os.Create(certPath)
 	if err != nil {
 		t.Fatalf("create cert file: %v", err)
@@ -46,7 +46,7 @@ func writeTestSelfSignedCert(t *testing.T, certPath, keyPath string) *big.Int {
 		t.Fatalf("close cert file: %v", err)
 	}
 
-	//nolint:gosec // G304: keyPath comes from t.TempDir() — operator-controlled test helper
+	//nolint:gosec // G304: keyPath comes from t.TempDir(), operator-controlled test helper
 	keyF, err := os.Create(keyPath)
 	if err != nil {
 		t.Fatalf("create key file: %v", err)
@@ -132,7 +132,7 @@ func TestCertReloader_ReloadOnMtimeChange(t *testing.T) {
 			certSerial(t, got2), serial2)
 	}
 	if certSerial(t, got1).Cmp(certSerial(t, got2)) == 0 {
-		t.Error("cert was not reloaded — serial unchanged")
+		t.Error("cert was not reloaded, serial unchanged")
 	}
 }
 

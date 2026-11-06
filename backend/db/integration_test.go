@@ -33,7 +33,7 @@ func openTestDB(t *testing.T) *sql.DB {
 	t.Setenv("STEPWEBUI_ADMIN_PASSWORD", "IntegrationTest123!")
 	conn, err := Connect(testDSN(t))
 	if err != nil {
-		t.Skipf("integration DB not available (%v) — skipping", err)
+		t.Skipf("integration DB not available (%v), skipping", err)
 	}
 	if err := InitSchema(conn); err != nil {
 		_ = conn.Close()

@@ -24,6 +24,10 @@
       "types": "./dist/client.gen.d.ts",
       "import": "./dist/client.gen.js"
     },
+    "./react-query": {
+      "types": "./dist/@tanstack/react-query.gen.d.ts",
+      "import": "./dist/@tanstack/react-query.gen.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

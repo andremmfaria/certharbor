@@ -14,9 +14,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"step-webui/leafcert"
 )
 
-// Liveness is GET /health — unconditional 200 when the process is serving.
+// Liveness is GET /health, unconditional 200 when the process is serving.
 // No DB, no CA. Called by NLB/ECS/Docker probes.
 func (h *Handler) Liveness(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -24,7 +26,7 @@ func (h *Handler) Liveness(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
 }
 
-// Readiness is GET /ready — cheap DB ping + CA reachability check.
+// Readiness is GET /ready, cheap DB ping + CA reachability check.
 // Returns 200 {"status":"ready"} or 503 with per-component detail.
 func (h *Handler) Readiness(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -42,20 +44,67 @@ func (h *Handler) Readiness(w http.ResponseWriter, r *http.Request) {
 
 	caStatus := h.checkCAReachability(ctx)
 
+	body := map[string]string{}
+	certsReady := h.leafReadiness(body, time.Now())
+
 	w.Header().Set("Content-Type", "application/json")
-	if dbStatus == "ok" && caStatus == "ok" {
+	if dbStatus == "ok" && caStatus == "ok" && certsReady {
+		body["status"] = "ready"
+		out, _ := json.Marshal(body)
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ready"}`))
+		_, _ = w.Write(out)
 		return
 	}
 
+	body["status"] = "not ready"
+	body["db"] = dbStatus
+	body["ca"] = caStatus
+	out, _ := json.Marshal(body)
 	w.WriteHeader(http.StatusServiceUnavailable)
-	body, _ := json.Marshal(map[string]string{
-		"status": "not ready",
-		"db":     dbStatus,
-		"ca":     caStatus,
-	})
-	_, _ = w.Write(body)
+	_, _ = w.Write(out)
+}
+
+// leafReadiness adds <name>Cert and <name>CertNotAfter for both TLS leaves to
+// body and reports whether they allow readiness. A leaf this process manages
+// (stepca mode) fails readiness when it is missing, is the self-signed
+// fallback, or is more than one backoff past its renewal point: a web leaf
+// that keeps failing to renew is otherwise invisible until browsers reject
+// it, since nginx keeps serving the copy it already loaded.
+func (h *Handler) leafReadiness(body map[string]string, now time.Time) bool {
+	if h.cfg == nil {
+		return true
+	}
+	backend := h.leafStatus(body, "backendCert", h.cfg.SSLCert, h.cfg.UITLSMode == "stepca", now)
+	web := h.leafStatus(body, "webCert", h.cfg.WebSSLCert, h.cfg.WebTLSMode == "stepca", now)
+	return backend && web
+}
+
+func (h *Handler) leafStatus(body map[string]string, name, certPath string, managed bool, now time.Time) bool {
+	if certPath == "" {
+		return true
+	}
+	if managed {
+		marker := leafcert.FallbackMarker(certPath)
+		if _, err := os.Stat(marker); err == nil {
+			body[name] = "self-signed-fallback " + marker
+			return false
+		}
+	}
+	cert, err := leafcert.Read(certPath)
+	if err != nil {
+		if managed {
+			body[name] = "missing " + certPath
+			return false
+		}
+		return true
+	}
+	body[name+"NotAfter"] = cert.NotAfter.UTC().Format(time.RFC3339)
+	if managed && leafcert.Overdue(cert, now) {
+		body[name] = "renewal-overdue"
+		return false
+	}
+	body[name] = "ok"
+	return true
 }
 
 // checkCAReachability does a lightweight HTTPS GET to ${CAURL}/health.
@@ -385,7 +434,7 @@ func (h *Handler) checkProvisionerPasswordSync(checks *[]HealthCheck) {
 }
 
 func readSecretLine(path string) (string, error) {
-	//nolint:gosec // G304: path is always cfg.PasswordFile — a config-derived path, not user input
+	//nolint:gosec // G304: path is always cfg.PasswordFile, a config-derived path, not user input
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("%s is not readable: %w", path, err)

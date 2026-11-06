@@ -1,5 +1,5 @@
 /*
- * admin.css — admin workspace shell, navigation, metrics and dense tables.
+ * admin.css, admin workspace shell, navigation, metrics and dense tables.
  */
 
 :root,
@@ -78,7 +78,7 @@ body.admin-mode {
 
 body.admin-mode * { box-sizing: border-box; }
 
-/* hidden on desktop — shown by media query below */
+/* hidden on desktop, shown by media query below */
 .admin-topnav {
   display: none;
 }

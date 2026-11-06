@@ -1,5 +1,5 @@
 /*
- * import.js — drag-and-drop file zones and manual-tab path auto-fill.
+ * import.js, drag-and-drop file zones and manual-tab path auto-fill.
  */
 function fmtSize(bytes) {
   if (bytes < 1024) { return bytes + ' B'; }

@@ -1,0 +1,8 @@
+# operationIds in the spec that no frontend call site imports yet.
+#
+# Dead API surface is a review decision, not an accident: adding a line here
+# says the operation is deliberately unused. The frontend job fails on an
+# unlisted unused operation and on a listed one that has since gained a caller.
+getSpikeBlob
+postSpikeUpload
+getStatus

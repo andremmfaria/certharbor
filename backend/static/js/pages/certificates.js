@@ -1,5 +1,5 @@
 /*
- * certificates.js — client-side filter and confirm dialogs for the
+ * certificates.js, client-side filter and confirm dialogs for the
  * certificates list page.
  */
 (function () {

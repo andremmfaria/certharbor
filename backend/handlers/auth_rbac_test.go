@@ -18,7 +18,7 @@ import (
 )
 
 // newTestHandler wires a Handler with no DB and no loaded templates.  Callers
-// that trigger h.render() will get "template not found" but that is OK — we
+// that trigger h.render() will get "template not found" but that is OK, we
 // test the redirect / status-code paths, not the rendered HTML.
 func newTestHandler(cfg *config.Config, store *sessions.CookieStore) *Handler {
 	return &Handler{
@@ -69,9 +69,9 @@ func seedCSRF(t *testing.T, store *sessions.CookieStore) ([]*http.Cookie, string
 	return cookies, token
 }
 
-// ─── LoginPost — pre-DB paths ─────────────────────────────────────────────────
+// ─── LoginPost, pre-DB paths ─────────────────────────────────────────────────
 
-// TestLoginPost_LocalLoginDisabledOIDC — when local login is disabled and OIDC
+// TestLoginPost_LocalLoginDisabledOIDC, when local login is disabled and OIDC
 // is enabled, LoginPost redirects to the OIDC login path.
 func TestLoginPost_LocalLoginDisabledOIDC(t *testing.T) {
 	store := testStore()
@@ -92,8 +92,8 @@ func TestLoginPost_LocalLoginDisabledOIDC(t *testing.T) {
 	}
 }
 
-// TestLoginPost_LocalLoginDisabledNoOIDC — when both are off, renders login
-// with an error (uses nil db but render() returns 500 — we just check it
+// TestLoginPost_LocalLoginDisabledNoOIDC, when both are off, renders login
+// with an error (uses nil db but render() returns 500, we just check it
 // doesn't panic and returns non-redirect).
 func TestLoginPost_LocalLoginDisabledNoOIDC(t *testing.T) {
 	store := testStore()
@@ -112,7 +112,7 @@ func TestLoginPost_LocalLoginDisabledNoOIDC(t *testing.T) {
 	}
 }
 
-// TestLoginPost_RateLimited — when IP is blocked, LoginPost renders the blocked
+// TestLoginPost_RateLimited, when IP is blocked, LoginPost renders the blocked
 // state (no redirect, no DB call).
 func TestLoginPost_RateLimited(t *testing.T) {
 	store := testStore()
@@ -141,7 +141,7 @@ func TestLoginPost_RateLimited(t *testing.T) {
 	}
 }
 
-// TestLoginPost_BadCSRF — CSRF check fails → redirect to /login.
+// TestLoginPost_BadCSRF, CSRF check fails → redirect to /login.
 func TestLoginPost_BadCSRF(t *testing.T) {
 	store := testStore()
 	cfg := &config.Config{ //nolint:gosec // G101: test-only key
@@ -159,7 +159,7 @@ func TestLoginPost_BadCSRF(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.LoginPost(rr, req)
 	// CSRF failure renders an error page (not redirecting to a different path).
-	// Status may be 200 (render) — we confirm it is NOT a successful login redirect.
+	// Status may be 200 (render), we confirm it is NOT a successful login redirect.
 	if rr.Code == http.StatusFound && rr.Header().Get("Location") == "/" {
 		t.Error("CSRF failure should not redirect to /")
 	}
@@ -167,7 +167,7 @@ func TestLoginPost_BadCSRF(t *testing.T) {
 
 // ─── pending2FAUserID ─────────────────────────────────────────────────────────
 
-// TestPending2FAUserID_Set — session has a valid pending_2fa_user_id.
+// TestPending2FAUserID_Set, session has a valid pending_2fa_user_id.
 func TestPending2FAUserID_Set(t *testing.T) {
 	store := testStore()
 	h := newTestHandler(testConfig(""), store)
@@ -185,7 +185,7 @@ func TestPending2FAUserID_Set(t *testing.T) {
 	}
 }
 
-// TestPending2FAUserID_Expired — pending_2fa_expires is in the past.
+// TestPending2FAUserID_Expired, pending_2fa_expires is in the past.
 func TestPending2FAUserID_Expired(t *testing.T) {
 	store := testStore()
 	h := newTestHandler(testConfig(""), store)
@@ -203,7 +203,7 @@ func TestPending2FAUserID_Expired(t *testing.T) {
 	}
 }
 
-// TestPending2FAUserID_NotSet — no pending_2fa_user_id in session.
+// TestPending2FAUserID_NotSet, no pending_2fa_user_id in session.
 func TestPending2FAUserID_NotSet(t *testing.T) {
 	store := testStore()
 	h := newTestHandler(testConfig(""), store)

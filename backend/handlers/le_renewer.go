@@ -13,7 +13,7 @@ import (
 
 // StartRenewer starts the LE auto-renewal loop as a panic-safe background
 // goroutine.  It replaces the bare le.StartRenewer call so renewal failures
-// can flow through notifyAsync and InsertHistory — matching the synchronous
+// can flow through notifyAsync and InsertHistory, matching the synchronous
 // manual-renew path.
 func (h *Handler) StartRenewer() {
 	safeGo("le-renewer", func() {

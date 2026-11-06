@@ -29,7 +29,7 @@ import (
 // StartedAt records the time the server process started (set in main).
 var StartedAt time.Time
 
-// Versioning — overridden via ldflags at build time
+// Versioning, overridden via ldflags at build time
 var (
 	Version   = "0.1.0"
 	BuildDate = "2026-05-28"
@@ -41,17 +41,18 @@ type Handler struct {
 	db    *sql.DB
 	cfg   *config.Config
 	store *sessions.CookieStore
+	auth  AuthStore
 	tmpls map[string]*template.Template
 	// assets is the embedded FS rooted at the module root (contains templates/
 	// and static/ sub-trees).  When nil, loadTemplates falls back to reading
 	// from the filesystem at the current working directory.
 	assets fs.FS
 
-	// OIDC fields — non-nil only when cfg.OIDCEnabled is true
+	// OIDC fields, non-nil only when cfg.OIDCEnabled is true
 	oidcOAuth2Config *oauth2.Config
 	oidcVerifier     *gooidc.IDTokenVerifier
 
-	// CA client — lazily constructed and cached on first successful call to
+	// CA client, lazily constructed and cached on first successful call to
 	// caClient(). A construction failure is never cached (see caClient), so a
 	// step-ca that isn't up yet at UI boot cannot poison the Handler.
 	caMu  sync.Mutex
@@ -136,8 +137,8 @@ func (h *Handler) initOIDC() {
 }
 
 // caClient lazily constructs and caches the CA client on first successful
-// call. Unlike initOIDC, construction failure is never cached — the next
-// call retries from scratch — because step-ca may not have produced its
+// call. Unlike initOIDC, construction failure is never cached, the next
+// call retries from scratch, because step-ca may not have produced its
 // root cert yet at UI-container-boot, and this must degrade to a reported
 // status (today's /ready behavior), never a fatal boot error (R2).
 func (h *Handler) caClient() (stepca.CA, error) {
@@ -208,7 +209,7 @@ func (h *Handler) loadTemplates() {
 		}
 		h.tmpls[page] = t
 	}
-	// Standalone auth pages (no base layout — same pattern as login).
+	// Standalone auth pages (no base layout, same pattern as login).
 	for _, authPage := range []string{"login", "forgot_password", "reset_password"} {
 		file := fmt.Sprintf("templates/%s.html", authPage)
 		name := authPage + ".html"
@@ -252,7 +253,7 @@ func (h *Handler) templateFuncs() template.FuncMap {
 		},
 		"fmtTime": func(t *time.Time) string {
 			if t == nil {
-				return "—"
+				return "-"
 			}
 			return t.Local().Format("2006-01-02 15:04")
 		},
@@ -273,7 +274,7 @@ func (h *Handler) templateFuncs() template.FuncMap {
 		"sub": func(a, b int) int { return a - b },
 		"deref": func(s *string) string {
 			if s == nil {
-				return "—"
+				return "-"
 			}
 			return *s
 		},

@@ -5,8 +5,10 @@ package middleware
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
+	"step-webui/apitypes"
 	"step-webui/models"
 
 	"github.com/gorilla/sessions"
@@ -32,32 +34,35 @@ const SessionTimeout = 8 * time.Hour
 // created.  This limits the blast radius of a stolen session cookie.
 const SessionMaxLifetime = 24 * time.Hour
 
-// SecurityHeaders adds security HTTP headers.
-func SecurityHeaders(enableHSTS bool) func(http.Handler) http.Handler {
+// documentCSP is the policy for the server-rendered template routes. No
+// 'unsafe-inline' anywhere: every inline <style> and <script> was moved into
+// static files. frame-ancestors, base-uri, form-action and object-src close
+// the gaps default-src does not cover.
+const documentCSP = "default-src 'self'; script-src 'self'; " +
+	"style-src 'self'; " +
+	"font-src 'self'; img-src 'self' data:; " +
+	"object-src 'none'; base-uri 'self'; " +
+	"form-action 'self'; frame-ancestors 'none';"
+
+// apiCSP is all a JSON response needs. A document policy on one would be
+// intersected by the browser with nginx's policy on the SPA document.
+const apiCSP = "default-src 'none'; frame-ancestors 'none'"
+
+// SecurityHeaders adds the headers that mean something on the response type
+// each route serves. It never sends Strict-Transport-Security: on one origin
+// an API response carrying max-age=0 would clear the policy nginx sets on the
+// document, so HSTS belongs to nginx alone.
+func SecurityHeaders() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-Frame-Options", "DENY")
 			w.Header().Set("X-Content-Type-Options", "nosniff")
-			// X-XSS-Protection is deprecated in modern browsers and removed (P2-3).
 			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-			if enableHSTS {
-				w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+			if isAPIPath(r.URL.Path) {
+				w.Header().Set("Content-Security-Policy", apiCSP)
 			} else {
-				w.Header().Set("Strict-Transport-Security", "max-age=0")
+				w.Header().Set("Content-Security-Policy", documentCSP)
 			}
-			// All CSS/JS/fonts are served locally; Google-Fonts grants removed (P2-3).
-			// 'unsafe-inline' removed from script-src (P2-3) and from style-src (W4-4)
-			// after all inline <style> blocks were moved into static/css/pages.css.
-			// No unsafe-inline remains anywhere in the CSP.
-			// frame-ancestors/base-uri/form-action/object-src close the gaps
-			// default-src does not cover: framing, <base href> hijacking,
-			// off-origin form posts, and plugin content.
-			w.Header().Set("Content-Security-Policy",
-				"default-src 'self'; script-src 'self'; "+
-					"style-src 'self'; "+
-					"font-src 'self'; img-src 'self' data:; "+
-					"object-src 'none'; base-uri 'self'; "+
-					"form-action 'self'; frame-ancestors 'none';")
 			// Global, not per-route: an allowlist goes stale every time a
 			// sensitive route is added. main.go's static handler runs after
 			// this chain and overwrites it for assets, which is intended.
@@ -66,6 +71,10 @@ func SecurityHeaders(enableHSTS bool) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func isAPIPath(p string) bool {
+	return p == apitypes.BasePath || strings.HasPrefix(p, apitypes.BasePath+"/")
 }
 
 // RequireLogin is the template-route wrapper around ValidateSession: it

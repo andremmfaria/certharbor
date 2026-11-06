@@ -16,12 +16,12 @@ func TestResolveAdminPassword(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:    "password set — seed proceeds",
+			name:    "password set, seed proceeds",
 			envVal:  "StrongPassword123!",
 			wantErr: false,
 		},
 		{
-			name:    "password empty — must error",
+			name:    "password empty, must error",
 			envVal:  "",
 			wantErr: true,
 		},
@@ -57,7 +57,7 @@ func TestResolveAdminPasswordErrorMessage(t *testing.T) {
 		if !errors.Is(err, err) { // keep the import used
 			_ = want
 		}
-		// Simple substring check — the message must be actionable
+		// Simple substring check, the message must be actionable
 		found := false
 		for i := range len(msg) - len(want) + 1 {
 			if msg[i:i+len(want)] == want {

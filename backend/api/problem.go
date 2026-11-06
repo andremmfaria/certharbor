@@ -81,3 +81,23 @@ func writeRateLimitProblem(w http.ResponseWriter, instance string, attemptsLeft 
 		AttemptsLeft int `json:"attemptsLeft"`
 	}{model, attemptsLeft})
 }
+
+// newProblem builds a problem document for an operation handler to return.
+// typ may be empty, which leaves huma's default of about:blank.
+func newProblem(status int, title, typ, detail, instance string) *huma.ErrorModel {
+	model := huma.NewError(status, detail).(*huma.ErrorModel) //nolint:errcheck // huma.NewError's default implementation always returns *huma.ErrorModel
+	model.Title = title
+	model.Instance = instance
+	if typ != "" {
+		model.Type = typ
+	}
+	return model
+}
+
+// rateLimitError is writeRateLimitProblem's body as a returnable error, for the
+// attempt that itself trips the limiter. The middleware refuses an address that
+// is already blocked, but only a handler knows its own attempt was the last.
+type rateLimitError struct {
+	*huma.ErrorModel
+	AttemptsLeft int `json:"attemptsLeft"`
+}

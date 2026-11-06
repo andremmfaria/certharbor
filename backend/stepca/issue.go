@@ -23,7 +23,7 @@ import (
 type IssueRequest struct {
 	Domain       string
 	Duration     time.Duration
-	KeyType      string // "EC:P-256", "EC:P-384", "RSA:2048", "RSA:4096" — same vocabulary as cert_ops.go
+	KeyType      string // "EC:P-256", "EC:P-384", "RSA:2048", "RSA:4096", same vocabulary as cert_ops.go
 	Provisioner  string
 	PasswordFile string
 }
@@ -31,7 +31,7 @@ type IssueRequest struct {
 // IssueCertificate mints a certificate for req.Domain, replicating what
 // `step ca certificate <domain>` did: local key generation + CSR + direct
 // api.SignRequest construction (v0.30.2 has no bring-your-own-key primitive
-// at the ca.CreateSignRequest level — R4, doc.go), single-SAN issuance
+// at the ca.CreateSignRequest level, R4, doc.go), single-SAN issuance
 // (subject == the one SAN, matching the CLI's default), and leaf+chain PEM
 // bundling in the cert file so parseCertDates/getCertKeyType (which read
 // only the first PEM block) keep working unchanged.
@@ -49,7 +49,7 @@ func (c *Client) IssueCertificate(ctx context.Context, req IssueRequest) (certPE
 
 	// kid is left empty: ca.NewProvisioner resolves the named provisioner's
 	// key from the CA itself when kid == "" (loadProvisionerJWKByName in the
-	// library source — see doc.go), so no separate Provisioners()-based kid
+	// library source, see doc.go), so no separate Provisioners()-based kid
 	// lookup is needed here.
 	prov, err := ca.NewProvisioner(req.Provisioner, "", c.cfg.CAURL, password, ca.WithRootFile(c.cfg.RootCert))
 	if err != nil {
@@ -129,7 +129,7 @@ func generateKey(keyType string) (any, error) {
 }
 
 // bundleChainPEM PEM-encodes the certificate chain in the order the CA
-// returned it — leaf first, then any intermediates — matching what
+// returned it, leaf first, then any intermediates, matching what
 // `step ca certificate` wrote into the cert file by default (confirmed
 // against api/sign.go: certChainPEM[0] is the leaf, certChainPEM[1] the
 // intermediate). Writing the leaf first is what keeps

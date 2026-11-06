@@ -242,7 +242,7 @@ func TestIssueCert_UnknownProvider(t *testing.T) {
 	_ = origDir
 
 	// The unknown-provider path is reached only after key/registration setup.
-	// We test it by calling IssueCert directly — the switch default fires
+	// We test it by calling IssueCert directly, the switch default fires
 	// before any ACME network call.  The call will fail at MkdirAll if
 	// LEDirectory doesn't exist, so we skip the directory creation part and
 	// just confirm validateIdentifier + provider logic.
@@ -257,10 +257,10 @@ func TestIssueCert_UnknownProvider(t *testing.T) {
 		t.Error("expected error for unknown provider")
 	}
 	// The error may come from MkdirAll (LEDirectory not writable) or from the
-	// provider switch — either is acceptable; we just confirm an error is returned.
+	// provider switch, either is acceptable; we just confirm an error is returned.
 }
 
-// ─── parseCertDates — invalid cert body ───────────────────────────────────────
+// ─── parseCertDates, invalid cert body ───────────────────────────────────────
 
 // TestParseCertDates_ValidPEMBadCert confirms nil is returned for a PEM block
 // with a valid header but invalid DER body.

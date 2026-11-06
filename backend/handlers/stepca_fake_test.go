@@ -6,7 +6,7 @@ import (
 	"step-webui/stepca"
 )
 
-// FakeCA is a test double for stepca.CA — the direct replacement for the
+// FakeCA is a test double for stepca.CA, the direct replacement for the
 // role makeFakeRunner/fakeRunnerResult played before this migration (see
 // cert_backup_test.go, deleted per Phase 6.1). Zero value is a CA that
 // succeeds every call with empty/zero results.

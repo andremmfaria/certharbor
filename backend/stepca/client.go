@@ -25,7 +25,7 @@ type CA interface {
 }
 
 // ProvisionerInfo is the minimal shape handlers/provisioners.go needs to
-// render the provisioners page — mirrors the "name"/"type" JSON the deleted
+// render the provisioners page, mirrors the "name"/"type" JSON the deleted
 // CLI call produced, so provisioners.html's index . "name"/"type" lookups
 // keep working unchanged.
 type ProvisionerInfo struct {
@@ -39,9 +39,9 @@ type Client struct {
 	ca  *ca.Client
 }
 
-// New constructs a Client. It performs no network I/O itself — ca.NewClient
+// New constructs a Client. It performs no network I/O itself, ca.NewClient
 // only parses cfg.CAURL and (eagerly, per doc.go's R2 finding) reads
-// cfg.RootCert from disk — so New is fast/safe to call speculatively from
+// cfg.RootCert from disk, so New is fast/safe to call speculatively from
 // Handler.caClient() on every request until it first succeeds.
 func New(cfg *config.Config) (*Client, error) {
 	c, err := ca.NewClient(cfg.CAURL, ca.WithRootFile(cfg.RootCert))

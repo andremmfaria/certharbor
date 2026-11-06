@@ -1,5 +1,5 @@
 /*
- * history.js — multi-select filter for the cert-history page.
+ * history.js, multi-select filter for the cert-history page.
  * Initial selection is read from the #history-data JSON block written by the
  * template (type="application/json"), so no inline JS is needed.
  */

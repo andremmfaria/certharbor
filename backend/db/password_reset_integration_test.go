@@ -131,10 +131,10 @@ func TestIntegration_PasswordReset_TokenLifecycle(t *testing.T) {
 		}
 	})
 
-	t.Run("mark used — token no longer valid", func(t *testing.T) {
+	t.Run("mark used, token no longer valid", func(t *testing.T) {
 		tok, _ := GetValidPasswordResetToken(conn, tokenHash)
 		if tok == nil {
-			t.Skip("token not found — prior sub-test may have failed")
+			t.Skip("token not found, prior sub-test may have failed")
 		}
 		if err := MarkPasswordResetTokenUsed(conn, tok.ID); err != nil {
 			t.Fatalf("MarkPasswordResetTokenUsed: %v", err)

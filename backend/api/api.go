@@ -34,7 +34,7 @@ type ctxKey int
 const ctxKeyHTTP ctxKey = iota
 
 // httpPair is what the unwrap middleware stashes on the context so operation
-// handlers — which huma hands only a context.Context — can reach
+// handlers, which huma hands only a context.Context, can reach
 // gorilla/sessions, which needs both the *http.Request and the
 // http.ResponseWriter (D2 cost 2, 5.5).
 type httpPair struct {

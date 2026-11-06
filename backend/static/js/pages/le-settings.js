@@ -1,5 +1,5 @@
 /*
- * le-settings.js — show/hide provider-specific settings panels on the
+ * le-settings.js, show/hide provider-specific settings panels on the
  * Let's Encrypt settings page.
  * The initially selected provider is read from the data-provider attribute
  * on the <select id="provSelect"> element.

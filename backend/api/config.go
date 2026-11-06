@@ -15,6 +15,7 @@ var roleLevels = map[string]int{"viewer": 1, "manager": 2, "admin": 3}
 
 type configBody struct {
 	OIDCEnabled               bool           `json:"oidcEnabled"`
+	LocalLoginEnabled         bool           `json:"localLoginEnabled"`
 	OIDCButtonLabel           string         `json:"oidcButtonLabel"`
 	ACMEEnabled               bool           `json:"acmeEnabled"`
 	AppVersion                string         `json:"appVersion"`
@@ -30,8 +31,8 @@ type configOutput struct {
 
 // getConfig implements the public GET /api/v1/config (auth: public, no
 // session touched). oidcButtonLabel and acmeEnabled have no backing config
-// field yet — no OIDC-button-copy or ACME-toggle env var exists in
-// config.Config today — so they are spike placeholders a later phase
+// field yet, no OIDC-button-copy or ACME-toggle env var exists in
+// config.Config today, so they are spike placeholders a later phase
 // replaces with real settings.
 func getConfig(h *handlers.Handler) func(context.Context, *struct{}) (*configOutput, error) {
 	return func(_ context.Context, _ *struct{}) (*configOutput, error) {
@@ -42,6 +43,7 @@ func getConfig(h *handlers.Handler) func(context.Context, *struct{}) (*configOut
 		}
 		return &configOutput{Body: configBody{
 			OIDCEnabled:               cfg.OIDCEnabled,
+			LocalLoginEnabled:         cfg.LocalLoginEnabled,
 			OIDCButtonLabel:           oidcLabel,
 			ACMEEnabled:               true,
 			AppVersion:                handlers.Version,

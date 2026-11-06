@@ -83,7 +83,7 @@ func applyRequestCookies(req *http.Request, cookies []*http.Cookie) {
 // ─── SecurityHeaders ───────────────────────────────────────────────────────────
 
 func TestSecurityHeaders_Present(t *testing.T) {
-	handler := SecurityHeaders(false)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := SecurityHeaders()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	req := newReq("GET", "/")
@@ -102,36 +102,47 @@ func TestSecurityHeaders_Present(t *testing.T) {
 	}
 }
 
-func TestSecurityHeaders_HSTSEnabled(t *testing.T) {
-	handler := SecurityHeaders(true)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+// TestSecurityHeaders_NoHSTSAnywhere: on one origin, a max-age=0 from Go
+// would clear the policy nginx sets on the document, so Go never sends HSTS.
+func TestSecurityHeaders_NoHSTSAnywhere(t *testing.T) {
+	handler := SecurityHeaders()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
-	req := newReq("GET", "/")
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-
-	hsts := rr.Header().Get("Strict-Transport-Security")
-	if hsts == "" || hsts == "max-age=0" {
-		t.Errorf("expected HSTS header to be set when enableHSTS=true, got %q", hsts)
+	for _, path := range []string{"/", "/login", "/api/v1", "/api/v1/session", "/health"} {
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, newReq("GET", path))
+		if got, ok := rr.Header()["Strict-Transport-Security"]; ok {
+			t.Errorf("%s: Strict-Transport-Security present (%q); Go must not emit it on any path", path, got)
+		}
 	}
 }
 
-func TestSecurityHeaders_HSTSDisabled(t *testing.T) {
-	handler := SecurityHeaders(false)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+// TestSecurityHeaders_APIScopedCSP: no /api/v1 response carries the document
+// policy, and the template routes keep it.
+func TestSecurityHeaders_APIScopedCSP(t *testing.T) {
+	handler := SecurityHeaders()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
-	req := newReq("GET", "/")
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-
-	hsts := rr.Header().Get("Strict-Transport-Security")
-	if hsts != "max-age=0" {
-		t.Errorf("expected HSTS=max-age=0 when disabled, got %q", hsts)
+	cases := map[string]string{
+		"/api/v1":            apiCSP,
+		"/api/v1/session":    apiCSP,
+		"/api/v1/x/y":        apiCSP,
+		"/":                  documentCSP,
+		"/login":             documentCSP,
+		"/api/status":        documentCSP,
+		"/api/v10/lookalike": documentCSP,
+	}
+	for path, want := range cases {
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, newReq("GET", path))
+		if got := rr.Header().Get("Content-Security-Policy"); got != want {
+			t.Errorf("%s: CSP %q want %q", path, got, want)
+		}
 	}
 }
 
 func TestSecurityHeaders_CSP(t *testing.T) {
-	handler := SecurityHeaders(false)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := SecurityHeaders()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	req := newReq("GET", "/")
@@ -164,7 +175,7 @@ func TestSecurityHeaders_CSP(t *testing.T) {
 }
 
 func TestSecurityHeaders_NoXXSSProtection(t *testing.T) {
-	handler := SecurityHeaders(false)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := SecurityHeaders()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	req := newReq("GET", "/")
@@ -224,7 +235,7 @@ func TestRequireLogin_AbsoluteLifetimeExpired(t *testing.T) {
 	cookies := injectSessionMiddleware(t, store, map[interface{}]interface{}{
 		"user_id":            42,
 		"session_created_at": oldCreatedAt,
-		"last_activity":      time.Now().Unix(), // recently active — must still be rejected
+		"last_activity":      time.Now().Unix(), // recently active, must still be rejected
 	})
 
 	handler := RequireLogin(store, fakeLoader(activeUser(42, "viewer")))(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

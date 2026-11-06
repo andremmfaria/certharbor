@@ -25,7 +25,7 @@ func (c *countingFakeCA) IssueCertificate(ctx context.Context, req stepca.IssueR
 }
 
 // TestIssueCert_ValidDomain confirms a valid domain reaches the CA client and
-// the returned cert/key PEM bytes are written to certPath/keyPath — the
+// the returned cert/key PEM bytes are written to certPath/keyPath, the
 // direct replacement for the deleted stepRunner-based TestIssueCert_ValidIdentifier.
 func TestIssueCert_ValidDomain(t *testing.T) {
 	dir := t.TempDir()
@@ -58,7 +58,7 @@ func TestIssueCert_ValidDomain(t *testing.T) {
 }
 
 // TestIssueCert_InvalidDomain confirms a malicious domain is rejected by
-// validateIdentifier before the CA client is ever touched — the direct
+// validateIdentifier before the CA client is ever touched, the direct
 // replacement for the deleted stepRunner-based TestIssueCert_InvalidDomain.
 func TestIssueCert_InvalidDomain(t *testing.T) {
 	ca := &countingFakeCA{}
@@ -69,7 +69,7 @@ func TestIssueCert_InvalidDomain(t *testing.T) {
 		t.Fatal("expected error for domain starting with '--'")
 	}
 	if errors.Is(err, ca.IssueErr) {
-		t.Errorf("issueCert returned the CA's error — validateIdentifier did not short-circuit: %v", err)
+		t.Errorf("issueCert returned the CA's error, validateIdentifier did not short-circuit: %v", err)
 	}
 	if ca.issueCalls != 0 {
 		t.Errorf("expected 0 IssueCertificate calls, got %d", ca.issueCalls)
@@ -77,7 +77,7 @@ func TestIssueCert_InvalidDomain(t *testing.T) {
 }
 
 // TestIssueCert_PathOutsideCertsDir confirms a cert path that escapes
-// cfg.CertsDir — a tampered or legacy database row on the Renew path — is
+// cfg.CertsDir, a tampered or legacy database row on the Renew path, is
 // refused before anything is written to disk.
 func TestIssueCert_PathOutsideCertsDir(t *testing.T) {
 	dir := t.TempDir()
@@ -125,7 +125,7 @@ func TestIssueCert_DomainOutsideNamePolicy(t *testing.T) {
 }
 
 // TestRevokeStep_PropagatesCAError confirms a FakeCA.RevokeErr is propagated
-// by revokeStep — the direct replacement for the deleted stepRunner-based
+// by revokeStep, the direct replacement for the deleted stepRunner-based
 // TestRevokeStep_RunnerError.
 func TestRevokeStep_PropagatesCAError(t *testing.T) {
 	wantErr := errors.New("revoke failed")

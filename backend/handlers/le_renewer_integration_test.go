@@ -26,7 +26,7 @@ func openRenewerTestDB(t *testing.T) *sql.DB {
 	}
 	conn, err := appdb.Connect(dsn)
 	if err != nil {
-		t.Skipf("integration DB not available (%v) — skipping", err)
+		t.Skipf("integration DB not available (%v), skipping", err)
 	}
 	if err := appdb.InitLESchema(conn); err != nil {
 		_ = conn.Close()

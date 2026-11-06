@@ -20,6 +20,11 @@ import (
 	"time"
 )
 
+// PGDumpTimeout is the longest operation any handler runs. It is exported so
+// a test can assert nginx's proxy_read_timeout exceeds it: a ceiling raised
+// here without nginx following would surface as an unattributed 504.
+const PGDumpTimeout = 2 * time.Minute
+
 type backupManifest struct {
 	Format     string            `json:"format"`
 	CreatedAt  string            `json:"created_at"`
@@ -176,7 +181,7 @@ func (h *Handler) writePGDump(ctx context.Context, path string) error {
 		return fmt.Errorf("closing pgpass: %w", err)
 	}
 
-	timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	timeoutCtx, cancel := context.WithTimeout(ctx, PGDumpTimeout)
 	defer cancel()
 
 	args := []string{"-h", info.host, "-p", info.port, "-U", info.user, "-d", info.db, "--no-owner", "--no-privileges"}

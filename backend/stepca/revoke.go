@@ -12,11 +12,11 @@ import (
 )
 
 // Revoke revokes the certificate at certPath/keyPath, authenticating via the
-// leaf cert/key itself (mTLS) — the same auth mode `step ca revoke --cert
+// leaf cert/key itself (mTLS), the same auth mode `step ca revoke --cert
 // --key` used (no provisioner/OTT). Per R7 (verified against v0.30.2
 // source): the server's mTLS revoke path requires req.Serial to exactly
 // match the presented peer certificate's serial (else 403), and
-// req.Passive == true (non-passive revocation returns NotImplemented) — a
+// req.Passive == true (non-passive revocation returns NotImplemented), a
 // zero-value api.RevokeRequest fails at runtime, so both fields are set
 // explicitly here.
 func (c *Client) Revoke(ctx context.Context, certPath, keyPath string) error {

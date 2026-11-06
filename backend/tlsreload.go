@@ -48,7 +48,7 @@ func (r *certReloader) GetCertificate(_ *tls.ClientHelloInfo) (*tls.Certificate,
 		return cached, nil
 	}
 
-	// Mtime changed or cache is empty — reload under write lock.
+	// Mtime changed or cache is empty, reload under write lock.
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -61,7 +61,7 @@ func (r *certReloader) GetCertificate(_ *tls.ClientHelloInfo) (*tls.Certificate,
 	cert, err := tls.LoadX509KeyPair(r.certPath, r.keyPath)
 	if err != nil {
 		if r.cached != nil {
-			slog.Warn("TLS cert reload failed — serving last good cert",
+			slog.Warn("TLS cert reload failed, serving last good cert",
 				"certPath", r.certPath, "err", err)
 			return r.cached, nil
 		}

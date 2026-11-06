@@ -31,9 +31,6 @@ func TestLoad_Defaults(t *testing.T) {
 	if !cfg.LocalLoginEnabled {
 		t.Error("LocalLoginEnabled: got false want true")
 	}
-	if cfg.EnableHSTS {
-		t.Error("EnableHSTS: got true want false")
-	}
 	if cfg.TrustProxy {
 		t.Error("TrustProxy: got true want false")
 	}
@@ -58,6 +55,15 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.HostIP != "127.0.0.1" {
 		t.Errorf("HostIP: got %q want %q", cfg.HostIP, "127.0.0.1")
 	}
+	if cfg.WebTLSMode != "stepca" {
+		t.Errorf("WebTLSMode: got %q want stepca", cfg.WebTLSMode)
+	}
+	if cfg.WebHostname != "" {
+		t.Errorf("WebHostname: got %q want empty, there is no fallback", cfg.WebHostname)
+	}
+	if cfg.WebUpstreamHost != "step-webui-web" {
+		t.Errorf("WebUpstreamHost: got %q want step-webui-web", cfg.WebUpstreamHost)
+	}
 }
 
 // TestLoad_EnvOverrides verifies that env vars override every default.
@@ -75,7 +81,6 @@ func TestLoad_EnvOverrides(t *testing.T) {
 	t.Setenv("OIDC_DEFAULT_ROLE", "viewer")
 	t.Setenv("OIDC_SYNC_ROLE", "false")
 	t.Setenv("LOCAL_LOGIN_ENABLED", "false")
-	t.Setenv("ENABLE_HSTS", "true")
 	t.Setenv("TRUST_PROXY", "true")
 	t.Setenv("TRUSTED_PROXY_CIDRS", "10.0.0.7/32,192.168.0.0/16")
 	t.Setenv("ALLOWED_DOMAIN_SUFFIXES", " Example.COM , .internal.example.net ,, ")
@@ -88,6 +93,9 @@ func TestLoad_EnvOverrides(t *testing.T) {
 	t.Setenv("CA_ROOT_CERT_PEM", "-----BEGIN CERTIFICATE-----\nabc\n-----END CERTIFICATE-----")
 	t.Setenv("UI_HOSTNAME", "ui.internal.example.com")
 	t.Setenv("HOST_IP", "10.0.0.5")
+	t.Setenv("WEB_TLS_MODE", "provided")
+	t.Setenv("WEB_HOSTNAME", " ca.example.com ")
+	t.Setenv("WEB_UPSTREAM_HOST", "edge-proxy")
 
 	cfg := Load()
 
@@ -111,9 +119,6 @@ func TestLoad_EnvOverrides(t *testing.T) {
 	}
 	if cfg.LocalLoginEnabled {
 		t.Error("LocalLoginEnabled: got true want false")
-	}
-	if !cfg.EnableHSTS {
-		t.Error("EnableHSTS: got false want true")
 	}
 	if !cfg.TrustProxy {
 		t.Error("TrustProxy: got false want true")
@@ -153,25 +158,34 @@ func TestLoad_EnvOverrides(t *testing.T) {
 	if cfg.HostIP != "10.0.0.5" {
 		t.Errorf("HostIP: got %q want %q", cfg.HostIP, "10.0.0.5")
 	}
+	if cfg.WebTLSMode != "provided" {
+		t.Errorf("WebTLSMode: got %q want provided", cfg.WebTLSMode)
+	}
+	if cfg.WebHostname != "ca.example.com" {
+		t.Errorf("WebHostname: got %q want the trimmed value", cfg.WebHostname)
+	}
+	if cfg.WebUpstreamHost != "edge-proxy" {
+		t.Errorf("WebUpstreamHost: got %q want edge-proxy", cfg.WebUpstreamHost)
+	}
 }
 
 // TestGetEnvBool_InvalidValue verifies that an unparseable boolean value falls
 // back to the default.
 func TestGetEnvBool_InvalidValue(t *testing.T) {
-	t.Setenv("ENABLE_HSTS", "notabool")
+	t.Setenv("TRUST_PROXY", "notabool")
 	cfg := Load()
-	// Default for ENABLE_HSTS is false; invalid value must not flip it.
-	if cfg.EnableHSTS {
+	// Default for TRUST_PROXY is false; invalid value must not flip it.
+	if cfg.TrustProxy {
 		t.Error("invalid bool env var should fall back to default false")
 	}
 }
 
 // TestGetEnvBool_EmptyValue verifies that an empty env var returns the default.
 func TestGetEnvBool_EmptyValue(t *testing.T) {
-	t.Setenv("ENABLE_HSTS", "")
+	t.Setenv("TRUST_PROXY", "")
 	cfg := Load()
-	if cfg.EnableHSTS {
-		t.Error("empty env var should return default false for EnableHSTS")
+	if cfg.TrustProxy {
+		t.Error("empty env var should return default false for TrustProxy")
 	}
 }
 
@@ -193,13 +207,14 @@ func clearEnvVars(t *testing.T) {
 	vars := []string{
 		"PORT", "DATABASE_URL", "CA_URL", "ROOT_CERT", "PROVISIONER",
 		"PASSWORD_FILE", "STEP_CA_IMAGE", "SECRET_KEY", "SECRET_KEY_FILE",
-		"SESSION_SECURE", "ENABLE_HSTS", "TRUST_PROXY", "TRUSTED_PROXY_CIDRS",
+		"SESSION_SECURE", "TRUST_PROXY", "TRUSTED_PROXY_CIDRS", "WEB_UPSTREAM_HOST",
 		"ALLOWED_DOMAIN_SUFFIXES", "OIDC_ENABLED",
 		"OIDC_ISSUER_URL", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET",
 		"OIDC_REDIRECT_URL", "OIDC_GROUP_CLAIM", "OIDC_GROUP_ADMIN",
 		"OIDC_GROUP_MANAGER", "OIDC_GROUP_VIEWER", "OIDC_DEFAULT_ROLE",
 		"OIDC_SYNC_ROLE", "LOCAL_LOGIN_ENABLED", "USE_HTTPS",
 		"UI_TLS_MODE", "CA_FINGERPRINT", "CA_ROOT_CERT_PEM", "UI_HOSTNAME", "HOST_IP",
+		"WEB_TLS_MODE", "WEB_HOSTNAME",
 	}
 	for _, v := range vars {
 		t.Setenv(v, "")

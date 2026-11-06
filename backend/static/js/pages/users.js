@@ -1,5 +1,5 @@
 /*
- * users.js — client-side user-table filter.
+ * users.js, client-side user-table filter.
  * Used by users.html and admin_users.html (identical logic, shared file).
  */
 (function () {

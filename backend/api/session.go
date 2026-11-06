@@ -2,7 +2,11 @@ package api
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"step-webui/handlers"
@@ -141,5 +145,76 @@ func expiredCookie(name string, secure, httpOnly bool) *http.Cookie {
 		Secure:   secure,
 		SameSite: http.SameSiteStrictMode,
 		HttpOnly: httpOnly,
+	}
+}
+
+type createSessionBody struct {
+	Username string `json:"username" minLength:"1" maxLength:"255" doc:"Account username."`
+	Password string `json:"password" minLength:"1" maxLength:"1024" writeOnly:"true" doc:"Account password."`
+}
+
+type createSessionInput struct {
+	Body createSessionBody
+}
+
+// createSession implements POST /api/v1/session: the credential half of
+// today's POST /login. It answers with the same discriminated Session
+// getSession does, so the SPA has one shape to branch on, and returns
+// pendingMfa rather than an error when a second factor is owed.
+func createSession(h *handlers.Handler) func(context.Context, *createSessionInput) (*sessionOutput, error) {
+	return func(ctx context.Context, in *createSessionInput) (*sessionOutput, error) {
+		r, w := httpFrom(ctx)
+		res := h.APILogin(w, r, strings.TrimSpace(in.Body.Username), in.Body.Password)
+		return loginResponse(w, r, res)
+	}
+}
+
+type submitMFABody struct {
+	Code     string `json:"code" minLength:"1" maxLength:"64" doc:"The authenticator code, or a recovery code."`
+	CodeType string `json:"codeType" enum:"totp,recovery" doc:"Whether code is an authenticator code or a recovery code."`
+}
+
+type submitMFAInput struct {
+	Body submitMFABody
+}
+
+// submitMfa implements POST /api/v1/session/mfa. It verifies against the user
+// parked in the session by createSession and never against one named in the
+// request (5.3).
+func submitMfa(h *handlers.Handler) func(context.Context, *submitMFAInput) (*sessionOutput, error) {
+	return func(ctx context.Context, in *submitMFAInput) (*sessionOutput, error) {
+		r, w := httpFrom(ctx)
+		res := h.APIVerifyMFA(w, r, in.Body.Code, in.Body.CodeType == "recovery")
+		return loginResponse(w, r, res)
+	}
+}
+
+// loginResponse maps a LoginResult onto the problem contract (5.2). Every
+// credential refusal is 401 and deliberately non-specific, matching today's
+// refusal to tell an unknown user from a wrong password.
+func loginResponse(w http.ResponseWriter, r *http.Request, res handlers.LoginResult) (*sessionOutput, error) {
+	switch res.Outcome {
+	case handlers.LoginAuthenticated:
+		return &sessionOutput{Body: sessionBody{
+			State: SessionAuthenticated,
+			User:  &sessionUserBody{ID: res.User.ID, Username: res.User.Username, Role: res.User.Role},
+		}}, nil
+	case handlers.LoginMFARequired:
+		return &sessionOutput{Body: sessionBody{State: SessionPendingMFA}}, nil
+	case handlers.LoginBlocked:
+		w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(res.RetryAfter.Seconds()))))
+		return nil, &rateLimitError{
+			ErrorModel:   newProblem(http.StatusTooManyRequests, "Too Many Requests", problemTypeBase+"rate-limit", security.LockoutMessage(), r.URL.Path),
+			AttemptsLeft: 0,
+		}
+	case handlers.LoginDisabled:
+		return nil, newProblem(http.StatusUnauthorized, "Unauthorized", "", "Account is disabled. Please contact your administrator.", r.URL.Path)
+	case handlers.LoginLocalDisabled:
+		return nil, newProblem(http.StatusForbidden, "Forbidden", problemTypeBase+"local-login-disabled", "Local login is disabled.", r.URL.Path)
+	case handlers.LoginNoPending:
+		return nil, newProblem(http.StatusUnauthorized, "Unauthorized", problemTypeBase+"mfa-expired", "No sign-in is waiting for a code. Start again.", r.URL.Path)
+	default:
+		return nil, newProblem(http.StatusUnauthorized, "Unauthorized", "",
+			fmt.Sprintf("Invalid credentials. Attempts remaining: %d", res.AttemptsLeft), r.URL.Path)
 	}
 }

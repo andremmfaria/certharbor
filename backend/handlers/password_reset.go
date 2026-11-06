@@ -25,7 +25,7 @@ const (
 	passwordResetLimitCount  = 3
 	passwordResetLimitWindow = 15 * time.Minute
 	// genericResetInfo is the identical response shown regardless of
-	// whether an account was found — prevents user enumeration via response differences.
+	// whether an account was found, prevents user enumeration via response differences.
 	genericResetInfo = "If an account with that login or email exists, a password reset link has been sent."
 )
 
@@ -68,7 +68,7 @@ func (h *Handler) ForgotPasswordPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// All branches below show the same generic Info — only the audit log
+	// All branches below show the same generic Info, only the audit log
 	// captures the real outcome to preserve no-enumeration.
 	user, err := appdb.GetUserByLoginOrEmail(h.db, identifier)
 	if err != nil || user == nil {
@@ -301,7 +301,7 @@ func sendPasswordResetMail(
 	}
 	from, to = fromAddr.Address, toAddr.Address
 
-	subject := "Step-CA WebUI — Password Reset"
+	subject := "Step-CA WebUI, Password Reset"
 	body := fmt.Sprintf(
 		"A password reset was requested for your Step-CA WebUI account.\r\n\r\n"+
 			"Open this link within 30 minutes to set a new password:\r\n%s\r\n\r\n"+

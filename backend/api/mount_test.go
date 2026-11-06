@@ -16,6 +16,7 @@ import (
 	humaapi "step-webui/api"
 	"step-webui/config"
 	"step-webui/handlers"
+	appmw "step-webui/middleware"
 	"step-webui/models"
 
 	"github.com/go-chi/chi/v5"
@@ -23,7 +24,7 @@ import (
 )
 
 // Mirrors the registration main.go does before store.Save can encode a
-// session value through an interface{} map — tests never call main().
+// session value through an interface{} map, tests never call main().
 func init() {
 	gob.Register(int(0))
 	gob.Register(int64(0))
@@ -31,6 +32,13 @@ func init() {
 }
 
 func newTestServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return newTestServerWith(t, &config.Config{}, nil)
+}
+
+// newTestServerWith builds the same server with a chosen configuration and,
+// when auth is non-nil, a stand-in for the database the login flow reads.
+func newTestServerWith(t *testing.T, cfg *config.Config, auth handlers.AuthStore) *httptest.Server {
 	t.Helper()
 	hashKey := sha256.Sum256([]byte("phase0-spike-test-key-not-for-prod!"))
 	blockKey := sha256.Sum256([]byte("phase0-spike-test-key-not-for-prod!_block"))
@@ -43,7 +51,10 @@ func newTestServer(t *testing.T) *httptest.Server {
 		Secure:   false, // httptest.NewServer is plain HTTP
 	}
 
-	h := handlers.NewWithFS(nil, &config.Config{}, store, nil)
+	h := handlers.NewWithFS(nil, cfg, store, nil)
+	if auth != nil {
+		h.SetAuthStore(auth)
+	}
 	r := chi.NewRouter()
 
 	// A test-only login route. The handler is built with a nil database, so
@@ -64,7 +75,11 @@ func newTestServer(t *testing.T) *httptest.Server {
 		http.SetCookie(w, &http.Cookie{Name: "step-webui-csrf", Value: testCSRFToken, Path: "/"}) //nolint:gosec // G124: the readable CSRF cookie is deliberately not HttpOnly (5.4), and this test server is plain HTTP
 	})
 
-	humaapi.Mount(r, h, stubUserLoader)
+	loader := appmw.UserLoader(stubUserLoader)
+	if auth != nil {
+		loader = auth.UserByID
+	}
+	humaapi.Mount(r, h, loader)
 
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
@@ -153,7 +168,7 @@ func cookieValue(cookies []*http.Cookie, name string) string {
 // TestSession_AnonymousRoundTrip is the go/no-go proof for the unwrap
 // mechanic (D2 cost 2): getSession writes a CSRF token into the encrypted
 // session from inside a huma operation handler, and this asserts a second
-// call reads the same value back — only possible if store.Get inside the
+// call reads the same value back, only possible if store.Get inside the
 // handler actually decrypted what store.Save wrote there.
 func TestSession_AnonymousRoundTrip(t *testing.T) {
 	srv := newTestServer(t)
@@ -183,7 +198,7 @@ func TestSession_AnonymousRoundTrip(t *testing.T) {
 	}
 	secondCSRF := cookieValue(second.cookies, "step-webui-csrf")
 	if secondCSRF != firstCSRF {
-		t.Fatalf("csrf token changed across requests: first=%q second=%q — session write did not round-trip", firstCSRF, secondCSRF)
+		t.Fatalf("csrf token changed across requests: first=%q second=%q, session write did not round-trip", firstCSRF, secondCSRF)
 	}
 }
 
@@ -210,7 +225,7 @@ func TestConfig_IsPublic(t *testing.T) {
 		t.Fatalf("status = %d, want 200", result.status)
 	}
 	for _, key := range []string{
-		"oidcEnabled", "oidcButtonLabel", "acmeEnabled", "appVersion",
+		"oidcEnabled", "localLoginEnabled", "oidcButtonLabel", "acmeEnabled", "appVersion",
 		"contractSha", "roleLevels", "sessionIdleTimeoutSeconds", "expiringSoonDays",
 	} {
 		if _, ok := result.body[key]; !ok {

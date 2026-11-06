@@ -1,5 +1,5 @@
 /*
- * le-logs.js — debounce domain filter on the LE logs page.
+ * le-logs.js, debounce domain filter on the LE logs page.
  */
 (function () {
   var inp = document.getElementById('leDomainFilter');

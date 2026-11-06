@@ -168,7 +168,7 @@ func TestPgIsReadyArgs(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := pgIsReadyArgs(tc.dsn)
 			if len(got) != len(tc.want) {
-				t.Fatalf("len(args)=%d; want %d — got %v", len(got), len(tc.want), got)
+				t.Fatalf("len(args)=%d; want %d, got %v", len(got), len(tc.want), got)
 			}
 			for i, v := range tc.want {
 				if got[i] != v {
@@ -220,7 +220,7 @@ func TestAdminConsoleCommandsReflectConfig(t *testing.T) {
 	// postgres.ready must parse the DSN; password must NOT appear.
 	wantPGArgs := []string{"-h", "rds.example.com", "-p", "5432", "-U", "app", "-d", "proddb"}
 	if len(pgReady.Args) != len(wantPGArgs) {
-		t.Fatalf("postgres.ready args len=%d; want %d — %v", len(pgReady.Args), len(wantPGArgs), pgReady.Args)
+		t.Fatalf("postgres.ready args len=%d; want %d, %v", len(pgReady.Args), len(wantPGArgs), pgReady.Args)
 	}
 	for i, v := range wantPGArgs {
 		if pgReady.Args[i] != v {
@@ -230,7 +230,7 @@ func TestAdminConsoleCommandsReflectConfig(t *testing.T) {
 	// Paranoia: no arg should contain the password.
 	for _, a := range pgReady.Args {
 		if a == "secret" {
-			t.Error("postgres.ready args contain the database password — must not")
+			t.Error("postgres.ready args contain the database password, must not")
 		}
 	}
 }

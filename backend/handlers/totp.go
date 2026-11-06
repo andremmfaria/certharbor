@@ -184,13 +184,13 @@ func (h *Handler) verifyRecoveryCode(userID int, code string) bool {
 	if code == "" {
 		return false
 	}
-	hashes, err := appdb.GetUnusedRecoveryCodes(h.db, userID)
+	hashes, err := h.authStore().UnusedRecoveryCodes(userID)
 	if err != nil {
 		return false
 	}
 	for id, hash := range hashes {
 		if security.VerifyPassword(code, hash) {
-			_ = appdb.UseRecoveryCode(h.db, id)
+			_ = h.authStore().UseRecoveryCode(id)
 			return true
 		}
 	}
@@ -208,9 +208,9 @@ func (h *Handler) validateTOTPWithReplayCtx(ctx context.Context, userID int, sec
 		return false
 	}
 	currentStep := time.Now().Unix() / 30
-	lastStep, err := appdb.GetTOTPLastStep(ctx, h.db, userID)
+	lastStep, err := h.authStore().TOTPLastStep(ctx, userID)
 	if err != nil {
-		// Fail open on DB read error — we already validated the code, and
+		// Fail open on DB read error, we already validated the code, and
 		// blocking valid users on a DB glitch is worse than the narrow replay
 		// window left open.  The error is logged for operator visibility.
 		log.Printf("[warn] TOTP: GetTOTPLastStep user=%d err=%T", userID, err) //nolint:gosec // G706: userID is int, err type is logged without value
@@ -220,8 +220,8 @@ func (h *Handler) validateTOTPWithReplayCtx(ctx context.Context, userID int, sec
 		log.Printf("[warn] TOTP replay rejected for user=%d", userID) //nolint:gosec // G706: only int userID logged
 		return false
 	}
-	if err := appdb.SetTOTPLastStep(ctx, h.db, userID, currentStep); err != nil {
-		// Write failure: accept the code but log — the step was valid and
+	if err := h.authStore().SetTOTPLastStep(ctx, userID, currentStep); err != nil {
+		// Write failure: accept the code but log, the step was valid and
 		// the worst-case outcome is a single replay opportunity before the
 		// window expires.
 		log.Printf("[warn] TOTP: SetTOTPLastStep user=%d err=%T", userID, err) //nolint:gosec // G706: only int userID and error type logged

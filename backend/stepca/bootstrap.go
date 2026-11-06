@@ -14,12 +14,12 @@ import (
 //
 // Client.Root/RootWithContext (verified against v0.30.2 source, ca/client.go)
 // always issues its GET /root/{sha256sum} over its own insecure pre-trust
-// client — newInsecureClient(), TLS InsecureSkipVerify — regardless of how
+// client, newInsecureClient(), TLS InsecureSkipVerify, regardless of how
 // the *ca.Client wrapping it was constructed, and verifies the returned
 // certificate's SHA256 against the fingerprint before returning an error if
 // they don't match. The wrapping *ca.Client still requires some transport
 // option to construct at all (NewClient rejects "no root cert, no root
-// sha256, no transport" configurations), so ca.WithInsecure() is used here —
+// sha256, no transport" configurations), so ca.WithInsecure() is used here,
 // it is never actually consulted for the /root request itself, only to
 // satisfy that constructor check; there is no trusted root yet at bootstrap
 // time, which is exactly the problem this function solves.

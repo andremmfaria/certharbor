@@ -6,7 +6,7 @@
 {{if .NewUsername}}
 <div class="card card-border-green-mt18">
     <div class="card-header">
-        <strong class="cred-strong-green">Account created — share these credentials with the user</strong>
+        <strong class="cred-strong-green">Account created, share these credentials with the user</strong>
     </div>
     <div class="card-body">
         <p class="muted mb-12">
@@ -58,13 +58,13 @@
                 <div>
                     <label>Role</label>
                     <select name="role">
-                        <option value="viewer" selected>viewer — read-only</option>
-                        <option value="manager">manager — can issue certificates</option>
-                        <option value="admin">admin — full access</option>
+                        <option value="viewer" selected>viewer, read-only</option>
+                        <option value="manager">manager, can issue certificates</option>
+                        <option value="admin">admin, full access</option>
                     </select>
                 </div>
                 <div>
-                    <label>Expiry — preset</label>
+                    <label>Expiry, preset</label>
                     <select name="preset">
                         <option value="30m">30 minutes</option>
                         <option value="1h">1 hour</option>
@@ -87,7 +87,7 @@
                 <label>Note (purpose / recipient)</label>
                 <input type="text"
                        name="note"
-                       placeholder="e.g. J. Smith — audit April 19"
+                       placeholder="e.g. J. Smith, audit April 19"
                        maxlength="200">
             </div>
             <button type="submit" class="btn btn-primary">Create</button>
@@ -139,9 +139,9 @@
                         </td>
                         <td>{{.CreatedAt}}</td>
                         <td>
-                            {{if .ExpiresAt}}{{.ExpiresAt}}{{else}}<span class="muted">—</span>{{end}}
+                            {{if .ExpiresAt}}{{.ExpiresAt}}{{else}}<span class="muted">-</span>{{end}}
                         </td>
-                        <td class="muted">{{if .Note}}{{.Note}}{{else}}—{{end}}</td>
+                        <td class="muted">{{if .Note}}{{.Note}}{{else}}-{{end}}</td>
                     </tr>
                     {{end}}
                 </tbody>

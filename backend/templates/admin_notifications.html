@@ -109,7 +109,7 @@
                 <select name="smtp_security">
                     <option value="starttls" {{if eq .Settings.SMTPSecurity "starttls"}}selected{{end}}>STARTTLS (port 587)</option>
                     <option value="tls" {{if eq .Settings.SMTPSecurity "tls"}}selected{{end}}>TLS (port 465)</option>
-                    <option value="none" {{if eq .Settings.SMTPSecurity "none"}}selected{{end}}>None (plaintext — not recommended)</option>
+                    <option value="none" {{if eq .Settings.SMTPSecurity "none"}}selected{{end}}>None (plaintext, not recommended)</option>
                 </select>
             </label>
             <div class="form-row">

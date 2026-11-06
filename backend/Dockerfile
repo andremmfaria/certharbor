@@ -23,7 +23,7 @@ RUN addgroup -g 10001 -S stepwebui && \
     adduser -u 10001 -S -G stepwebui stepwebui
 
 # openssl stays here solely for admin_console.go's "openssl.version"
-# diagnostic allowlist entry — TLS bootstrap no longer needs it (main.go
+# diagnostic allowlist entry, TLS bootstrap no longer needs it (main.go
 # does root fetch/leaf issuance/self-signed generation via crypto/x509).
 # hadolint ignore=DL3018
 RUN apk add --no-cache curl openssl ca-certificates netcat-openbsd tzdata postgresql-client
@@ -32,7 +32,7 @@ COPY --from=builder /build/step-webui .
 COPY templates/ templates/
 COPY static/ static/
 
-RUN mkdir -p data certs uploads ssl && \
+RUN mkdir -p data certs uploads ssl web-ssl && \
     chown -R stepwebui:stepwebui /opt/step-webui
 
 COPY entrypoint.sh /entrypoint.sh

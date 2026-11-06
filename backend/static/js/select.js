@@ -1,5 +1,5 @@
 /*
- * select.js — auto-wraps <select> elements in a custom UI widget
+ * select.js, auto-wraps <select> elements in a custom UI widget
  * Included from base.html and admin_base.html
  */
 

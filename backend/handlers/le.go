@@ -85,7 +85,7 @@ func (h *Handler) LEIssuePost(w http.ResponseWriter, r *http.Request) {
 	appdb.AddLELog(r.Context(), h.db, domain, "issue",
 		fmt.Sprintf("Certificate issuance started (directory: %s)", h.cfg.LEACMEDirectoryURL))
 
-	// Issue in the background — use Background so the goroutine outlives the request.
+	// Issue in the background, use Background so the goroutine outlives the request.
 	bgCtx := context.Background()
 	safeGo("le-issue:"+domain, func() {
 		result, err := le.IssueCert(&le.LEConfig{

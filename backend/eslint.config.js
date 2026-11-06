@@ -1,4 +1,4 @@
-// ESLint v9 flat config — covers vanilla JS in static/js/
+// ESLint v9 flat config, covers vanilla JS in static/js/
 // sourceType: "script" because there is no bundler/module system
 "use strict";
 

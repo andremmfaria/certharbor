@@ -142,13 +142,13 @@
             <div class="info-row">
                 <div class="info-key">DNS</div>
                 <div class="info-val">
-                    {{range .Detail.DNSNames}}<span class="badge blue badge-m2">{{.}}</span>{{else}}<span class="text-muted">—</span>{{end}}
+                    {{range .Detail.DNSNames}}<span class="badge blue badge-m2">{{.}}</span>{{else}}<span class="text-muted">-</span>{{end}}
                 </div>
             </div>
             <div class="info-row">
                 <div class="info-key">IP</div>
                 <div class="info-val">
-                    {{range .Detail.IPAddresses}}<span class="badge purple badge-m2">{{.}}</span>{{else}}<span class="text-muted">—</span>{{end}}
+                    {{range .Detail.IPAddresses}}<span class="badge purple badge-m2">{{.}}</span>{{else}}<span class="text-muted">-</span>{{end}}
                 </div>
             </div>
         </div>
@@ -161,13 +161,13 @@
             <div class="info-row">
                 <div class="info-key">Key usage</div>
                 <div class="info-val">
-                    {{range .Detail.KeyUsage}}<span class="badge gray badge-m2">{{.}}</span>{{else}}<span class="text-muted">—</span>{{end}}
+                    {{range .Detail.KeyUsage}}<span class="badge gray badge-m2">{{.}}</span>{{else}}<span class="text-muted">-</span>{{end}}
                 </div>
             </div>
             <div class="info-row">
                 <div class="info-key">Extended</div>
                 <div class="info-val">
-                    {{range .Detail.ExtKeyUsage}}<span class="badge gray badge-m2">{{.}}</span>{{else}}<span class="text-muted">—</span>{{end}}
+                    {{range .Detail.ExtKeyUsage}}<span class="badge gray badge-m2">{{.}}</span>{{else}}<span class="text-muted">-</span>{{end}}
                 </div>
             </div>
         </div>

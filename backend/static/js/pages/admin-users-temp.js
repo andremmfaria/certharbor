@@ -1,5 +1,5 @@
 /*
- * admin-users-temp.js — clipboard helpers for the temporary-users page.
+ * admin-users-temp.js, clipboard helpers for the temporary-users page.
  */
 function flashCheck(btnEl) {
   if (!btnEl) { return; }

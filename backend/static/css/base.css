@@ -1,6 +1,6 @@
 /* scoped-for-non-admin */
 /*
- * base.css — global reset, typography, and layout for the main application
+ * base.css, global reset, typography, and layout for the main application
  *
  * Covers: *, body, html, .sidebar, .main, .logo, .nav-*, .burger
  */
@@ -12,7 +12,7 @@
 /* align-items/justify-content are set explicitly (not just relying on the
  * flex defaults) to win, via this selector's higher specificity, over
  * pages.css's unscoped `body{...align-items:center;justify-content:center}`
- * rule — that rule is written for login.html's standalone centered-card
+ * rule, that rule is written for login.html's standalone centered-card
  * layout only, but pages.css loads on every page, so without an explicit
  * override here it silently un-stretches .sidebar/.main: .main ends up
  * sized to its own content height and vertically centered instead of

@@ -188,6 +188,9 @@ func (h *Handler) AdminNotificationsTest(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *Handler) notifyAsync(eventKey, eventType, severity, title, message string, meta map[string]string) {
+	if h.db == nil {
+		return
+	}
 	safeGo("notify:"+eventType, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 7*time.Second)
 		defer cancel()

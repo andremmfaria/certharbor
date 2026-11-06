@@ -1,5 +1,5 @@
 /*
- * admin-theme.js — apply the system-preference theme for admin pages when
+ * admin-theme.js, apply the system-preference theme for admin pages when
  * data-theme="auto".  The server already writes the initial data-theme on
  * <html>; this script only wires the media-query listener for the "auto" case
  * and cleans up the legacy localStorage key.

@@ -17,6 +17,9 @@
             "format": "int64",
             "type": "integer"
           },
+          "localLoginEnabled": {
+            "type": "boolean"
+          },
           "oidcButtonLabel": {
             "type": "string"
           },
@@ -37,6 +40,7 @@
         },
         "required": [
           "oidcEnabled",
+          "localLoginEnabled",
           "oidcButtonLabel",
           "acmeEnabled",
           "appVersion",
@@ -44,6 +48,29 @@
           "roleLevels",
           "sessionIdleTimeoutSeconds",
           "expiringSoonDays"
+        ],
+        "type": "object"
+      },
+      "CreateSessionBody": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "description": "Account password.",
+            "maxLength": 1024,
+            "minLength": 1,
+            "type": "string",
+            "writeOnly": true
+          },
+          "username": {
+            "description": "Account username.",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
         ],
         "type": "object"
       },
@@ -218,6 +245,30 @@
           "name",
           "domain",
           "days"
+        ],
+        "type": "object"
+      },
+      "SubmitMFABody": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "description": "The authenticator code, or a recovery code.",
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "codeType": {
+            "description": "Whether code is an authenticator code or a recovery code.",
+            "enum": [
+              "totp",
+              "recovery"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "codeType"
         ],
         "type": "object"
       }
@@ -436,6 +487,88 @@
         },
         "security": [],
         "summary": "Get the current session state",
+        "tags": [
+          "session"
+        ]
+      },
+      "post": {
+        "operationId": "createSession",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSessionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Log in with a username and password",
+        "tags": [
+          "session"
+        ]
+      }
+    },
+    "/api/v1/session/mfa": {
+      "post": {
+        "operationId": "submitMfa",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitMFABody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Complete a login with a second factor",
         "tags": [
           "session"
         ]

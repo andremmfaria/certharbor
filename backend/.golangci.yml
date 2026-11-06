@@ -19,7 +19,6 @@ linters:
     - gosec
     - unconvert
     - unparam
-    # Added in PR-23 now that log/slog is adopted
     - sloglint
     # Added in Phase 1 of plans/frontend-backend-split.md
     - depguard
@@ -70,10 +69,10 @@ linters:
 
   exclusions:
     paths:
-      # node_modules installed locally for frontend linters — not Go source
+      # node_modules installed locally for frontend linters, not Go source
       - node_modules/
     rules:
-      # Suppress deprecated-symbol warnings on existing code — burn down in PR-23
+      # Deprecated-symbol warnings on existing code are suppressed
       - linters: [staticcheck]
         text: "SA1019:"
       # Suppress style/quickfix staticcheck hints in existing code

@@ -78,7 +78,7 @@ func TestSaveLoadRegistrationNoRace(t *testing.T) {
 
 // TestParseCertDates checks the happy path and the nil-block path.
 func TestParseCertDates(t *testing.T) {
-	// Non-PEM input — both pointers should be nil.
+	// Non-PEM input, both pointers should be nil.
 	issued, expires := parseCertDates([]byte("not a pem block"))
 	if issued != nil || expires != nil {
 		t.Errorf("expected nil times for invalid PEM, got issued=%v expires=%v", issued, expires)
