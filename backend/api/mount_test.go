@@ -2,7 +2,6 @@ package api_test
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/gob"
 	"encoding/json"
 	"io"
@@ -18,6 +17,7 @@ import (
 	"step-webui/handlers"
 	appmw "step-webui/middleware"
 	"step-webui/models"
+	"step-webui/security"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/sessions"
@@ -40,9 +40,11 @@ func newTestServer(t *testing.T) *httptest.Server {
 // when auth is non-nil, a stand-in for the database the login flow reads.
 func newTestServerWith(t *testing.T, cfg *config.Config, auth handlers.AuthStore) *httptest.Server {
 	t.Helper()
-	hashKey := sha256.Sum256([]byte("phase0-spike-test-key-not-for-prod!"))
-	blockKey := sha256.Sum256([]byte("phase0-spike-test-key-not-for-prod!_block"))
-	store := sessions.NewCookieStore(hashKey[:], blockKey[:16])
+	hashKey, blockKey, err := security.DeriveSessionKeys("phase0-spike-test-key-not-for-prod!")
+	if err != nil {
+		t.Fatalf("DeriveSessionKeys: %v", err)
+	}
+	store := sessions.NewCookieStore(hashKey, blockKey)
 	store.Options = &sessions.Options{
 		Path:     "/",
 		MaxAge:   28800,

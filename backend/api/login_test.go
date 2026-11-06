@@ -233,6 +233,28 @@ func TestCreateSession_LogsIn(t *testing.T) {
 // TestCreateSession_ReMintsTheCSRFPair covers 5.4: completeLogin replaces the
 // token, which is what closes session fixation, and the readable cookie has
 // to move with it or the next mutation is refused.
+// TestCreateSession_UpgradesALegacyHash covers an account whose stored hash is
+// the pre-bcrypt unsalted SHA-256: a successful login must replace it with
+// bcrypt, and the next login must verify against the new hash.
+func TestCreateSession_UpgradesALegacyHash(t *testing.T) {
+	f := newLoginFixture(t, localLogin())
+	// SHA-256 of alicePassword, hardcoded because the only producer of legacy
+	// hashes is unexported and must stay that way.
+	const legacyHash = "9028ea0d15decaa35b2da21c0290af3b1a5ba0a30a591906f89b5074e209ea72"
+	f.store.users["alice"].PasswordHash = legacyHash
+
+	if res := f.login(t, f.csrf(t), "alice"); res.status != http.StatusOK {
+		t.Fatalf("legacy login: status = %d, want 200: %s", res.status, res.raw)
+	}
+	got := f.store.users["alice"].PasswordHash
+	if got == legacyHash || !strings.HasPrefix(got, "$2") {
+		t.Fatalf("stored hash after login = %q, want a bcrypt hash", got)
+	}
+	if !security.VerifyPassword(alicePassword, got) {
+		t.Fatal("upgraded hash does not verify the password")
+	}
+}
+
 func TestCreateSession_ReMintsTheCSRFPair(t *testing.T) {
 	f := newLoginFixture(t, localLogin())
 	before := f.csrf(t)

@@ -3,7 +3,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
 	"embed"
 	"encoding/gob"
@@ -27,6 +26,7 @@ import (
 	"step-webui/config"
 	"step-webui/handlers"
 	"step-webui/models"
+	"step-webui/security"
 	"step-webui/stepca"
 
 	"github.com/go-chi/chi/v5"
@@ -218,9 +218,12 @@ func main() {
 	defer func() { _ = conn.Close() }()
 
 	// ─── Sessions ────────────────────────────────────────────────────────────
-	hashKey := sha256.Sum256([]byte(cfg.SecretKey))
-	blockKey := sha256.Sum256([]byte(cfg.SecretKey + "_block"))
-	store := sessions.NewCookieStore(hashKey[:], blockKey[:16])
+	hashKey, blockKey, err := security.DeriveSessionKeys(cfg.SecretKey)
+	if err != nil {
+		_ = conn.Close()
+		log.Fatalf("Cannot derive session keys: %v", err)
+	}
+	store := sessions.NewCookieStore(hashKey, blockKey)
 	store.Options = &sessions.Options{
 		Path:     "/",
 		MaxAge:   28800,
