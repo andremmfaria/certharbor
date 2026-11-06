@@ -4,7 +4,7 @@
 # a backend-only commit does not invalidate npm ci or the Vite build.
 
 # ── Stage 1: client and SPA build ────────────────────────────────────────────
-FROM node:24-alpine3.23 AS build
+FROM node:25-alpine3.23 AS build
 
 WORKDIR /src
 
