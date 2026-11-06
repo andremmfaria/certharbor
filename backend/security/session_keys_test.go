@@ -9,7 +9,7 @@ import (
 	"github.com/gorilla/sessions"
 )
 
-const testSecret = "a-long-test-secret-key-32charsXX"
+const testSecret = "a-long-test-secret-key-32charsXX" //nolint:gosec // G101: fixture, not a credential
 
 func TestDeriveSessionKeysDeterministic(t *testing.T) {
 	h1, b1, err := DeriveSessionKeys(testSecret)
@@ -71,7 +71,7 @@ func TestDeriveSessionKeysWorkWithCookieStore(t *testing.T) {
 	}
 	store := sessions.NewCookieStore(h, b)
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	s, err := store.Get(req, "s")
 	if err != nil {
@@ -82,7 +82,7 @@ func TestDeriveSessionKeysWorkWithCookieStore(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 
-	req2 := httptest.NewRequest(http.MethodGet, "/", nil)
+	req2 := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	for _, c := range rec.Result().Cookies() {
 		req2.AddCookie(c)
 	}

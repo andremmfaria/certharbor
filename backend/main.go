@@ -215,14 +215,14 @@ func main() {
 		_ = conn.Close()
 		log.Fatalf("Cannot init password reset schema: %v", err)
 	}
-	defer func() { _ = conn.Close() }()
-
 	// ─── Sessions ────────────────────────────────────────────────────────────
 	hashKey, blockKey, err := security.DeriveSessionKeys(cfg.SecretKey)
 	if err != nil {
 		_ = conn.Close()
 		log.Fatalf("Cannot derive session keys: %v", err)
 	}
+	defer func() { _ = conn.Close() }()
+
 	store := sessions.NewCookieStore(hashKey, blockKey)
 	store.Options = &sessions.Options{
 		Path:     "/",
