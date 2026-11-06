@@ -1,0 +1,14 @@
+# Headers for the SPA document and its assets, included by the two static
+# locations only. Rendered by entrypoint.sh to conf.d/doc-headers.conf, with
+# the hashes of every inline <script> and <style> in the served index.html,
+# so the policy can never fall behind the bundle and needs no unsafe-inline. Never include this in a proxying block: the browser
+# intersects this CSP with the backend's default-src 'none' on API responses.
+#
+# always, or the headers vanish from every 4xx and 5xx (D5 rule 8).
+add_header Content-Security-Policy "default-src 'self'; script-src 'self'${WEB_CSP_SCRIPT_HASHES}; style-src 'self'${WEB_CSP_STYLE_HASHES}; font-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
+add_header X-Frame-Options "DENY" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+# Written by entrypoint.sh from WEB_HSTS_MAX_AGE, empty when it is unset: a
+# long policy on a name chaining to a private root has no downgrade path.
+include conf.d/hsts.conf;

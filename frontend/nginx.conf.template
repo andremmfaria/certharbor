@@ -1,0 +1,179 @@
+# What may live in this file: routing, TLS, headers, caching and limits.
+# What may not: any decision that depends on a user, a role or a resource.
+# Those belong in Go, where they are typed and tested. A new map, an if, a set
+# beyond $backend or a second return with a body is policy arriving by
+# accretion: put it in the backend instead.
+#
+# Rendered by entrypoint.sh to /etc/nginx/nginx.conf. Only the WEB_HOSTNAME
+# and WEB_RESOLVER placeholders are substituted, every other $name is nginx's
+# own. This
+# is the whole main config rather than a conf.d snippet so that the stock
+# default.conf and the stock http-level directives cannot survive beside it.
+
+user nginx;
+worker_processes auto;
+pid /run/nginx.pid;
+error_log /dev/stderr notice;
+
+events {
+  worker_connections 1024;
+}
+
+http {
+  include /etc/nginx/mime.types;
+  default_type application/octet-stream;
+  sendfile on;
+
+  server_tokens off;
+  # $uri, never $request: the query string can carry a password-reset token.
+  log_format origin '$remote_addr $request_id "$request_method $uri" $status '
+                    'ua=$upstream_status urt=$upstream_response_time';
+  access_log /dev/stdout origin;
+
+  client_header_timeout 10s;
+  client_body_timeout 15s;
+  send_timeout 15s;
+  keepalive_timeout 30s;
+  proxy_connect_timeout 3s;
+  # Must exceed the longest backend operation (handlers.PGDumpTimeout);
+  # backend/nginx_timeout_test.go parses this line.
+  proxy_read_timeout 180s;
+  # The backend's response headers must fit here even with buffering off: a
+  # server-rendered redirect can carry the session, CSRF and flash cookies,
+  # each up to 4 KiB, beside its CSP. Past the default page size nginx answers
+  # the request with a 502 instead.
+  proxy_buffer_size 16k;
+  # nginx refuses to start unless this is at least proxy_buffer_size.
+  proxy_busy_buffers_size 16k;
+
+  limit_conn_zone $binary_remote_addr zone=perip:10m;
+  limit_req_zone $binary_remote_addr zone=api:10m rate=20r/s;
+
+  # A variable proxy_pass re-resolves step-webui per request, so a recreated
+  # backend container is followed without restarting nginx. It also means no
+  # upstream block and no upstream keepalive, and that is what keeps request
+  # smuggling unreachable: desync needs a reused connection. Adding an upstream
+  # with keepalive, or proxy_http_version 1.1, removes that property.
+  resolver ${WEB_RESOLVER} valid=10s ipv6=off;
+  resolver_timeout 2s;
+
+  server {
+    listen 8443 ssl;
+    http2 on;
+    server_name ${WEB_HOSTNAME};
+    root /usr/share/nginx/html;
+
+    ssl_certificate /etc/step-webui/ssl/web.crt;
+    ssl_certificate_key /etc/step-webui/ssl/web.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    gzip on;
+    # Relative Location headers: an absolute one would name the internal
+    # port 8443 rather than the one the host publishes.
+    absolute_redirect off;
+    client_max_body_size 1m;
+    limit_conn perip 32;
+    limit_req zone=api burst=40 nodelay;
+    # The default 503 would reach @apidown below and tell a throttled client
+    # the backend is down.
+    limit_req_status 429;
+    limit_conn_status 429;
+
+    location = /nginx-health {
+      access_log off;
+      return 200;
+    }
+
+    location ~ ^/(docs|openapi\.yaml|schemas)(/|$) {
+      return 404;
+    }
+
+    # PHASE9-DELETE: becomes location /assets/ once the SPA owns the root.
+    location /app/assets/ {
+      include conf.d/doc-headers.conf;
+      add_header Cache-Control "public, max-age=31536000, immutable" always;
+      try_files $uri =404;
+    }
+
+    # PHASE9-DELETE: becomes location / with try_files $uri /index.html once
+    # the SPA owns the root.
+    location /app/ {
+      include conf.d/doc-headers.conf;
+      add_header Cache-Control "no-store" always;
+      try_files $uri /app/index.html;
+    }
+
+    # PHASE9-DELETE: the SPA's base without its trailing slash.
+    location = /app {
+      return 301 /app/;
+    }
+
+    # Each entry of frontend/proxy-prefixes.json, the list Vite's dev proxy
+    # also reads, and anything below it. make nginx-lint fails if this line
+    # and that file disagree.
+    location ~ ^/(api|auth|health|ready|openapi\.json)(/|$) {
+      include conf.d/proxy-headers.conf;
+      # Any add_header here stops this block inheriting a future server-level
+      # one, which would stamp the document CSP and HSTS onto API responses.
+      add_header X-Content-Type-Options "nosniff" always;
+      # The backend sends its own; without this the response carries two.
+      proxy_hide_header X-Content-Type-Options;
+      # Above the backend's 5 MiB ceiling, so Go answers 413 as a problem
+      # document rather than nginx answering it as HTML.
+      client_max_body_size 8m;
+      # Stream a backup bundle instead of spooling it to disk first.
+      proxy_buffering off;
+      set $backend "step-webui:8443";
+      # $request_uri is mandatory: with a variable, proxy_pass drops the URI.
+      proxy_pass https://$backend$request_uri;
+      proxy_ssl_trusted_certificate /etc/step-webui/ssl/root_ca.crt;
+      proxy_ssl_verify on;
+      proxy_ssl_verify_depth 2;
+      proxy_ssl_name step-webui;
+      proxy_ssl_server_name on;
+      proxy_ssl_protocols TLSv1.2 TLSv1.3;
+      # nginx's own 502/504 (backend down, unresolvable, or failing TLS
+      # verification) become a problem document. The backend's own 503s are
+      # not intercepted, so /ready keeps its detail.
+      error_page 502 503 504 = @apidown;
+    }
+
+    # PHASE9-DELETE: the backend's server-rendered pages and /static/, which
+    # own every path the SPA does not until Phase 9. /reset-password and the
+    # OIDC callback's landing pages stay at the root here and after the flip,
+    # because the reset link is emailed and the redirect URI is registered with
+    # an IdP: neither may ever point at /app/. The backend sends its own
+    # document CSP on these pages, so doc-headers.conf is not included.
+    location / {
+      include conf.d/proxy-headers.conf;
+      add_header X-Content-Type-Options "nosniff" always;
+      proxy_hide_header X-Content-Type-Options;
+      client_max_body_size 8m;
+      proxy_buffering off;
+      set $backend "step-webui:8443";
+      proxy_pass https://$backend$request_uri;
+      proxy_ssl_trusted_certificate /etc/step-webui/ssl/root_ca.crt;
+      proxy_ssl_verify on;
+      proxy_ssl_verify_depth 2;
+      proxy_ssl_name step-webui;
+      proxy_ssl_server_name on;
+      proxy_ssl_protocols TLSv1.2 TLSv1.3;
+      error_page 502 503 504 = @apidown;
+    }
+
+    location @apidown {
+      default_type application/problem+json;
+      add_header Cache-Control "no-store" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      return 503 '{"type":"https://step-ca-webui/errors/upstream-unavailable","title":"Service Unavailable","status":503}';
+    }
+  }
+
+  # No SNI, or a name other than WEB_HOSTNAME: refuse the handshake rather
+  # than present the web leaf to a scanner.
+  server {
+    listen 8443 ssl default_server;
+    ssl_reject_handshake on;
+    return 444;
+  }
+}

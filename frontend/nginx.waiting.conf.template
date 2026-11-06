@@ -1,0 +1,32 @@
+# Served by entrypoint.sh under WEB_TLS_MODE=stepca when web.crt or web.key
+# has not arrived in time, so the origin answers with the missing path rather
+# than refusing connections. The reload watcher swaps in the real config as
+# soon as the files appear. /nginx-health answers 503 here too, so the
+# container reports unhealthy for as long as it waits.
+
+user nginx;
+worker_processes 1;
+pid /run/nginx.pid;
+error_log /dev/stderr notice;
+
+events {
+  worker_connections 128;
+}
+
+http {
+  server_tokens off;
+  access_log /dev/stdout;
+
+  server {
+    listen 8443 ssl default_server;
+    ssl_certificate /etc/step-webui/ephemeral/waiting.crt;
+    ssl_certificate_key /etc/step-webui/ephemeral/waiting.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location / {
+      default_type application/problem+json;
+      add_header Cache-Control "no-store" always;
+      return 503 '{"type":"https://step-ca-webui/errors/web-certificate-missing","title":"Service Unavailable","status":503,"detail":"waiting for ${WEB_MISSING}"}';
+    }
+  }
+}
