@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 env:
-  PLAYWRIGHT_IMAGE: "mcr.microsoft.com/playwright:v1.62.1-noble"
+  PLAYWRIGHT_IMAGE: "mcr.microsoft.com/playwright:v1.64.1-noble"
   COMPOSE_PROJECT_NAME: step-ca-webui
 
 jobs:
@@ -23,13 +23,13 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v7.0.1
 
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@v4.1.0
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: Build the application image and warm its layer cache
-        uses: docker/build-push-action@v7.2.0
+        uses: docker/build-push-action@v7.4.0
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -40,7 +40,7 @@ jobs:
           cache-to: type=gha,scope=e2e,mode=max
 
       - name: Build the harness image (Playwright base plus docker CLI)
-        uses: docker/build-push-action@v7.2.0
+        uses: docker/build-push-action@v7.4.0
         with:
           context: ./test/e2e
           file: ./test/e2e/Dockerfile
@@ -59,13 +59,13 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v7.0.1
 
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@v4.1.0
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: Materialise the application image from the layer cache
-        uses: docker/build-push-action@v7.2.0
+        uses: docker/build-push-action@v7.4.0
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -75,7 +75,7 @@ jobs:
           cache-from: type=gha,scope=e2e
 
       - name: Materialise the harness image from the layer cache
-        uses: docker/build-push-action@v7.2.0
+        uses: docker/build-push-action@v7.4.0
         with:
           context: ./test/e2e
           file: ./test/e2e/Dockerfile
