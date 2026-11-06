@@ -47,7 +47,7 @@ http {
   proxy_busy_buffers_size 16k;
 
   limit_conn_zone $binary_remote_addr zone=perip:10m;
-  limit_req_zone $binary_remote_addr zone=api:10m rate=20r/s;
+  limit_req_zone $binary_remote_addr zone=api:10m rate=${WEB_RATE_LIMIT};
 
   # A variable proxy_pass re-resolves step-webui per request, so a recreated
   # backend container is followed without restarting nginx. It also means no
@@ -73,7 +73,7 @@ http {
     absolute_redirect off;
     client_max_body_size 1m;
     limit_conn perip 32;
-    limit_req zone=api burst=40 nodelay;
+    limit_req zone=api burst=${WEB_RATE_BURST} nodelay;
     # The default 503 would reach @apidown below and tell a throttled client
     # the backend is down.
     limit_req_status 429;

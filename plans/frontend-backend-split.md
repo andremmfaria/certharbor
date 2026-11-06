@@ -289,7 +289,7 @@ http {
   keepalive_timeout 30s;      proxy_connect_timeout 3s;  proxy_read_timeout 180s;
   proxy_buffer_size 16k;      proxy_busy_buffers_size 16k;   # a redirect with three cookies plus its CSP overflows the default
   limit_conn_zone $binary_remote_addr zone=perip:10m;
-  limit_req_zone  $binary_remote_addr zone=api:10m rate=20r/s;
+  limit_req_zone  $binary_remote_addr zone=api:10m rate=${WEB_RATE_LIMIT};
   resolver ${WEB_RESOLVER} valid=10s ipv6=off;   # 127.0.0.11 unless WEB_RESOLVER says otherwise
   resolver_timeout 2s;   # timeout= is NOT a resolver parameter; nginx refuses to start
 
@@ -303,7 +303,7 @@ http {
     gzip on;
     absolute_redirect off;          # an absolute Location would name the internal port 8443
     client_max_body_size 1m;
-    limit_conn perip 32;  limit_req zone=api burst=40 nodelay;
+    limit_conn perip 32;  limit_req zone=api burst=${WEB_RATE_BURST} nodelay;
     limit_req_status 429;  limit_conn_status 429;   # the default 503 would reach @apidown and report the backend down
 
     location = /nginx-health { access_log off; return 200; }
@@ -1345,7 +1345,7 @@ The highest-risk phase in the plan. It owns R13, R25, R26, R30 and R32 in full.
 
 **What the build falsified, all now corrected in place.** Section 10 claimed that `helpers/routes.ts` derives zero routes and throws, which is false during the window and becomes true at Phase 9. It claimed the `infra` project is untouched and that `-fatals`, `-nodeps` and `-fingerprint` need no edits: the override files needed none, but the five boot spec files had to change, four because they dialled the backend's published port, which no longer exists, and now use the backend's network address, and `boot-fatals` because it dropped the same kind of probe. 4.4's claim that `make dev` runs only Vite on the host omitted that the backend now has no host port. Step 2's "four `.gitignore` additions" was one: only `.env.*` with `!.env.example` was missing. Step 3's `-oidc` entry named the wrong redirect path, which is `/auth/oidc/callback`. 9.2's claim that `codeql.yml` needs no change was false, since JavaScript and TypeScript analysis was added. E2E-BOOT-07 case (d) in `plans/e2e-tests.md` had a malformed list and an empty list as one fatal case, when only the malformed list is fatal and an empty list with an unresolvable name keeps running. `/ready` now carries `backendCert`, `backendCertNotAfter`, `webCert` and `webCertNotAfter`, which E2E-HLTH-02 and the boot-fingerprint assertions in `plans/e2e-tests.md` now state.
 
-**Eight decisions were taken during execution that this plan did not specify.**
+**Nine decisions were taken during execution that this plan did not specify.**
 
 1. **`/reset-password` and the OIDC callback stay with the backend at the root**, as step 1 required, which is why nginx's `location /` passthrough exists and why R31 holds.
 2. **The compose `WEB_HOSTNAME` default is empty rather than `:?`**, because `:?` also breaks `down`, `logs` and `collect.sh`. The web container refuses to start with a message naming the key, and the backend does the same under `WEB_TLS_MODE=stepca`.
@@ -1355,6 +1355,7 @@ The highest-risk phase in the plan. It owns R13, R25, R26, R30 and R32 in full.
 6. **CI runs the `ui` project for `specs/spa` only.** The legacy `ui` specs wait for the phases that replace their pages. A new `origin` job in `ci.yml` runs `proxy-routes-check`, `config-keys-check`, `backend-port-check`, the `collect.sh` service-list assertion and `nginx-lint`, and `ci-gate` now needs it.
 7. **`make dev` reaches the backend by its container address**, which works on Linux only, and sets `SESSION_SECURE=false`.
 8. **`scenario.sh` no longer `exec`s Playwright**, so its `EXIT` trap runs and removes the `.env.e2e-*` copies.
+9. **The nginx rate limit is configurable.** `WEB_RATE_LIMIT` (default `20r/s`) and `WEB_RATE_BURST` (default `40`) feed `limit_req_zone` and `limit_req`. The first CI run of the `api` project through the origin failed five specs on 429, because the harness drives every route from one address faster than the fixed limit allowed, so `compose.e2e-image.yml` raises both for the suite and the production default is unchanged.
 
 **Carried forward, and why.** Four failures are pre-existing and unrelated to the topology. `auth-04.ui` has no fixture that creates `twofa_user`, and its `waitForURL` regex matches immediately. `auth-11.ui` fails because both base templates render two logout forms. E2E-BOOT-07 case (c) fails on the postgres wait described above, and E2E-BOOT-09 shows a timing flake under load. `scripts/test_deploy.sh` still assumes `credentials.txt` and a mode-600 `.env`. All of these are listed under Remaining in `plans/e2e-implementation-status.md`. Only a CI run on `main` proves the workflow changes: the cache scopes, the single image artifact, the matrix job names and the `origin` job.
 

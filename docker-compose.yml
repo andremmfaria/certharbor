@@ -163,6 +163,8 @@ services:
       WEB_HSTS_MAX_AGE:    "${WEB_HSTS_MAX_AGE:-}"
       WEB_RESOLVER:        "${WEB_RESOLVER:-127.0.0.11}"
       WEB_RELOAD_INTERVAL: "${WEB_RELOAD_INTERVAL:-60}"
+      WEB_RATE_LIMIT:      "${WEB_RATE_LIMIT:-20r/s}"
+      WEB_RATE_BURST:      "${WEB_RATE_BURST:-40}"
     # The only certificate-bearing mount. step-webui-ssl holds the backend's
     # private key and step-ca-data the CA's, and neither is mounted here.
     volumes:

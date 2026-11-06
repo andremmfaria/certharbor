@@ -43,7 +43,7 @@ missing() {
 # survive.
 render() {
 	# shellcheck disable=SC2016 # the single quotes are the point: envsubst gets the names, not values
-	envsubst '${WEB_HOSTNAME} ${WEB_RESOLVER} ${WEB_MISSING} ${WEB_CSP_SCRIPT_HASHES} ${WEB_CSP_STYLE_HASHES}' <"$1" >"$2.tmp"
+	envsubst '${WEB_HOSTNAME} ${WEB_RESOLVER} ${WEB_RATE_LIMIT} ${WEB_RATE_BURST} ${WEB_MISSING} ${WEB_CSP_SCRIPT_HASHES} ${WEB_CSP_STYLE_HASHES}' <"$1" >"$2.tmp"
 	mv "$2.tmp" "$2"
 }
 
@@ -183,7 +183,9 @@ main() {
 	: "${WEB_RESOLVER:=127.0.0.11}"
 	: "${WEB_CERT_WAIT_SECONDS:=120}"
 	: "${WEB_RELOAD_INTERVAL:=60}"
-	export WEB_HOSTNAME="${WEB_HOSTNAME:-}" WEB_RESOLVER WEB_MISSING=
+	: "${WEB_RATE_LIMIT:=20r/s}"
+	: "${WEB_RATE_BURST:=40}"
+	export WEB_HOSTNAME="${WEB_HOSTNAME:-}" WEB_RESOLVER WEB_RATE_LIMIT WEB_RATE_BURST WEB_MISSING=
 
 	if [ -z "$WEB_HOSTNAME" ]; then
 		log "WEB_HOSTNAME is required: it is the server_name and the name browsers check on web.crt"
