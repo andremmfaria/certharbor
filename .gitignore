@@ -1,12 +1,13 @@
 # Secrets
 .env
+.env.*
+!.env.example
 *.env.local
-.env.e2e-*
 secrets/
 node_modules/
 package-lock.json
 package.json
-# The e2e harness, the generated client and the spike frontend are each their
+# The e2e harness, the generated client and the SPA are each their
 # own Node project and their manifests are tracked; the two patterns above
 # have no slash, so they would otherwise match at any depth.
 !test/e2e/package.json
@@ -16,7 +17,7 @@ package.json
 !frontend/package.json
 !frontend/package-lock.json
 
-# Generated client sources/build output — only the spec they're generated
+# Generated client sources/build output, only the spec they're generated
 # from is committed (plans/frontend-backend-split.md, Phase 0 step 8).
 clients/ts/src/
 clients/ts/dist/
@@ -69,9 +70,6 @@ Thumbs.db
 # Backup directories from update scripts
 .backup-*/
 
-# Backup directories from update scripts
-.backup-*/
-
-# Spike frontend build output
+# SPA build output
 frontend/dist/
 *.tsbuildinfo

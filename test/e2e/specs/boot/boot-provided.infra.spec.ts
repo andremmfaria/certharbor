@@ -2,8 +2,8 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { expect, test } from "@playwright/test";
-import { composeOrThrow, logs, projectName, run, upStack, waitHealthy } from "../../helpers/compose";
-import { getEnvKey, setEnvKeys } from "../../helpers/envfile";
+import { backendAddress, composeArgv, composeOrThrow, logs, projectName, run, upFlags, upStack, waitHealthy } from "../../helpers/compose";
+import { setEnvKeys } from "../../helpers/envfile";
 import { parsePEM, probeTLS } from "../../helpers/openssl";
 
 test("E2E-BOOT-03: UI_TLS_MODE=provided leaves an operator certificate untouched", async () => {
@@ -11,10 +11,14 @@ test("E2E-BOOT-03: UI_TLS_MODE=provided leaves an operator certificate untouched
 
   await composeOrThrow("down", "-v");
   await composeOrThrow("up", "-d", "--wait", "postgres", "step-ca");
+  // Creating, not starting, step-webui makes compose create its volumes, so
+  // the `down -v` of every later scenario removes the seeded one again.
+  const created = await run(composeArgv("create", ...upFlags(), "step-webui"), { timeoutMs: 5 * 60_000 });
+  expect(created.code, `docker compose create step-webui failed: ${created.stderr}`).toBe(0);
 
   // Generated on the harness, not inside the runtime image (uid 10001 cannot
   // apk add), then copied into the named volume by a throwaway container so
-  // it is in place before step-webui's first start — "provided" never writes
+  // it is in place before step-webui's first start, "provided" never writes
   // anything, so nothing else would put it there.
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "e2e-boot03-"));
   try {
@@ -32,7 +36,10 @@ test("E2E-BOOT-03: UI_TLS_MODE=provided leaves an operator certificate untouched
       "-v", `${vol}:/ssl`,
       "-v", `${tmpDir}:/src:ro`,
       "alpine",
-      "sh", "-c", "cp /src/server.crt /src/server.key /ssl/ && chown 10001:10001 /ssl/server.crt /ssl/server.key",
+      // The directory too: this container creates the volume, so it is
+      // root-owned, and the backend writes each leaf as a .tmp sibling it
+      // renames into place, which needs the directory writable.
+      "sh", "-c", "cp /src/server.crt /src/server.key /ssl/ && chown 10001:10001 /ssl /ssl/server.crt /ssl/server.key",
     ]);
     expect(seed.code, `seeding the operator certificate failed: ${seed.stderr}`).toBe(0);
 
@@ -40,8 +47,7 @@ test("E2E-BOOT-03: UI_TLS_MODE=provided leaves an operator certificate untouched
     await upStack();
     await waitHealthy("step-webui", 180_000);
 
-    const port = getEnvKey("UI_HTTPS_PORT") ?? "443";
-    const served = await probeTLS(`localhost:${port}`);
+    const served = await probeTLS(await backendAddress());
     expect(served.subject).toBe(seededCert.subject);
     expect(served.sha256).toBe(seededCert.sha256);
 
@@ -53,7 +59,7 @@ test("E2E-BOOT-03: UI_TLS_MODE=provided leaves an operator certificate untouched
     await upStack();
     await waitHealthy("step-webui", 180_000);
 
-    const reissued = await probeTLS(`localhost:${port}`);
+    const reissued = await probeTLS(await backendAddress());
     expect(reissued.subject).not.toBe(served.subject);
     expect(reissued.sha256).not.toBe(served.sha256);
     expect(await logs("step-webui")).toContain("UI leaf certificate obtained");

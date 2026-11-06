@@ -27,15 +27,21 @@ export function getEnvKey(key: string, file = scenarioEnvFile()): string | undef
   return readEnvFile(file).get(key);
 }
 
-/** Sets or replaces keys in place; a value of undefined comments the key out. */
+/**
+ * Sets or replaces keys in place; a value of undefined comments the key out.
+ * Every later line for the same key is commented out too: an .env built by
+ * appending to .env.example carries a key twice, and compose reads the last.
+ */
 export function setEnvKeys(values: Record<string, string | undefined>, file = scenarioEnvFile()): void {
   const lines = fs.existsSync(file) ? fs.readFileSync(file, "utf8").split("\n") : [];
-  const remaining = new Map(Object.entries(values));
+  const wanted = new Map(Object.entries(values));
+  const remaining = new Map(wanted);
 
   const rewritten = lines.map((line) => {
     const m = /^\s*#?\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(line);
     const key = m?.[1];
-    if (!key || !remaining.has(key)) return line;
+    if (!key || !wanted.has(key)) return line;
+    if (!remaining.has(key)) return line.trimStart().startsWith("#") ? line : `# ${line}`;
     const value = remaining.get(key);
     remaining.delete(key);
     return value === undefined ? `# ${key}=` : `${key}=${serialise(value)}`;

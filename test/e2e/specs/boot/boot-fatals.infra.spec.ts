@@ -1,9 +1,9 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { expect, test } from "@playwright/test";
-import { composeOrThrow, logs, run, upStack, waitExited, waitHealthy } from "../../helpers/compose";
+import { composeOrThrow, inspectState, logs, upStack, waitExited, waitForLogLine, waitHealthy } from "../../helpers/compose";
 import { REPO_ROOT } from "../../helpers/env";
-import { getEnvKey, setEnvKeys } from "../../helpers/envfile";
+import { setEnvKeys } from "../../helpers/envfile";
 
 const SECRET_KEY_PATH = path.join(REPO_ROOT, "secrets", "secret_key");
 const ADMIN_PW = "Boot07-e2e-Pass1!";
@@ -11,7 +11,7 @@ const ADMIN_PW = "Boot07-e2e-Pass1!";
 /**
  * Cases (a), (d) and (e) fail before the DB connect, so compose.e2e-nodeps.yml
  * (already applied for this whole scenario) lets step-webui start without step-ca
- * at all — but postgres still needs to be up and reachable, or entrypoint.sh's
+ * at all, but postgres still needs to be up and reachable, or entrypoint.sh's
  * own 60x1s wait-for-postgres loop (which every case runs through first) hangs
  * on DNS resolution for a service with no running container, adding far more
  * than 60s rather than failing each attempt fast.
@@ -24,7 +24,7 @@ async function freshPostgres(): Promise<void> {
 async function expectFatal(logContains: string | string[]): Promise<void> {
   await upStack("step-webui");
   // The scenario's own compose.e2e-fatals.yml sets restart:"no" for every
-  // case in this file, not only (c) — against the stock restart policy a
+  // case in this file, not only (c), against the stock restart policy a
   // fatal exit restarts into the same fatal, and reading ExitCode mid-loop
   // races the next restart.
   const state = await waitExited("step-webui", 90_000);
@@ -33,9 +33,6 @@ async function expectFatal(logContains: string | string[]): Promise<void> {
   for (const needle of Array.isArray(logContains) ? logContains : [logContains]) {
     expect(log, `missing expected fatal message: ${needle}`).toContain(needle);
   }
-  const port = getEnvKey("UI_HTTPS_PORT") ?? "443";
-  const curl = await run(["curl", "-sk", "-o", "/dev/null", "--max-time", "3", `https://localhost:${port}/login`]);
-  expect(curl.code, "a fatally-exited container must not still be serving").not.toBe(0);
 }
 
 test.describe.serial("bootstrap: fatals scenario", () => {
@@ -43,7 +40,7 @@ test.describe.serial("bootstrap: fatals scenario", () => {
   // dry run on 2026-09-02, after discovering that entrypoint.sh's wait-for-
   // postgres loop hangs well past its nominal 60s when "postgres" has no
   // running container at all (fixed here by bringing postgres up healthy for
-  // every case, not just (b) and (c)) — that fix is applied below but the
+  // every case, not just (b) and (c)), that fix is applied below but the
   // full file, in order, including case (c)'s wait against a stopped (not
   // absent) postgres, was not re-run end to end before this pass ended.
   test.fixme(true, "E2E-BOOT-07 not yet re-verified end to end after the freshPostgres() fix, see comment above");
@@ -81,15 +78,23 @@ test.describe.serial("bootstrap: fatals scenario", () => {
     await expectFatal(["PostgreSQL not reachable", "Cannot connect to database:"]);
   });
 
+  // A malformed TRUSTED_PROXY_CIDRS is fatal. An empty one is not: the backend
+  // trusts whatever WEB_UPSTREAM_HOST resolves to and keeps re-resolving while
+  // it does not, which is the state here, with no nginx. An empty
+  // WEB_UPSTREAM_HOST is fatal as well, but compose's default fills it in, so
+  // no stack can reach that case.
   test("E2E-BOOT-07 (d): TRUST_PROXY=true with no usable CIDR list", async () => {
-    test.setTimeout(3 * 60_000);
+    test.setTimeout(4 * 60_000);
     await freshPostgres();
-    setEnvKeys({ STEPWEBUI_ADMIN_PASSWORD: ADMIN_PW, TRUST_PROXY: "true", TRUSTED_PROXY_CIDRS: undefined });
+    setEnvKeys({ STEPWEBUI_ADMIN_PASSWORD: ADMIN_PW, TRUST_PROXY: "true", TRUSTED_PROXY_CIDRS: "not-a-cidr" });
     await expectFatal("FATAL: TRUST_PROXY=true requires a usable TRUSTED_PROXY_CIDRS");
 
     await freshPostgres();
-    setEnvKeys({ TRUSTED_PROXY_CIDRS: "not-a-cidr" });
-    await expectFatal("FATAL: TRUST_PROXY=true requires a usable TRUSTED_PROXY_CIDRS");
+    setEnvKeys({ TRUSTED_PROXY_CIDRS: undefined });
+    await upStack("step-webui");
+    await waitForLogLine("step-webui", "trusted proxy name does not resolve yet: forwarding headers are ignored until it does", { timeoutMs: 90_000 });
+    const state = await inspectState("step-webui");
+    expect(state.Status, "an empty list with a name to resolve is not a startup fatal").toBe("running");
   });
 
   test("E2E-BOOT-07 (e): bad OIDC_DEFAULT_ROLE with OIDC on", async () => {

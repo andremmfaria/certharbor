@@ -1,0 +1,7 @@
+# Composed into every infra scenario by test/e2e/scenario.sh. The bootstrap
+# tests exercise the backend below the HTTP layer and dial it directly, so
+# step-webui-web is given a profile nothing enables and never exists for them.
+# That keeps the other scenario overrides free of nginx edits.
+services:
+  step-webui-web:
+    profiles: ["e2e-noweb-never"]

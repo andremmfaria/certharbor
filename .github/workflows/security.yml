@@ -115,23 +115,47 @@ jobs:
           category: trivy-fs
 
   trivy-image:
-    name: trivy image scan
+    name: trivy image scan (${{ matrix.name }})
     runs-on: ubuntu-latest
     continue-on-error: true
     permissions:
       security-events: write
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            context: ./backend
+            file: ./backend/Dockerfile
+            scope: e2e-backend
+            category: trivy-image
+          - name: frontend
+            context: .
+            file: ./frontend/Dockerfile
+            scope: e2e-frontend
+            category: trivy-image-web
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
 
-      - name: Build Docker image
-        run: docker build -t step-ca-webui:ci -f backend/Dockerfile backend
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4.4.1
+
+      - name: Build the image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          tags: step-ca-webui-${{ matrix.name }}:ci
+          push: false
+          load: true
+          cache-from: type=gha,scope=${{ matrix.scope }}
 
       - name: Run Trivy (image)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: step-ca-webui:ci
+          image-ref: step-ca-webui-${{ matrix.name }}:ci
           format: sarif
           output: trivy-image.sarif
           exit-code: "0"
@@ -141,4 +165,4 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3.36.0
         with:
           sarif_file: trivy-image.sarif
-          category: trivy-image
+          category: ${{ matrix.category }}

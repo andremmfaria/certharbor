@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  backendAddress,
   captureBeforeRecreate,
   compose,
   composeOrThrow,
@@ -13,7 +14,7 @@ import {
   waitHealthy,
   waitForLogLine,
 } from "../../helpers/compose";
-import { getEnvKey, setEnvKeys } from "../../helpers/envfile";
+import { setEnvKeys } from "../../helpers/envfile";
 import { probeTLS } from "../../helpers/openssl";
 
 // Three cases share one CA identity (Section 3.1's teardown table): tearing
@@ -49,15 +50,14 @@ test.describe.serial("bootstrap: fingerprint scenario", () => {
     // compose.e2e-fingerprint.yml applied is what makes this line possible at
     // all: under the stock read-only mount, ensureRootCert early-returns and
     // CA_FINGERPRINT is never read.
-    expect(iFetching, "missing 'fetching root CA certificate via CA_FINGERPRINT' — was compose.e2e-fingerprint.yml applied?").toBeGreaterThanOrEqual(0);
+    expect(iFetching, "missing 'fetching root CA certificate via CA_FINGERPRINT', was compose.e2e-fingerprint.yml applied?").toBeGreaterThanOrEqual(0);
     expect(iFetched, "missing 'root CA certificate fetched and verified'").toBeGreaterThan(iFetching);
     expect(iIssued, "missing 'UI leaf certificate obtained'").toBeGreaterThan(iFetched);
 
     const rootStat = await exec("step-webui", "test", "-s", "/opt/step-webui/data/root_ca.crt");
     expect(rootStat.code, "root cert missing or empty at the writable path").toBe(0);
 
-    const port = getEnvKey("UI_HTTPS_PORT") ?? "443";
-    const cert = await probeTLS(`localhost:${port}`);
+    const cert = await probeTLS(await backendAddress());
     expect(cert.selfSigned, `issuer ${cert.issuer} should differ from subject ${cert.subject} for a step-ca-issued leaf`).toBe(false);
 
     const whichStep = await exec("step-webui", "which", "step");
@@ -81,19 +81,19 @@ test.describe.serial("bootstrap: fingerprint scenario", () => {
     const fetching = await waitForLogLine("step-webui", "fetching root CA certificate via CA_FINGERPRINT", { timeoutMs: 90_000 });
     const exhausted = await waitForLogLine(
       "step-webui",
-      "could not fetch root CA certificate after retries — continuing without it",
+      "could not fetch root CA certificate after retries, continuing without it",
       { timeoutMs: 90_000 },
     );
     const gapMs = timestampOf(exhausted).getTime() - timestampOf(fetching).getTime();
     expect(gapMs, `retry loop should span at least 28s, got ${gapMs}ms`).toBeGreaterThanOrEqual(28_000);
 
-    const port = getEnvKey("UI_HTTPS_PORT") ?? "443";
+    const backend = await backendAddress();
     const [caPs, caHealth, rootStat, ready, login] = await Promise.all([
       compose("ps", "--format", "json", "step-ca"),
       exec("step-ca", "curl", "-sk", "https://localhost:9443/health"),
       exec("step-webui", "test", "-e", "/opt/step-webui/data/root_ca.crt"),
-      run(["curl", "-sk", `https://localhost:${port}/ready`]),
-      run(["curl", "-sk", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "5", `https://localhost:${port}/login`]),
+      run(["curl", "-sk", `https://${backend}/ready`]),
+      run(["curl", "-sk", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "5", `https://${backend}/login`]),
     ]);
     expect(caPs.stdout, "step-ca must stay healthy throughout").toContain('"Health":"healthy"');
     expect(caHealth.stdout.trim(), "step-ca's own /health must answer ok").toBe('{"status":"ok"}');
@@ -135,8 +135,9 @@ test.describe.serial("bootstrap: fingerprint scenario", () => {
 
     expect(log).toContain("UI leaf certificate obtained");
 
-    const ready = await run(["curl", "-sk", `https://localhost:${getEnvKey("UI_HTTPS_PORT") ?? "443"}/ready`]);
-    expect(ready.stdout.trim()).toBe('{"status":"ready"}');
+    // Both leaves chain to the CA, so /ready names them as well as the status.
+    const ready = await run(["curl", "-sk", `https://${await backendAddress()}/ready`]);
+    expect(JSON.parse(ready.stdout)).toMatchObject({ status: "ready", backendCert: "ok", webCert: "ok" });
   });
 });
 

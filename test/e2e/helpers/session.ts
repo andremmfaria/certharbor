@@ -17,7 +17,11 @@ export async function newJar(baseURL = BASE_URL): Promise<APIRequestContext> {
   return request.newContext({ baseURL, ignoreHTTPSErrors: true, maxRedirects: 0 });
 }
 
-/** Every state-changing request carries the token rendered into the page it came from. */
+/**
+ * The CSRF token a server-rendered page embeds, for the specs that post its
+ * form. Those pages leave with their template routes, and nothing a fixture
+ * needs depends on them (see loginOrThrow).
+ */
 export async function csrfTokenFrom(ctx: APIRequestContext, url: string): Promise<string> {
   const res = await ctx.get(url);
   const body = await res.text();
@@ -32,6 +36,7 @@ export function extractCSRF(html: string, whence = "<page>"): string {
   return m[1];
 }
 
+/** The server-rendered login form, for the specs that assert its own behaviour (re-render, flash, rate limit). */
 export async function login(ctx: APIRequestContext, creds: Credentials): Promise<APIResponse> {
   const token = await csrfTokenFrom(ctx, "/login");
   return ctx.post("/login", {
@@ -39,23 +44,44 @@ export async function login(ctx: APIRequestContext, creds: Credentials): Promise
   });
 }
 
+/**
+ * The JSON login the SPA uses (createSession). GET /api/v1/session issues the
+ * CSRF cookie the POST must echo in X-CSRF-Token (5.4).
+ */
+export async function apiLogin(ctx: APIRequestContext, creds: Credentials): Promise<APIResponse> {
+  await ctx.get("/api/v1/session");
+  const token = await csrfToken(ctx);
+  return ctx.post("/api/v1/session", {
+    data: { username: creds.username, password: creds.password },
+    headers: { "X-CSRF-Token": token },
+  });
+}
+
+/**
+ * Logs in through the API, so no fixture depends on a server-rendered page.
+ * A user with MFA enrolled stops at pendingMfa, which counts: the form login
+ * this replaced accepted the redirect to the code step the same way.
+ */
 export async function loginOrThrow(ctx: APIRequestContext, creds: Credentials): Promise<void> {
-  const res = await login(ctx, creds);
-  // A successful login redirects; the failure path re-renders /login at 200
-  // with the error inline, so a status check alone never identifies it.
-  if (res.status() !== 302 && res.status() !== 303) {
-    const body = await res.text();
+  const res = await apiLogin(ctx, creds);
+  const body = await res.text();
+  let state = "";
+  try {
+    state = (JSON.parse(body) as { state?: string }).state ?? "";
+  } catch {
+    // Reported below with the body.
+  }
+  if (res.status() !== 200 || (state !== "authenticated" && state !== "pendingMfa")) {
     throw new Error(`login as ${creds.username} failed with ${res.status()}: ${body.slice(0, 400)}`);
   }
 }
 
 export async function logout(ctx: APIRequestContext): Promise<APIResponse> {
-  const token = await csrfTokenFrom(ctx, "/dashboard");
-  return ctx.post("/logout", { form: { csrf_token: token } });
+  return ctx.delete("/api/v1/session", { headers: { "X-CSRF-Token": await csrfToken(ctx) } });
 }
 
 /**
- * Standing rule from Section 4.1.4: on a 302 to /login from a fixture-backed
+ * Standing rule from Section 4.1.4: on a 302 to /login (or an API 401) from a fixture-backed
  * context, re-run the login once and retry the request once, rather than
  * surfacing the redirect as the test's own result. Nothing in Section 3 logs
  * the shared fixture users out, but a role change or a session-epoch bump on
@@ -72,7 +98,9 @@ export async function withLazyReauth<T extends APIResponse>(
   return send();
 }
 
+/** A server-rendered route redirects an expired session to /login; an /api/v1 operation answers 401 instead. */
 export function redirectsToLogin(res: APIResponse): boolean {
+  if (res.status() === 401 && new URL(res.url()).pathname.startsWith("/api/")) return true;
   if (res.status() !== 302 && res.status() !== 303) return false;
   const location = res.headers()["location"] ?? "";
   return location.startsWith("/login");
@@ -130,8 +158,7 @@ export async function sessionCookie(ctx: APIRequestContext): Promise<string> {
 
 /**
  * The readable CSRF token the SPA echoes in X-CSRF-Token (5.4). It is set on
- * login as well as by GET /api/v1/session, so a template-route login is enough
- * to obtain one.
+ * login as well as by GET /api/v1/session.
  */
 export async function csrfToken(ctx: APIRequestContext): Promise<string> {
   const state = await ctx.storageState();

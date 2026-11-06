@@ -14,14 +14,25 @@ permissions:
 
 jobs:
   analyze:
-    name: Analyze (Go)
+    name: Analyze (${{ matrix.label }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: go
+            label: Go
+            build-mode: manual
+          - language: javascript-typescript
+            label: JavaScript and TypeScript
+            build-mode: none
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
 
       - name: Set up Go
+        if: matrix.language == 'go'
         uses: actions/setup-go@v6.4.0
         with:
           go-version-file: backend/go.mod
@@ -31,13 +42,14 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3.36.0
         with:
-          languages: go
-          build-mode: manual
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
 
       - name: Build
+        if: matrix.language == 'go'
         run: cd backend && go build ./...
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3.36.0
         with:
-          category: /language:go
+          category: /language:${{ matrix.language }}

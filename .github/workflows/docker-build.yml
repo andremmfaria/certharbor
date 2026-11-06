@@ -17,8 +17,22 @@ permissions:
 
 jobs:
   build:
-    name: Build / Push
+    name: Build / Push (${{ matrix.name }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            context: ./backend
+            file: ./backend/Dockerfile
+            image: ghcr.io/andremmfaria/step-ca-webui
+            scope: e2e-backend
+          - name: frontend
+            context: .
+            file: ./frontend/Dockerfile
+            image: ghcr.io/andremmfaria/step-ca-webui-web
+            scope: e2e-frontend
 
     steps:
       - name: Checkout
@@ -31,7 +45,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6.2.0
         with:
-          images: ghcr.io/andremmfaria/step-ca-webui
+          images: ${{ matrix.image }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -50,10 +64,9 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v7.4.0
         with:
-          context: ./backend
-          file: ./backend/Dockerfile
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.scope }}

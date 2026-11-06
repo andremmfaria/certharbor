@@ -1,9 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 import * as path from "node:path";
-
-// api/ui run as a container on step-network and dial the compose service name;
-// infra runs on the host and dials the published port. Section 4.1.2.
-const BASE_URL = process.env.BASE_URL ?? "https://step-webui:8443";
+// api/ui run as a container on step-network and dial nginx by its service
+// name; infra runs on the host and reaches the backend by container address.
+import { BASE_URL } from "./helpers/env";
 
 // Playwright's junit reporter and actions/upload-artifact are configured
 // independently, so both are pinned to this one directory.
@@ -35,10 +34,10 @@ export default defineConfig({
 
   use: {
     baseURL: BASE_URL,
-    // The UI's serving cert never carries a SAN for the name the harness dials:
-    // the self-signed fallback covers localhost and HOST_IP, and a stepca-issued
-    // leaf covers resolveUIHostname's answer. Without this every request fails
-    // the handshake (tlsbootstrap.go).
+    // Both leaves chain to the stack's own private root, which the harness does
+    // not trust: nginx's web.crt for WEB_HOSTNAME, and the backend's for
+    // step-webui, which the BACKEND_URL tests and the infra tier dial directly,
+    // the latter by IP address, which no SAN covers.
     ignoreHTTPSErrors: true,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",

@@ -108,7 +108,7 @@ export function dnsNames(cert: ProbedCert): string[] {
 }
 
 /**
- * Checks the key parses and that it pairs with the certificate — two artifacts
+ * Checks the key parses and that it pairs with the certificate, two artifacts
  * from different code paths, cross-checked by a third-party parser.
  */
 export async function assertKeyPairs(certPEM: string, keyPEM: string): Promise<void> {

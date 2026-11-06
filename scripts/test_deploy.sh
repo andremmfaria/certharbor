@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────────────────────
-# Step-CA WebUI — deployment test
+# Step-CA WebUI, deployment test
 #
 # Simulates a brand-new user installing from scratch:
 #   1. Clones the repo into a temp directory
@@ -46,7 +46,7 @@ check() {
 cat <<EOF
 
 ${B}╔══════════════════════════════════════════════════════════════╗
-║          Step-CA WebUI — automated deployment test              ║
+║          Step-CA WebUI, automated deployment test              ║
 ╚══════════════════════════════════════════════════════════════╝${X}
 
   Repo:    $REPO_URL
@@ -90,6 +90,9 @@ fi
 HOST_IP=$(ip -4 -o addr show scope global | awk '{split($4,a,"/"); print a[1]}' | head -n1)
 [[ -n "$HOST_IP" ]] || HOST_IP="127.0.0.1"
 sed -i "s/^HOST_IP=.*/HOST_IP=${HOST_IP}/" .env
+# nginx refuses any name but WEB_HOSTNAME at the handshake, and the probes
+# below run on this machine, so the origin is named localhost here.
+sed -i "s/^WEB_HOSTNAME=.*/WEB_HOSTNAME=localhost/" .env
 
 if ! make up 2>&1 | tail -40; then
   echo "  ${R}✗${X} make up exited with non-zero code"
@@ -113,11 +116,10 @@ check "containers running"            \
       0  # any non-error exit; we just check the command runs
 
 check "step-webui container is healthy"  \
-      "bash -c 'st=\$(docker compose ps --format \"{{.Service}}|{{.Status}}\" | grep \"^step-webui|\"); \
-        echo \"\$st\" | grep -q healthy || { \
-          echo \"\$st\" | grep -q \"Up \" && \
-          curl -sk -o /dev/null -w \"%{http_code}\" --max-time 5 https://${HOST_IP}/login | grep -qE \"^(200|302|303)$\" ; \
-        }'"
+      "docker compose ps --format '{{.Service}}|{{.Status}}' | grep '^step-webui|' | grep -q healthy"
+
+check "step-webui-web container is healthy"  \
+      "docker compose ps --format '{{.Service}}|{{.Status}}' | grep '^step-webui-web|' | grep -q healthy"
 
 check "postgres container is healthy" \
       "docker compose ps --format '{{.Service}}|{{.Status}}' | grep '^postgres|' | grep -q healthy"
@@ -125,17 +127,26 @@ check "postgres container is healthy" \
 check "step-ca container is healthy"  \
       "docker compose ps --format '{{.Service}}|{{.Status}}' | grep '^step-ca|' | grep -q healthy"
 
-check "HTTPS responds (any 2xx/3xx)"  \
-      "curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://${HOST_IP}/login | grep -qE '^(200|302|303)$'"
+check "step-webui publishes no host port" \
+      "test -z \"\$(docker compose port step-webui 8443 2>/dev/null)\""
+
+check "HTTPS responds through nginx (any 2xx/3xx)"  \
+      "curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://localhost/login | grep -qE '^(200|302|303)$'"
+
+check "/app/ serves the SPA shell"     \
+      "curl -sk --max-time 5 https://localhost/app/ | grep -q '<div id=\"root\">'"
 
 check "/login serves HTML"            \
-      "curl -sk --max-time 5 https://${HOST_IP}/login | grep -qi '<form'"
+      "curl -sk --max-time 5 https://localhost/login | grep -qi '<form'"
 
 check "/static/css/base.css → 200"    \
-      "curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://${HOST_IP}/static/css/base.css | grep -q '^200$'"
+      "curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://localhost/static/css/base.css | grep -q '^200$'"
 
 check "/static/js/datepicker.js → 200" \
-      "curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://${HOST_IP}/static/js/datepicker.js | grep -q '^200$'"
+      "curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://localhost/static/js/datepicker.js | grep -q '^200$'"
+
+check "/api/v1/session → 200"          \
+      "curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://localhost/api/v1/session | grep -q '^200$'"
 
 check "credentials.txt was created"   \
       "test -f credentials.txt"
@@ -167,7 +178,7 @@ ${G}╔════════════════════════�
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝${X}
 
-  Visit:      https://${HOST_IP}
+  Visit:      https://localhost/app/ (set WEB_HOSTNAME in .env to the name other machines use)
   Credentials: cat $TARGET_DIR/credentials.txt
 
   ${D}To clean up the test deployment:${X}

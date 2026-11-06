@@ -1,5 +1,5 @@
-# Mock IdP plus the OIDC/proxy keys the stock step-webui environment block omits.
-# Applied by the scenario driver only when E2E_OIDC_ENABLED=1.
+# Mock IdP plus the OIDC defaults that point step-webui at it. Applied by the
+# scenario driver only when E2E_OIDC_ENABLED=1.
 #
 # The issuer URL must resolve identically for the app, the browser and the
 # discovery document, so it is the compose service name and every party runs on
@@ -67,7 +67,8 @@ services:
       OIDC_ISSUER_URL:    "${OIDC_ISSUER_URL:-http://mock-oidc:8080/default}"
       OIDC_CLIENT_ID:     "${OIDC_CLIENT_ID:-step-webui-e2e}"
       OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-step-webui-e2e-secret}"
-      OIDC_REDIRECT_URL:  "${OIDC_REDIRECT_URL:-https://step-webui:8443/oidc/callback}"
+      # The published origin, which the browser reaches the callback through.
+      OIDC_REDIRECT_URL:  "${OIDC_REDIRECT_URL:-https://step-webui-web:8443/auth/oidc/callback}"
       OIDC_GROUP_CLAIM:   "${OIDC_GROUP_CLAIM:-groups}"
       OIDC_GROUP_ADMIN:   "${OIDC_GROUP_ADMIN:-e2e-admins}"
       OIDC_GROUP_MANAGER: "${OIDC_GROUP_MANAGER:-e2e-managers}"
@@ -75,9 +76,7 @@ services:
       OIDC_DEFAULT_ROLE:  "${OIDC_DEFAULT_ROLE:-}"
       OIDC_SYNC_ROLE:     "${OIDC_SYNC_ROLE:-true}"
 
-      LOCAL_LOGIN_ENABLED:  "${LOCAL_LOGIN_ENABLED:-true}"
-      TRUST_PROXY:          "${TRUST_PROXY:-false}"
-      TRUSTED_PROXY_CIDRS:  "${TRUSTED_PROXY_CIDRS:-}"
+      LOCAL_LOGIN_ENABLED: "${LOCAL_LOGIN_ENABLED:-true}"
     depends_on:
       mock-oidc-ready:
         condition: service_completed_successfully

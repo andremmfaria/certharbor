@@ -5,10 +5,25 @@ import * as path from "node:path";
 // file, .env and secrets/* are all reachable from one place.
 export const REPO_ROOT = process.env.E2E_REPO_ROOT ?? path.resolve(__dirname, "..", "..", "..");
 
-export const BASE_URL = process.env.BASE_URL ?? "https://step-webui:8443";
+/**
+ * The origin under test: nginx, the only service a browser reaches. Its name is
+ * also the SNI it accepts, so WEB_HOSTNAME must be step-webui-web for an
+ * in-network run.
+ */
+export const BASE_URL = process.env.BASE_URL ?? "https://step-webui-web:8443";
 
 /**
- * Host-context (infra) tests dial the published port, not the service name.
+ * The backend directly, for the tests that must bypass the origin: the health
+ * tier and the direct half of the forgery table. The infra tier runs on the
+ * host, where this name does not resolve, and uses backendAddress() instead.
+ */
+export const BACKEND_URL = process.env.BACKEND_URL ?? "https://step-webui:8443";
+
+/** PHASE9-DELETE: "" once the SPA owns the root. The SPA's mount point under the origin, Vite's base without the trailing slash. */
+export const SPA_BASE = "/app";
+
+/**
+ * Host-context runs dial nginx's published port, not the service name.
  * UI_HTTPS_PORT lives only in the (possibly scenario-edited) .env file that
  * compose reads via --env-file, never in the harness's own environment, so
  * this has to parse the file rather than read process.env.
@@ -53,7 +68,7 @@ export function adminPassword(): string {
       return m[1].trim().replace(/^["']|["']$/g, "");
     }
   }
-  throw new Error("STEPWEBUI_ADMIN_PASSWORD is set neither in the environment nor in .env — startup would have fatalled");
+  throw new Error("STEPWEBUI_ADMIN_PASSWORD is set neither in the environment nor in .env, startup would have fatalled");
 }
 
 /** The canary values E2E-SEC-04 sweeps collected artifacts for. */

@@ -54,18 +54,21 @@ services:
       retries: 10
       start_period: 15s
 
-  # ─── Step-CA WebUI (Go) ───────────────────────────────────────────────────────
+  # ─── Step-CA WebUI backend (Go) ────────────────────────────────────────────
+  # No published port: step-webui-web is the one public origin, and a second
+  # path straight to the backend would bypass its rate limit, its body ceiling
+  # and the trusted-proxy identity. Debug with `docker compose exec`.
   step-webui:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: "${BACKEND_IMAGE:-step-ca-webui-backend:${IMAGE_TAG:-local}}"
     container_name: step-webui
     restart: unless-stopped
-    ports:
-      - "${UI_HTTPS_PORT:-443}:8443"
     volumes:
       - step-webui-certs:/opt/step-webui/certs
       - step-webui-ssl:/opt/step-webui/ssl
+      - step-webui-web-ssl:/opt/step-webui/web-ssl
       - step-webui-data:/opt/step-webui/data
       - step-webui-uploads:/opt/step-webui/uploads
       - step-ca-data:/home/step:ro
@@ -86,28 +89,42 @@ services:
       ROOT_CERT:        "/home/step/certs/root_ca.crt"
       PROVISIONER:      "${PROVISIONER:-admin}"
       PASSWORD_FILE:    "/opt/step-webui/data/provisioner_password"
-      # In-process TLS bootstrap (main.go/tlsbootstrap.go) — see .env.example.
-      # UI_TLS_MODE=stepca's CA_FINGERPRINT fetch is effectively a no-op here
-      # because step-ca-data is already mounted read-only at ROOT_CERT's
-      # parent path above, so the root cert is present before step-webui's
-      # bootstrap even runs; CA_FINGERPRINT/CA_ROOT_CERT_PEM matter for
-      # deployments that don't share that volume (ECS/Kubernetes).
-      UI_TLS_MODE:      "${UI_TLS_MODE:-self-signed}"
+      # stepca, because nginx verifies the backend's leaf against the CA root
+      # and a self-signed one fails that on every request. CA_FINGERPRINT and
+      # CA_ROOT_CERT_PEM matter only where step-ca-data is not mounted at
+      # ROOT_CERT's parent as it is here.
+      UI_TLS_MODE:      "${UI_TLS_MODE:-stepca}"
       CA_FINGERPRINT:   "${CA_FINGERPRINT:-}"
       CA_ROOT_CERT_PEM: "${CA_ROOT_CERT_PEM:-}"
-      UI_HOSTNAME:      "${UI_HOSTNAME:-}"
+      # nginx's proxy_ssl_name: the backend leaf must carry this name.
+      UI_HOSTNAME:      "${UI_HOSTNAME:-step-webui}"
+      UI_CERT_DURATION: "${UI_CERT_DURATION:-8760h}"
+      WEB_TLS_MODE:     "${WEB_TLS_MODE:-stepca}"
+      WEB_HOSTNAME:     "${WEB_HOSTNAME:-}"
+      WEB_UPSTREAM_HOST: "${WEB_UPSTREAM_HOST:-step-webui-web}"
       PROVISIONER_PASSWORD_FILE: /run/secrets/ca_password
       SECRET_KEY_FILE:  /run/secrets/secret_key
       SESSION_SECURE:   "${SESSION_SECURE:-true}"
-      ENABLE_HSTS:      "${ENABLE_HSTS:-false}"
       # Setting these in .env alone is a silent no-op: they only reach the
-      # container from here. TRUST_PROXY=true with an unusable CIDR list is a
-      # startup fatal, which is deliberate.
-      TRUST_PROXY:         "${TRUST_PROXY:-false}"
+      # container from here. A malformed TRUSTED_PROXY_CIDRS is a startup
+      # fatal. An empty one trusts whatever WEB_UPSTREAM_HOST resolves to.
+      TRUST_PROXY:         "${TRUST_PROXY:-true}"
       TRUSTED_PROXY_CIDRS: "${TRUSTED_PROXY_CIDRS:-}"
-      # Required for password recovery; emailed links are built from this and
-      # never from the request. See PUBLIC_BASE_URL in .env.example.
-      PUBLIC_BASE_URL:  "${PUBLIC_BASE_URL:-}"
+      # Both name nginx's published origin and never a path under /app/:
+      # reset links are emailed and the redirect URI is registered with the IdP.
+      PUBLIC_BASE_URL:    "${PUBLIC_BASE_URL:-}"
+      OIDC_REDIRECT_URL:  "${OIDC_REDIRECT_URL:-}"
+      OIDC_ENABLED:       "${OIDC_ENABLED:-false}"
+      OIDC_ISSUER_URL:    "${OIDC_ISSUER_URL:-}"
+      OIDC_CLIENT_ID:     "${OIDC_CLIENT_ID:-}"
+      OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-}"
+      OIDC_GROUP_CLAIM:   "${OIDC_GROUP_CLAIM:-groups}"
+      OIDC_GROUP_ADMIN:   "${OIDC_GROUP_ADMIN:-}"
+      OIDC_GROUP_MANAGER: "${OIDC_GROUP_MANAGER:-}"
+      OIDC_GROUP_VIEWER:  "${OIDC_GROUP_VIEWER:-}"
+      OIDC_DEFAULT_ROLE:  "${OIDC_DEFAULT_ROLE:-}"
+      OIDC_SYNC_ROLE:     "${OIDC_SYNC_ROLE:-true}"
+      LOCAL_LOGIN_ENABLED: "${LOCAL_LOGIN_ENABLED:-true}"
       STEP_CA_IMAGE:    "${STEP_CA_IMAGE:-smallstep/step-ca:0.30.2}"
       HOST_IP:          "${HOST_IP:-127.0.0.1}"
       PORT:             "8443"
@@ -120,11 +137,43 @@ services:
     networks:
       - step-net
     healthcheck:
-      test: ["CMD", "curl", "-sk", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "3", "https://localhost:8443/login"]
+      # /health is liveness only. The marker means the backend fell back to a
+      # self-signed leaf nginx cannot verify, so depends_on must hold nginx off.
+      test: ["CMD-SHELL", "curl -fsk --max-time 3 -o /dev/null https://localhost:8443/health && test ! -e /opt/step-webui/ssl/.fallback"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 20s
+
+  # ─── Step-CA WebUI origin (nginx) ─────────────────────────────────────────
+  # Terminates TLS for WEB_HOSTNAME, serves the SPA and proxies the backend.
+  # Its healthcheck is the image's own.
+  step-webui-web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: "${WEB_IMAGE:-step-ca-webui-web:${IMAGE_TAG:-local}}"
+    container_name: step-webui-web
+    restart: unless-stopped
+    init: true
+    environment:
+      TZ: "${TZ:-UTC}"
+      WEB_TLS_MODE:        "${WEB_TLS_MODE:-stepca}"
+      WEB_HOSTNAME:        "${WEB_HOSTNAME:-}"
+      WEB_HSTS_MAX_AGE:    "${WEB_HSTS_MAX_AGE:-}"
+      WEB_RESOLVER:        "${WEB_RESOLVER:-127.0.0.11}"
+      WEB_RELOAD_INTERVAL: "${WEB_RELOAD_INTERVAL:-60}"
+    # The only certificate-bearing mount. step-webui-ssl holds the backend's
+    # private key and step-ca-data the CA's, and neither is mounted here.
+    volumes:
+      - step-webui-web-ssl:/etc/step-webui/ssl:ro
+    ports:
+      - "${UI_HTTPS_PORT:-443}:8443"
+    depends_on:
+      step-webui:
+        condition: service_healthy
+    networks:
+      - step-net
 
 # ─── Secrets ───────────────────────────────────────────────────────────────
 # Each secret is a host file mounted read-only at /run/secrets/<name>.
@@ -149,6 +198,7 @@ volumes:
   step-ca-data:
   step-webui-certs:
   step-webui-ssl:
+  step-webui-web-ssl:
   step-webui-data:
   step-webui-uploads:
 
@@ -159,11 +209,10 @@ networks:
     name: step-network
     driver_opts:
       com.docker.network.bridge.enable_ip_masquerade: "true"
-    # Pinned so the proxy has a stable address to be trusted by as a /32.
-    # Trusting the whole subnet would include the bridge gateway, which is
-    # where host-originated traffic arrives from. Change STEP_NET_SUBNET if it
-    # collides with a LAN or VPN route; changing it on a live stack needs
-    # `docker compose down && docker network rm step-network` first.
+    # No service carries a static address: the backend trusts nginx by
+    # resolving its name. The subnet is pinned only so a collision with a LAN
+    # or VPN route is one key to change, which needs
+    # `docker compose down && docker network rm step-network` on a live stack.
     ipam:
       config:
-        - subnet: "${STEP_NET_SUBNET:-172.28.0.0/24}"
+        - subnet: "${STEP_NET_SUBNET:-10.213.0.0/24}"

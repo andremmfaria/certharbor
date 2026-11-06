@@ -58,7 +58,7 @@ cumulative="${E2E_CUMULATIVE_LOG:-test/e2e/artifacts/step-webui-cumulative.log}"
   dc logs --no-color --timestamps step-webui 2>&1
 } | redact > "$dest/logs-step-webui.log"
 
-for svc in postgres step-ca mock-oidc mailpit pebble; do
+for svc in step-webui-web postgres step-ca mock-oidc mailpit pebble; do
   out="$(dc logs --no-color --timestamps "$svc" 2>&1)"
   [[ -n "$out" ]] && printf '%s\n' "$out" | redact > "$dest/logs-$svc.log"
 done
@@ -81,11 +81,23 @@ done
 # the volume is not the file in the repository.
 dc exec -T step-ca cat /home/step/config/ca.json 2>/dev/null | redact > "$dest/ca.json"
 
-port="$(sed -n 's/^UI_HTTPS_PORT=//p' "${E2E_ENV_FILE:-.env}" 2>/dev/null | head -1)"
+# The rendered config, not the template: what nginx actually loaded.
+dc exec -T step-webui-web nginx -T 2>/dev/null | redact > "$dest/nginx-T.txt"
+
+# nginx is the published origin and refuses any SNI but WEB_HOSTNAME. The last
+# value wins, as it does for compose reading the same file.
+port="$(sed -n 's/^UI_HTTPS_PORT=//p' "${E2E_ENV_FILE:-.env}" 2>/dev/null | tail -1)"
 port="${port:-443}"
-openssl s_client -connect "localhost:${port}" -showcerts </dev/null 2>/dev/null > "$dest/s_client.txt" || true
-openssl s_client -connect "localhost:${port}" </dev/null 2>/dev/null \
+sni="$(sed -n 's/^WEB_HOSTNAME=//p' "${E2E_ENV_FILE:-.env}" 2>/dev/null | tail -1)"
+sni="${sni:-localhost}"
+openssl s_client -connect "localhost:${port}" -servername "$sni" -showcerts </dev/null 2>/dev/null > "$dest/s_client.txt" || true
+openssl s_client -connect "localhost:${port}" -servername "$sni" </dev/null 2>/dev/null \
   | openssl x509 -outform pem > "$dest/served-leaf.pem" 2>/dev/null || true
+backend_ip="$(docker inspect --format '{{with index .NetworkSettings.Networks "step-network"}}{{.IPAddress}}{{end}}' "$(dc ps -q step-webui 2>/dev/null | head -1)" 2>/dev/null || true)"
+if [[ -n "$backend_ip" ]]; then
+  openssl s_client -connect "${backend_ip}:8443" </dev/null 2>/dev/null \
+    | openssl x509 -outform pem > "$dest/served-backend-leaf.pem" 2>/dev/null || true
+fi
 
 # secrets/ and any backup bundle are never collected.
 if [[ -f "${E2E_ENV_FILE:-.env}" ]]; then

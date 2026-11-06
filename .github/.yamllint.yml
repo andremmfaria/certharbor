@@ -1,7 +1,7 @@
 extends: default
 
 rules:
-  # Long lines common in workflow files — disable length check
+  # Long lines common in workflow files, disable length check
   line-length: disable
   # Allow both true/false and on/off for YAML booleans
   truthy:

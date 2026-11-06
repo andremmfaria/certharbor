@@ -8,10 +8,10 @@ MAX_TLS_DURATION="${STEPCA_MAX_TLS_CERT_DURATION:-87600h}"
 CERTS_DIR="${STEPPATH:-/home/step}/certs"
 
 # The base image leaves $CERTS_DIR at 0750 (drwx--S---), owned by the "step"
-# user, with the group bit missing +x — so no other UID can even traverse
+# user, with the group bit missing +x, so no other UID can even traverse
 # into it, let alone read root_ca.crt/intermediate_ca.crt. step-webui (and any
 # other container sharing the step-ca-data volume) reads those files as its
-# own non-root UID, which is a different UID than step-ca's — the standard
+# own non-root UID, which is a different UID than step-ca's, the standard
 # docker-compose deployment shape this project documents ("root cert is
 # assumed already present via volume mount"). root_ca.crt/intermediate_ca.crt
 # are public certificates, not secrets (the private keys live in

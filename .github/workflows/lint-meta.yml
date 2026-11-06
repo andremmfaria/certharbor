@@ -10,8 +10,12 @@ permissions:
 
 jobs:
   hadolint:
-    name: Dockerfile lint
+    name: Dockerfile lint (${{ matrix.dockerfile }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dockerfile: [backend/Dockerfile, frontend/Dockerfile]
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
@@ -19,7 +23,7 @@ jobs:
       - name: Run hadolint
         uses: hadolint/hadolint-action@v3.5.0
         with:
-          dockerfile: backend/Dockerfile
+          dockerfile: ${{ matrix.dockerfile }}
 
   actionlint:
     name: Workflow lint (actionlint)
@@ -79,10 +83,17 @@ jobs:
             --config-basedir "$(pwd)" \
             "backend/static/css/**/*.css"
 
+      - name: stylelint (frontend CSS)
+        run: |
+          node_modules/.bin/stylelint \
+            --config backend/.stylelintrc.json \
+            --config-basedir "$(pwd)" \
+            "frontend/src/styles/**/*.css"
+
       - name: eslint (JS)
         run: node_modules/.bin/eslint --config backend/eslint.config.js "backend/static/js/**/*.js"
 
-      - name: djlint (Go templates — lint only; format burn-down is PR-23)
+      - name: djlint (Go templates, lint only; format burn-down is PR-23)
         run: djlint backend/templates/ --profile=golang --lint
 
       - name: Install the e2e harness

@@ -11,7 +11,7 @@ export function countOccurrences(haystack: string, needle: string): number {
 
 /**
  * This application renders its error paths inline at 200, so a status code alone
- * never identifies a failure — every content assertion carries the body it saw.
+ * never identifies a failure, every content assertion carries the body it saw.
  */
 export function assertContains(body: string, needle: string, context: string): void {
   if (!body.includes(needle)) {

@@ -28,16 +28,44 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v4.4.1
 
-      - name: Build the application image and warm its layer cache
+      - name: Build the backend image
         uses: docker/build-push-action@v7.4.0
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          tags: step-ca-webui:e2e
+          tags: step-ca-webui-backend:e2e
           push: false
           load: true
-          cache-from: type=gha,scope=e2e
-          cache-to: type=gha,scope=e2e,mode=max
+          cache-from: type=gha,scope=e2e-backend
+          cache-to: type=gha,scope=e2e-backend,mode=max
+
+      - name: Build the frontend image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: ./frontend/Dockerfile
+          tags: step-ca-webui-web:e2e
+          push: false
+          load: true
+          cache-from: type=gha,scope=e2e-frontend
+          cache-to: type=gha,scope=e2e-frontend,mode=max
+
+      - name: Neither runtime image contains Node
+        run: |
+          for img in step-ca-webui-backend:e2e step-ca-webui-web:e2e; do
+            docker run --rm --entrypoint sh "$img" -c '! command -v node && ! command -v npm'
+          done
+
+      - name: Save both application images into one archive
+        run: docker save step-ca-webui-backend:e2e step-ca-webui-web:e2e | gzip -1 > e2e-images.tar.gz
+
+      - name: Upload the application images
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: e2e-images
+          path: e2e-images.tar.gz
+          retention-days: 1
+          if-no-files-found: error
 
       - name: Build the harness image (Playwright base plus docker CLI)
         uses: docker/build-push-action@v7.4.0
@@ -56,7 +84,7 @@ jobs:
     name: e2e main suite
     needs: image
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
@@ -64,15 +92,15 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v4.4.1
 
-      - name: Materialise the application image from the layer cache
-        uses: docker/build-push-action@v7.4.0
+      - name: Download the application images
+        uses: actions/download-artifact@v8.0.2
         with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          tags: step-ca-webui:e2e
-          push: false
-          load: true
-          cache-from: type=gha,scope=e2e
+          name: e2e-images
+
+      - name: Load the application images
+        run: |
+          gunzip -c e2e-images.tar.gz | docker load
+          rm e2e-images.tar.gz
 
       - name: Materialise the harness image from the layer cache
         uses: docker/build-push-action@v7.4.0
@@ -94,7 +122,8 @@ jobs:
           cp .env.example .env
           {
             echo "STEPWEBUI_ADMIN_PASSWORD=${ADMIN_PW}"
-            echo "PUBLIC_BASE_URL=https://localhost"
+            echo "WEB_HOSTNAME=step-webui-web"
+            echo "PUBLIC_BASE_URL=https://step-webui-web:8443"
             echo "SESSION_SECURE=true"
           } >> .env
           chmod 644 secrets/*
@@ -102,19 +131,38 @@ jobs:
       - name: Bring up the stack
         run: docker compose -f docker-compose.yml -f compose.e2e-image.yml up -d --wait
 
+      - name: The backend publishes no host port
+        run: ./scripts/check-backend-port.sh --running
+
       - name: Run the api project
         run: |
           docker run --rm \
             --network step-network \
             -v "$PWD:/repo" -v /var/run/docker.sock:/var/run/docker.sock \
             -w /e2e \
-            -e BASE_URL=https://step-webui:8443 \
+            -e BASE_URL=https://step-webui-web:8443 \
+            -e BACKEND_URL=https://step-webui:8443 \
             -e E2E_REPO_ROOT=/repo \
             -e E2E_ARTIFACT_DIR=/repo/test/e2e/artifacts \
             -e COMPOSE_PROJECT_NAME=step-ca-webui \
             -e CI=true \
             step-ca-webui-harness:e2e \
             npx playwright test --project=api
+
+      - name: Run the SPA specs of the ui project
+        run: |
+          docker run --rm \
+            --network step-network \
+            -v "$PWD:/repo" -v /var/run/docker.sock:/var/run/docker.sock \
+            -w /e2e \
+            -e BASE_URL=https://step-webui-web:8443 \
+            -e BACKEND_URL=https://step-webui:8443 \
+            -e E2E_REPO_ROOT=/repo \
+            -e E2E_ARTIFACT_DIR=/repo/test/e2e/artifacts/ui \
+            -e COMPOSE_PROJECT_NAME=step-ca-webui \
+            -e CI=true \
+            step-ca-webui-harness:e2e \
+            npx playwright test --project=ui specs/spa
 
       - name: Collect artifacts
         if: always()

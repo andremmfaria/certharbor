@@ -17,8 +17,8 @@ usage() {
 }
 [[ -n "$scenario" ]] || usage
 
-# In CI the image job already built step-ca-webui:e2e, so the driver composes the
-# image override in and the specs never pass --build.
+# In CI the image job already built both application images, so the driver
+# composes the image override in and the specs never pass --build.
 image_override=""
 if [[ "${E2E_USE_PREBUILT_IMAGE:-}" == "1" ]]; then
   image_override="compose.e2e-image.yml"
@@ -44,6 +44,10 @@ if [[ -n "$image_override" ]]; then
   overrides="${overrides:+$overrides:}$image_override"
 fi
 
+# The bootstrap tests run below the HTTP layer and dial the backend directly,
+# so no scenario brings nginx up.
+overrides="${overrides:+$overrides:}compose.e2e-noweb.yml"
+
 env_file="$repo_root/.env.e2e-$scenario"
 cp "$repo_root/.env" "$env_file"
 trap 'rm -f "$env_file"' EXIT
@@ -68,11 +72,18 @@ fi
 # step-webui 10001) and the CA never finishes booting.
 chmod 644 "$repo_root"/secrets/* 2>/dev/null || true
 
+# compose.e2e-noweb.yml hides step-webui-web from every compose call the specs
+# make, so an origin left running by an earlier main-suite stack in the same
+# project would survive their `down -v`, holding step-network and its volume.
+docker compose -f "$repo_root/docker-compose.yml" --env-file "$env_file" rm -sf step-webui-web >/dev/null
+
 export E2E_COMPOSE_OVERRIDES="$overrides"
 export E2E_ENV_FILE="$env_file"
 export E2E_SCENARIO="$scenario"
 
 echo "scenario=$scenario overrides=[${overrides:-none}] filter=$filter env_file=$env_file"
 
+# Not exec: the EXIT trap must still run, or the scenario's .env copy, which
+# carries the admin password, outlives the run.
 cd "$e2e_dir"
-exec npx playwright test --project=infra -g "$filter"
+npx playwright test --project=infra -g "$filter"

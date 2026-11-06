@@ -1,0 +1,18 @@
+# Applies to builds whose context is the repository root (frontend/Dockerfile).
+# secrets/, .env and backups/ hold real credentials and password hashes, and a
+# file copied into a layer stays in the image even if a later layer deletes it.
+.git
+**/node_modules/
+secrets/
+.env
+.env.*
+!.env.example
+backups/
+test/e2e/artifacts/
+test/e2e/fixtures/pebble/certs/
+frontend/dist/
+clients/ts/src/
+clients/ts/dist/
+backend/ssl/
+**/*.tsbuildinfo
+*.log

@@ -1,7 +1,10 @@
-# Runs step-webui from the image the CI `image` job built, so no job pays its own
-# `up -d --build`. The base file's `build:` block survives the merge (overrides
-# add or replace keys, they do not delete them) and is simply never evaluated,
-# because CI never passes --build.
+# Runs both application services from the images the CI `image` job built, so
+# no job pays its own `up -d --build`. The base file's `build:` blocks survive
+# the merge (overrides add or replace keys, they do not delete them) and are
+# simply never evaluated, because CI never passes --build. Both pins are
+# needed: one left out silently runs that half from a local build.
 services:
   step-webui:
-    image: step-ca-webui:e2e
+    image: step-ca-webui-backend:e2e
+  step-webui-web:
+    image: step-ca-webui-web:e2e

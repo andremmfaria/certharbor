@@ -2,9 +2,9 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { APIRequestContext, expect, test } from "@playwright/test";
-import { composeArgv, composeOrThrow, containerId, exec, run, upStack, waitForLogLine, waitHealthy } from "../../helpers/compose";
-import { hostURL } from "../../helpers/env";
-import { getEnvKey, setEnvKeys } from "../../helpers/envfile";
+import { backendAddress, composeArgv, composeOrThrow, containerId, exec, run, upStack, waitForLogLine } from "../../helpers/compose";
+import { setEnvKeys } from "../../helpers/envfile";
+import { pollUntil } from "../../helpers/poll";
 import { adminCredentials } from "../../fixtures/test";
 import { probeTLS } from "../../helpers/openssl";
 import { csrfTokenFrom, loginOrThrow, newJar } from "../../helpers/session";
@@ -22,7 +22,7 @@ interface ConsoleResult {
   output: string;
 }
 
-/** Mirrors specs/admin/adm-console.api.spec.ts's runCommand — duplicated rather than shared, since that one runs through the worker-scoped admin fixture this file cannot use (it targets BASE_URL, the container-network hostname; infra runs on the host). */
+/** Mirrors specs/admin/adm-console.api.spec.ts's runCommand, duplicated rather than shared, since that one runs through the worker-scoped admin fixture this file cannot use (it targets BASE_URL, the container-network origin; infra runs on the host and dials the backend's address). */
 async function runConsoleCommand(ctx: APIRequestContext, commandID: string): Promise<ConsoleResult> {
   const token = await csrfTokenFrom(ctx, "/admin/console");
   const res = await ctx.post("/admin/console", { form: { command_id: commandID, csrf_token: token } });
@@ -49,17 +49,24 @@ test.describe.serial("bootstrap: ca-down scenario", () => {
     const obtaining = await waitForLogLine("step-webui", "obtaining UI leaf certificate from step-ca", { timeoutMs: 90_000 });
     const fallback = await waitForLogLine(
       "step-webui",
-      "step-ca certificate issuance failed after retries — falling back to self-signed",
+      "step-ca certificate issuance failed after retries, falling back to self-signed",
       { timeoutMs: 90_000 },
     );
     const gapMs = timestampOf(fallback).getTime() - timestampOf(obtaining).getTime();
     expect(gapMs, `retry loop should span at least 28s, got ${gapMs}ms`).toBeGreaterThanOrEqual(28_000);
 
-    const port = getEnvKey("UI_HTTPS_PORT") ?? "443";
-    const login = await run(["curl", "-sk", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "5", `https://localhost:${port}/login`]);
-    expect(login.stdout.trim(), "TLS bootstrap failure must be non-fatal").toBe("200");
+    // The web leaf's own 30-attempt loop runs after the fallback and before
+    // the listener starts, so the backend serves a further ~30s later.
+    const addr = await backendAddress();
+    const login = await pollUntil(
+      "the fallen-back backend to serve /login",
+      async () => (await run(["curl", "-sk", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "5", `https://${addr}/login`])).stdout.trim(),
+      (code) => code === "200",
+      { timeoutMs: 90_000, intervalMs: 1000 },
+    );
+    expect(login, "TLS bootstrap failure must be non-fatal").toBe("200");
 
-    const cert = await probeTLS(`localhost:${port}`);
+    const cert = await probeTLS(addr);
     expect(cert.selfSigned, `issuer ${cert.issuer} should equal subject ${cert.subject} for a self-signed fallback`).toBe(true);
   });
 
@@ -80,7 +87,6 @@ test.describe.serial("bootstrap: ca-down scenario", () => {
 
     setEnvKeys({ UI_TLS_MODE: "stepca", CA_FINGERPRINT: undefined, CA_ROOT_CERT_PEM: undefined });
     await upStack();
-    await waitHealthy("step-webui", 180_000);
 
     const id = await containerId("step-webui");
     const startedRes = await run(["docker", "inspect", "--format", "{{.State.StartedAt}}", id]);
@@ -89,14 +95,27 @@ test.describe.serial("bootstrap: ca-down scenario", () => {
     const constructionFailed = await waitForLogLine("step-webui", "CA client construction failed during TLS bootstrap", { timeoutMs: 30_000 });
     const fallback = await waitForLogLine(
       "step-webui",
-      "UI_TLS_MODE=stepca but no CA client is available — falling back to self-signed",
+      "UI_TLS_MODE=stepca but no CA client is available, falling back to self-signed",
       { timeoutMs: 30_000 },
     );
     expect(constructionFailed).not.toBe("");
     const elapsedMs = timestampOf(fallback).getTime() - startedAt.getTime();
     expect(elapsedMs, `the nil-client branch must not enter the retry loop, got ${elapsedMs}ms since container start`).toBeLessThan(5_000);
 
-    const jar = await newJar(hostURL());
+    // The self-signed fallback writes the marker that keeps the compose
+    // healthcheck failing, so liveness is read off /health rather than off
+    // the container's health status.
+    const addr = await backendAddress();
+    await pollUntil(
+      "the fallen-back backend to answer /health",
+      async () => (await run(["curl", "-sk", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "5", `https://${addr}/health`])).stdout.trim(),
+      (code) => code === "200",
+      { timeoutMs: 120_000, intervalMs: 2000 },
+    );
+    const marker = await exec("step-webui", "test", "-e", "/opt/step-webui/ssl/.fallback");
+    expect(marker.code, "a stepca fallback must leave the .fallback marker that holds nginx off").toBe(0);
+
+    const jar = await newJar(`https://${addr}`);
     try {
       await loginOrThrow(jar, adminCredentials());
 
@@ -118,7 +137,7 @@ test.describe.serial("bootstrap: ca-down scenario", () => {
 
       // h.caClient() caches only on success and retries stepca.New on every
       // call after a failure, so the root cert appearing later is picked up
-      // with no restart — the second half of R2.
+      // with no restart, the second half of R2.
       const after = await runConsoleCommand(jar, "ca.health");
       expect(after.success, "a root cert appearing later must be picked up with no restart").toBe(true);
       expect(after.output).toBe("ok");

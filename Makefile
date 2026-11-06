@@ -5,11 +5,13 @@
 # ──────────────────────────────────────────────────────────────────────────────
 SECRETS_DIR  := secrets
 GO_DIR       := backend
+WEB_DIR      := frontend
+CLIENT_DIR   := clients/ts
 BACKUP_DIR   := backups
 COMPOSE      := docker compose
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Help — self-documenting via ## comments
+# Help, self-documenting via ## comments
 # ──────────────────────────────────────────────────────────────────────────────
 .PHONY: help
 help: ## Show this help
@@ -24,7 +26,7 @@ setup: ## Bootstrap a fresh install: copy .env.example and generate secrets/
 	@# Copy .env if absent
 	@if [ ! -f .env ]; then \
 		cp .env.example .env; \
-		echo "  created  .env (from .env.example — edit HOST_IP, UI_HTTPS_PORT, PROVISIONER, TZ, STEPWEBUI_ADMIN_PASSWORD)"; \
+		echo "  created  .env (from .env.example, edit HOST_IP, WEB_HOSTNAME, UI_HTTPS_PORT, PROVISIONER, TZ, STEPWEBUI_ADMIN_PASSWORD)"; \
 	else \
 		echo "  skipped  .env already exists"; \
 	fi
@@ -64,7 +66,7 @@ setup: ## Bootstrap a fresh install: copy .env.example and generate secrets/
 	fi
 	@echo ""
 	@echo "Next steps:"
-	@echo "  1. Edit .env — set HOST_IP, UI_HTTPS_PORT, PROVISIONER, TZ, STEPWEBUI_ADMIN_PASSWORD"
+	@echo "  1. Edit .env, set HOST_IP, WEB_HOSTNAME, UI_HTTPS_PORT, PROVISIONER, TZ, STEPWEBUI_ADMIN_PASSWORD"
 	@echo "  2. make up"
 	@echo ""
 	@echo "To regenerate secrets (existing deployment): make setup FORCE=1"
@@ -111,7 +113,7 @@ backup: ## Dump the database and named volumes into backups/<timestamp>/
 		pg_dump -U stepwebui stepwebui > $$DIR/postgres-stepwebui.sql || true; \
 	\
 	echo "  archiving named volumes …"; \
-	for VOL in postgres-data step-ca-data step-webui-certs step-webui-ssl step-webui-data step-webui-uploads; do \
+	for VOL in postgres-data step-ca-data step-webui-certs step-webui-ssl step-webui-web-ssl step-webui-data step-webui-uploads; do \
 		MOUNT=$$(docker volume inspect step-ca-webui_$$VOL \
 			--format '{{.Mountpoint}}' 2>/dev/null || true); \
 		if [ -n "$$MOUNT" ] && [ -d "$$MOUNT" ]; then \
@@ -180,6 +182,35 @@ hooks: ## Register the openapi.json merge driver in this clone's git config
 	@echo "merge driver registered. Note it fires only on a local git merge or rebase:"
 	@echo "GitHub's merge button, squash and merge queue never run local git config (7.2)."
 
+.PHONY: client
+client: ## Generate, build and pack the TS client to clients/ts/dist/client.tgz
+	cd $(CLIENT_DIR) && npm ci && npm pack --pack-destination dist
+	mv $(CLIENT_DIR)/dist/andremmfaria-step-ca-webui-client-*.tgz $(CLIENT_DIR)/dist/client.tgz
+
+.PHONY: frontend-install
+frontend-install: ## Install the SPA's deps, then the packed client (run make client first)
+	cd $(WEB_DIR) && npm ci && npm install --no-save ../$(CLIENT_DIR)/dist/client.tgz
+
+.PHONY: frontend-build
+frontend-build: ## Typecheck and build the SPA
+	cd $(WEB_DIR) && npm run build
+
+.PHONY: frontend-lint
+frontend-lint: ## ESLint and Prettier on the SPA
+	cd $(WEB_DIR) && npm run lint
+
+.PHONY: frontend-typecheck
+frontend-typecheck: ## Typecheck the SPA
+	cd $(WEB_DIR) && npm run typecheck
+
+.PHONY: frontend-test
+frontend-test: ## Run the SPA's Vitest suite
+	cd $(WEB_DIR) && npm run test
+
+.PHONY: frontend-sdk-surface
+frontend-sdk-surface: ## Fail on spec operations the SPA neither imports nor allowlists
+	cd $(WEB_DIR) && npm run check:sdk-surface
+
 # ──────────────────────────────────────────────────────────────────────────────
 # End-to-end suite (plans/e2e-tests.md)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -211,19 +242,20 @@ e2e-bootstrap: ## Run one bootstrap scenario: make e2e-bootstrap SCENARIO=finger
 	@test -n "$(SCENARIO)" || { echo "usage: make e2e-bootstrap SCENARIO=<selfsigned|provided|ca-down|fingerprint|fatals>"; exit 2; }
 	./$(E2E_DIR)/scenario.sh $(SCENARIO)
 
-# Both rate limiters are process-local maps, so a restart clears them — turning
+# Both rate limiters are process-local maps, so a restart clears them, turning
 # a multi-minute real-time wait into ~20-30s back to healthy.
 .PHONY: e2e-restart-ui
 e2e-restart-ui: ## Restart step-webui, clearing both process-local rate limiters
 	$(COMPOSE) restart step-webui
 	$(COMPOSE) up -d --wait step-webui
 
+# nginx mounts step-webui-web-ssl, so it must go before that volume can, and
+# the final up brings it back once the backend has re-issued both leaves.
 .PHONY: e2e-reset-ssl
-e2e-reset-ssl: ## Remove the step-webui-ssl volume only, leaving users and CA state
-	$(COMPOSE) stop step-webui
-	$(COMPOSE) rm -f step-webui
-	docker volume rm $(E2E_PROJECT)_step-webui-ssl
-	$(COMPOSE) up -d --wait step-webui
+e2e-reset-ssl: ## Remove both leaf volumes (backend and nginx), leaving users and CA state
+	$(COMPOSE) rm -sf step-webui-web step-webui
+	docker volume rm $(E2E_PROJECT)_step-webui-ssl $(E2E_PROJECT)_step-webui-web-ssl
+	$(COMPOSE) up -d --wait
 
 .PHONY: e2e-seed-history
 e2e-seed-history: ## Insert N synthetic cert_history rows: make e2e-seed-history N=25
@@ -241,9 +273,69 @@ e2e-le-certs: ## Generate the local ACME server's TLS material for the LE leg
 # Cleanup
 # ──────────────────────────────────────────────────────────────────────────────
 .PHONY: clean
-clean: ## Remove build artifacts and old backups (secrets/ and .env are untouched)
+clean: ## Remove build artifacts, the generated client, the SPA bundle and old backups (secrets/ and .env are untouched)
 	cd $(GO_DIR) && go clean ./...
+	rm -rf $(CLIENT_DIR)/src $(CLIENT_DIR)/dist $(WEB_DIR)/dist
 	@if [ -d $(BACKUP_DIR) ]; then \
 		echo "  removing $(BACKUP_DIR)/"; \
 		rm -rf $(BACKUP_DIR); \
 	fi
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Web origin (nginx)
+# ──────────────────────────────────────────────────────────────────────────────
+.PHONY: nginx-lint
+nginx-lint: ## Fixture nginx against a stub upstream: routing, headers, cache, failure documents (no compose)
+	./frontend/nginx-lint/run.sh
+
+.PHONY: proxy-routes-check
+proxy-routes-check: ## Assert nginx and the Vite dev proxy both derive from frontend/proxy-prefixes.json
+	./scripts/check-proxy-routes.sh
+
+.PHONY: config-keys-check
+config-keys-check: ## Assert every web-origin key has a docs/configuration.md row and an .env.example line
+	./scripts/check-config-keys.sh
+
+.PHONY: backend-port-check
+backend-port-check: ## Assert no compose file, base or override, publishes a host port for step-webui
+	./scripts/check-backend-port.sh
+
+.PHONY: preview
+preview: backend-port-check ## Build both images, run all four containers healthy, smoke-test the origin (before pushing nginx, Vite, CSP or prefix changes)
+	$(COMPOSE) up -d --build --wait
+	./scripts/check-backend-port.sh --running
+
+# Never --build: that would rebuild the frontend image, Node stage included, to
+# start a backend nobody loads the bundled SPA from. make up-backend rebuilds.
+# Vite reaches the backend at its container address, since the backend
+# publishes no host port, which needs a host that routes to bridge networks
+# (Linux, not Docker Desktop). Plain HTTP on localhost, hence SESSION_SECURE
+# off and no __Host- prefix in this mode.
+.PHONY: dev
+dev: ## Start postgres, step-ca and step-webui as already built (--wait, no --build), then Vite with hot reload on the host
+	SESSION_SECURE=$${SESSION_SECURE:-false} $(COMPOSE) up -d --wait postgres step-ca step-webui
+	cd $(WEB_DIR) && DEV_BACKEND_URL="https://$$(docker inspect -f '{{with index .NetworkSettings.Networks "step-network"}}{{.IPAddress}}{{end}}' step-webui):8443" npm run dev
+
+.PHONY: up-backend
+up-backend: ## Rebuild and start postgres, step-ca and step-webui only
+	$(COMPOSE) up -d --build --wait postgres step-ca step-webui
+
+.PHONY: up-web
+up-web: ## Rebuild and restart step-webui-web alone against the running backend
+	$(COMPOSE) up -d --build --wait --no-deps step-webui-web
+
+.PHONY: logs-ui
+logs-ui: ## Stream step-webui's logs (Ctrl-C to stop)
+	$(COMPOSE) logs -f step-webui
+
+.PHONY: logs-web
+logs-web: ## Stream step-webui-web's logs (Ctrl-C to stop)
+	$(COMPOSE) logs -f step-webui-web
+
+.PHONY: nginx-test
+nginx-test: ## Run nginx -t inside the running step-webui-web
+	$(COMPOSE) exec step-webui-web nginx -t
+
+.PHONY: web-reload
+web-reload: ## Validate and reload nginx in the running step-webui-web, no restart
+	$(COMPOSE) exec step-webui-web sh -c 'nginx -t && nginx -s reload'

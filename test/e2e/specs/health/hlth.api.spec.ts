@@ -13,7 +13,7 @@ interface ReadyBody {
 /**
  * Readiness builds its body with json.Marshal over a map, and Go sorts map
  * keys, so the wire order is ca, db, status. A literal written in the request
- * order would never match — parse, never string-compare.
+ * order would never match, parse, never string-compare.
  */
 async function ready(ctx: APIRequestContext): Promise<{ status: number; body: ReadyBody }> {
   const res = await ctx.get("/ready");

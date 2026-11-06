@@ -228,7 +228,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v7.1.0
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: npm ci
         run: npm ci
@@ -254,8 +254,39 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: No dead API surface
+        run: npm run check:sdk-surface
+
       - name: Build
         run: npm run build
+
+  origin:
+    name: Origin (nginx and compose)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Proxy prefixes and the SPA base derive from one source
+        run: make proxy-routes-check
+
+      - name: Every web-origin key is documented
+        run: make config-keys-check
+
+      - name: No compose file publishes a backend host port
+        run: make backend-port-check
+
+      - name: The artifact collector covers the origin
+        run: grep -qE '^for svc in .*step-webui-web' test/e2e/collect.sh
+
+      - name: nginx-lint
+        run: make nginx-lint
 
   contract-negative:
     name: Contract negative proof
@@ -341,12 +372,13 @@ jobs:
   ci-gate:
     name: CI gate
     runs-on: ubuntu-latest
-    needs: [build-test-lint, db-integration, client, frontend]
+    needs: [build-test-lint, db-integration, client, frontend, origin]
     if: always()
     steps:
       - name: All required jobs succeeded
         run: |
           for r in "${{ needs.build-test-lint.result }}" "${{ needs.db-integration.result }}" \
-                   "${{ needs.client.result }}" "${{ needs.frontend.result }}"; do
+                   "${{ needs.client.result }}" "${{ needs.frontend.result }}" \
+                   "${{ needs.origin.result }}"; do
             [ "$r" = success ] || { echo "::error::a required job did not succeed ($r)"; exit 1; }
           done

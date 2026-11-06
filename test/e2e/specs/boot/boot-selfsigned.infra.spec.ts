@@ -1,20 +1,19 @@
 import { expect, test } from "@playwright/test";
-import { composeOrThrow, countExact, logs, upStack, waitHealthy } from "../../helpers/compose";
+import { backendAddress, composeOrThrow, countExact, logs, upStack, waitHealthy } from "../../helpers/compose";
 import { getEnvKey, setEnvKeys } from "../../helpers/envfile";
 import { probeTLS, validityMs } from "../../helpers/openssl";
 
-test("E2E-BOOT-04: self-signed default when UI_TLS_MODE is unset", async () => {
+test("E2E-BOOT-04: UI_TLS_MODE=self-signed generates a self-signed leaf", async () => {
   test.setTimeout(3 * 60_000);
 
   await composeOrThrow("down", "-v");
-  // config.Load's getEnv("UI_TLS_MODE", "self-signed") default only applies
-  // when the key is genuinely absent, not merely empty.
-  setEnvKeys({ UI_TLS_MODE: undefined });
+  // Set explicitly: compose defaults an unset or empty UI_TLS_MODE to stepca,
+  // so config.Load's own self-signed default is unreachable through compose.
+  setEnvKeys({ UI_TLS_MODE: "self-signed" });
   await upStack();
   await waitHealthy("step-webui", 180_000);
 
-  const port = getEnvKey("UI_HTTPS_PORT") ?? "443";
-  const cert = await probeTLS(`localhost:${port}`);
+  const cert = await probeTLS(await backendAddress());
   expect(cert.selfSigned, `issuer ${cert.issuer} should equal subject ${cert.subject}`).toBe(true);
   expect(cert.sans).toEqual(expect.arrayContaining([`IP Address:${getEnvKey("HOST_IP") ?? "127.0.0.1"}`, "DNS:localhost"]));
 

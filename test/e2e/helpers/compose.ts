@@ -126,7 +126,7 @@ export async function cumulativeLog(service = "step-webui"): Promise<string> {
   return previous + (await logs(service));
 }
 
-/** Number of lines containing an exact string — the offset form of a log gate (Section 3.0.5). */
+/** Number of lines containing an exact string, the offset form of a log gate (Section 3.0.5). */
 export function countExact(haystack: string, needle: string): number {
   return haystack.split("\n").filter((line) => line.includes(needle)).length;
 }
@@ -180,27 +180,61 @@ export async function waitHealthy(service: string, timeoutMs = 180_000): Promise
   );
 }
 
-/** A restart clears both process-local rate limiters; an .env edit needs a recreate instead. */
+export const BACKEND_SERVICE = "step-webui";
+export const WEB_SERVICE = "step-webui-web";
+
+/**
+ * Waits for nginx as well, where the stack has it: it starts only once the
+ * backend is healthy, so after a recreate of the whole stack the backend being
+ * healthy does not yet mean the origin answers. The infra tier runs without it.
+ */
+export async function waitOriginHealthy(timeoutMs = 180_000): Promise<void> {
+  await waitHealthy(BACKEND_SERVICE, timeoutMs);
+  if (await serviceStatus(WEB_SERVICE)) await waitHealthy(WEB_SERVICE, timeoutMs);
+}
+
+/**
+ * A restart clears both process-local rate limiters. An .env edit needs a
+ * recreate instead. nginx needs nothing: it re-resolves the backend per request.
+ */
 export async function restartUI(): Promise<void> {
-  await captureBeforeRecreate("step-webui");
-  await composeOrThrow("restart", "step-webui");
-  await waitHealthy("step-webui");
+  await captureBeforeRecreate(BACKEND_SERVICE);
+  await composeOrThrow("restart", BACKEND_SERVICE);
+  await waitOriginHealthy();
 }
 
 export async function recreate(service: string, env: Record<string, string> = {}): Promise<void> {
-  if (service === "step-webui") await captureBeforeRecreate("step-webui");
+  if (service === BACKEND_SERVICE) await captureBeforeRecreate(BACKEND_SERVICE);
   const res = await run(composeArgv("up", "-d", "--force-recreate", service), { env });
   if (res.code !== 0) throw new Error(`recreating ${service} failed: ${res.stderr || res.stdout}`);
-  await waitHealthy(service);
+  if (service === BACKEND_SERVICE) await waitOriginHealthy();
+  else await waitHealthy(service);
+}
+
+/**
+ * The backend publishes no host port, since nginx is the only origin, so a
+ * host-side infra test reaches it at its address on step-network, which a
+ * Linux host routes to. The address changes on every recreate, so resolve it
+ * after the stack is up rather than once per file.
+ */
+export async function backendAddress(): Promise<string> {
+  const id = await containerId(BACKEND_SERVICE);
+  const res = await run(["docker", "inspect", "--format", '{{with index .NetworkSettings.Networks "step-network"}}{{.IPAddress}}{{end}}', id]);
+  const ip = res.stdout.trim();
+  if (res.code !== 0 || ip === "") throw new Error(`no step-network address for ${BACKEND_SERVICE} (${id}): ${res.stderr}`);
+  return `${ip}:8443`;
 }
 
 export async function timestampMarker(): Promise<string> {
   return new Date().toISOString();
 }
 
-/** Resolves through `compose ps -q` rather than the bare service/container name, which is ambiguous whenever more than one compose project is live on the host. */
+/**
+ * Resolves through `compose ps -aq` rather than the bare service/container name, which is ambiguous whenever more than one compose project is live on the host.
+ * -a, or an exited container has no id and waitExited can never observe the exit it waits for.
+ */
 export async function containerId(service: string): Promise<string> {
-  const res = await compose("ps", "-q", service);
+  const res = await compose("ps", "-aq", service);
   const id = res.stdout.trim().split("\n")[0];
   if (!id) throw new Error(`no container id for service ${service} (docker compose ps -q returned nothing)`);
   return id;
@@ -245,7 +279,7 @@ export function projectName(): string {
   return process.env.COMPOSE_PROJECT_NAME ?? path.basename(REPO_ROOT);
 }
 
-const STEP_WEBUI_VOLUMES = ["step-webui-certs", "step-webui-ssl", "step-webui-data", "step-webui-uploads"];
+const STEP_WEBUI_VOLUMES = ["step-webui-certs", "step-webui-ssl", "step-webui-web-ssl", "step-webui-data", "step-webui-uploads"];
 
 /** Drops step-webui's own volumes while leaving step-ca-data, and the CA identity a fingerprint was computed from, intact. Call after `compose("down")` (no `-v`). */
 export async function resetStepWebUIVolumes(): Promise<void> {
