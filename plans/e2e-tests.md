@@ -1,6 +1,6 @@
 # End-to-End Test Specification: step-ca-webui
 
-Status: 2026-08-10. Verified against `backend/` at `e53236f`.
+Status: 2026-09-23. Verified against `backend/` at `9b9d40a`, except Section 2.7.4, which describes the code as it stood before its three prerequisites landed.
 
 ## 0. Using this document
 
@@ -10,11 +10,11 @@ Status: 2026-08-10. Verified against `backend/` at `e53236f`.
 |---|---|
 | [1. Purpose and scope](#1-purpose-and-scope) | 1.1 Tiers · 1.2 Tests that cannot be green today · 1.3 Tier rosters |
 | [2. Test environment](#2-test-environment) | 2.1 Compose stack · 2.2 Fresh vs reused volumes · 2.3 Seed credentials · 2.4 Root provisioning and `UI_TLS_MODE` · 2.5 Which `.env` keys reach the container · 2.6 Log-assertion mechanics · 2.7 Required test infrastructure · 2.8 Running a subset locally |
-| [3. Test suites](#3-test-suites) | 3.0 Conventions and execution order · 3.1 Bootstrap · 3.2 Auth · 3.3 RBAC · 3.4 Certificates · 3.5 Provisioners · 3.6 History and security log · 3.7 Admin · 3.8 Backup · 3.9 Health · 3.10 UI-cert renewal · 3.11 CSRF · 3.12 Config and static · 3.13 Temporary users · 3.14 Let's Encrypt · 3.15 Notifications |
+| [3. Test suites](#3-test-suites) | 3.0 Conventions and execution order · 3.1 Bootstrap · 3.2 Auth · 3.3 RBAC · 3.4 Certificates · 3.5 Provisioners · 3.6 History and security log · 3.7 Admin · 3.8 Backup · 3.9 Health · 3.10 UI-cert renewal · 3.11 CSRF · 3.12 Config and static · 3.13 Temporary users · 3.14 Let's Encrypt · 3.15 Notifications · 3.16 The SPA and the origin |
 | [4. Automation and CI](#4-automation-and-ci) | 4.1 The harness, its three projects and two execution contexts · 4.2 Topology and cost · 4.3 Jobs · 4.4 Existing workflows · 4.5 Secrets · 4.6 Artifacts · 4.7 Flake policy |
 | [5. Traceability](#5-traceability) | 5.1 Acceptance criteria · 5.2 Risk register · 5.3 Coverage by area · 5.4 Source file to test |
-| [6. Application findings](#6-application-findings) | V1 to V12, all closed on 2026-08-10, and what the suite asserts about each |
-| [Appendix A](#appendix-a-test-index) | Test index, all 78, sorted by ID |
+| [6. Application findings](#6-application-findings) | V1 to V12, all closed, and what the suite asserts about each |
+| [Appendix A](#appendix-a-test-index) | Test index, all 83, sorted by ID |
 | [Appendix B](#appendix-b-workflow-file) | The workflow file |
 
 ### 0.2 Where to start
@@ -51,7 +51,7 @@ Status: 2026-08-10. Verified against `backend/` at `e53236f`.
 
 This is the project's end-to-end suite. It validates the deployed `step-ca-webui` stack (postgres + step-ca + step-webui, `docker-compose.yml`) as a black box: real HTTP requests against a running container set, real TLS handshakes, real files on the compose volumes. A test belongs here when its property is only observable against a running stack.
 
-The suite was seeded from the step CLI to `ca` library swap plan, removed on 2026-09-02 once the swap had fully landed in `backend/stepca/` (see `plans/frontend-backend-split.md`, Section 12). Section 5 traces which tests discharge which of that plan's criteria and risks.
+The suite was seeded from the step CLI to `ca` library swap plan, removed on 2026-10-21 once the swap had fully landed in `backend/stepca/` (see `plans/frontend-backend-split.md`, Section 12). Section 5 traces which tests discharge which of that plan's criteria and risks.
 
 **What e2e covers that unit tests do not:**
 - The `UI_TLS_MODE` bootstrap switch (`self-signed` / `provided` / `stepca`) crossed with all four root-provisioning modes, running against a real `step-ca` container, including retry-then-fallback timing (`caBootstrapRetries=30`, `caBootstrapInterval=1s`, `stepca/bootstrap.go`, `tlsbootstrap.go`).
@@ -96,7 +96,7 @@ The PR tier blocks both pull requests and pushes to `main`. There is no main-onl
 
 ### 1.2 Tests that cannot be green today
 
-**Every application finding in Section 6 is closed as of 2026-08-10.** Two tests remain blocked, and neither is waiting on a security defect.
+**Every application finding in Section 6 is closed as of 2026-09-23.** Two tests remain blocked, and neither is waiting on a security defect.
 
 | Test | Blocker | Unblocked by |
 |---|---|---|
@@ -109,7 +109,7 @@ Nothing else in Section 3 is expected red. In particular E2E-AUTH-11 through E2E
 
 ### 1.3 Tier rosters
 
-**PR tier, job `e2e-main`**, projects `api` then `ui`, one long-lived stack, in the Section 3.0.3 order: E2E-AUTH-01 to E2E-AUTH-07, E2E-AUTH-11, E2E-AUTH-12, E2E-AUTH-14, E2E-AUTH-15, E2E-RBAC-01, E2E-RBAC-02, E2E-CERT-01 to E2E-CERT-13, E2E-PROV-01, E2E-PROV-02, E2E-HIST-01 to E2E-HIST-03, E2E-SEC-01 to E2E-SEC-06, E2E-ADM-01 to E2E-ADM-05, E2E-ADM-07, E2E-ADM-08, E2E-BAK-01, E2E-HLTH-01 to E2E-HLTH-06, E2E-CSRF-01, E2E-CSRF-05, E2E-CFG-01, E2E-STATIC-01, E2E-TEMP-01, E2E-TEMP-02.
+**PR tier, job `e2e-main`**, projects `api` then `ui`, one long-lived stack, in the Section 3.0.3 order: E2E-AUTH-01 to E2E-AUTH-07, E2E-AUTH-11, E2E-AUTH-12, E2E-AUTH-14, E2E-AUTH-15, E2E-RBAC-01, E2E-RBAC-02, E2E-CERT-01 to E2E-CERT-13, E2E-PROV-01, E2E-PROV-02, E2E-HIST-01 to E2E-HIST-03, E2E-SEC-01 to E2E-SEC-06, E2E-ADM-01 to E2E-ADM-05, E2E-ADM-07, E2E-ADM-08, E2E-BAK-01, E2E-HLTH-01 to E2E-HLTH-06, E2E-CSRF-01, E2E-CSRF-05, E2E-CFG-01, E2E-STATIC-01, E2E-TEMP-01, E2E-TEMP-02, E2E-ORIGIN-01, and from the `ui` project's `specs/spa` the four SPA tests E2E-SPA-01 to E2E-SPA-03 and E2E-CSP-01.
 
 **PR tier, job `e2e-bootstrap`**, project `infra`, one disposable stack per scenario:
 
@@ -189,7 +189,7 @@ There are **four** root-provisioning modes, not three, and they are tried in a f
 |---|---|---|---|
 | 1 | Inline PEM | `CA_ROOT_CERT_PEM` non-empty | `writeInlineRootCert` writes it to `cfg.RootCert` and logs `wrote root CA certificate from CA_ROOT_CERT_PEM` (`tlsbootstrap.go`, `writeInlineRootCert`) |
 | 2 | Pre-existing file | `cfg.RootCert` exists and is non-empty | `ensureRootCert` early-returns without touching the network. This is what the stock `step-ca-data:/home/step:ro` mount produces |
-| 3 | Fingerprint fetch | no root file, `CA_FINGERPRINT` set | `stepca.FetchRootByFingerprint` retried `caBootstrapRetries` times at `caBootstrapInterval`, then `root CA certificate fetched and verified` or, on exhaustion, `could not fetch root CA certificate after retries — continuing without it` |
+| 3 | Fingerprint fetch | no root file, `CA_FINGERPRINT` set | `stepca.FetchRootByFingerprint` retried `caBootstrapRetries` times at `caBootstrapInterval`, then `root CA certificate fetched and verified` or, on exhaustion, `could not fetch root CA certificate after retries, continuing without it` |
 | 4 | None | no root file, no fingerprint | `ensureRootCert` returns `nil` immediately. `stepca.New` then fails, because `ca.WithRootFile` reads the file eagerly inside `ca.NewClient`, so `caClient` stays nil for the remainder of `main` |
 
 `UI_TLS_MODE` then selects what happens to the UI's own serving certificate (`ensureUICert`):
@@ -198,10 +198,10 @@ There are **four** root-provisioning modes, not three, and they are tried in a f
 |---|---|---|
 | unset / `self-signed` | any | `generateSelfSignedCert` (EC P-256, 10 years) only if `cfg.SSLCert` is absent, otherwise a no-op |
 | `provided` | any | No-op. The operator supplies the cert out of band |
-| `stepca` | nil | Immediate self-signed fallback, logging `UI_TLS_MODE=stepca but no CA client is available — falling back to self-signed` |
+| `stepca` | nil | Immediate self-signed fallback, logging `UI_TLS_MODE=stepca but no CA client is available, falling back to self-signed` |
 | `stepca` | non-nil, CA answering | `obtaining UI leaf certificate from step-ca`, then `UI leaf certificate obtained` |
-| `stepca` | non-nil, CA refusing | 30 attempts at 1s, then `step-ca certificate issuance failed after retries — falling back to self-signed` |
-| `stepca` | non-nil, context expired mid-loop | `UI cert issuance aborted by context — falling back to self-signed` |
+| `stepca` | non-nil, CA refusing | 30 attempts at 1s, then `step-ca certificate issuance failed after retries, falling back to self-signed` |
+| `stepca` | non-nil, context expired mid-loop | `UI cert issuance aborted by context, falling back to self-signed` |
 
 Three of those six rows end in a self-signed certificate, and all three log a message containing the substring `falling back to self-signed` (`tlsbootstrap.go:214`, `:230`, `:235`). **No test may treat that substring as a positive identification of a path.** Self-signed is the terminal state of every failure path and also the default-branch outcome. Match the exact full message, and pair it with the message that uniquely identifies the path, which for the retry loop is `obtaining UI leaf certificate from step-ca`. Asserting the substring's *count is zero* is a different and legitimate use, and E2E-BOOT-04 does exactly that.
 
@@ -348,7 +348,7 @@ E2E-SEC-06's skip-until-fixed contract (Section 1.2) stays in force until this l
 
 #### 2.7.5 One-time calibration
 
-Both assertion lists below were captured 2026-08-10 on a fresh stock stack (no compose override). Both are environment-dependent and neither could be derived from source; the values recorded here are what the suite encodes.
+Both assertion lists below were captured on a fresh stock stack (no compose override). Both are environment-dependent and neither could be derived from source; the values recorded here are what the suite encodes.
 
 - **E2E-BAK-01's component list.** `/home/step` is mounted read-only, while step-webui runs as uid 10001. `writeDirTGZ` propagates the walk error (`handlers/backup.go:297-299`), so a permission denial aborts that component. One backup on the fresh stock stack, read straight from `manifest.json`:
   - `components`: `postgres` (`postgres-stepwebui.sql`, `ok`), `step-webui-data` (`step-webui-data.tgz`, `ok`), `step-webui-certs` (`step-webui-certs.tgz`, `ok`), `step-webui-uploads` (`step-webui-uploads.tgz`, `ok`).
@@ -445,7 +445,7 @@ Every test that depends on a flagged stack **skips with an explicit reason** whe
 #### 3.0.3 Order within the long-lived stack
 
 1. **Fixtures.** Create `viewer_user`, `manager_user` and the dedicated 2FA subject. Seed `cert_history` for E2E-HIST-01.
-2. **E2E-AUTH-01, E2E-AUTH-11, E2E-CSRF-01, E2E-CSRF-05, E2E-RBAC-01, E2E-RBAC-02, E2E-STATIC-01, E2E-SEC-06.** These need a working login and nothing else. E2E-CSRF-05 needs two independent sessions established in the same step. E2E-AUTH-01 and E2E-AUTH-11 create and use their own throwaway users rather than the fixtures above, per the standing rule in Section 4.1.4.
+2. **E2E-AUTH-01, E2E-AUTH-11, E2E-CSRF-01, E2E-CSRF-05, E2E-RBAC-01, E2E-RBAC-02, E2E-STATIC-01, E2E-SEC-06, E2E-ORIGIN-01.** These need a working login and nothing else. E2E-CSRF-05 needs two independent sessions established in the same step. E2E-AUTH-01 and E2E-AUTH-11 create and use their own throwaway users rather than the fixtures above, per the standing rule in Section 4.1.4.
 3. **E2E-CERT-01 through E2E-CERT-13.** E2E-CERT-04 and E2E-CERT-05 must operate on **different** certificate ids, since revocation and renewal interfere. E2E-CERT-07 issues its own material rather than borrowing E2E-CERT-01's, because a revoked certificate keeps both its file and its row and a scan therefore finds nothing. E2E-CERT-11 recreates `step-ca` twice and E2E-CERT-12 recreates `step-webui` once, so both take the barrier. E2E-CERT-13 destroys `e2e-server-ec-p256`, so it runs after every test that reads it.
 4. **E2E-PROV-01 then E2E-PROV-02**, adjacent and in that order. The first is the second's positive control.
 5. **E2E-HIST-01 to E2E-HIST-03, E2E-SEC-01.**
@@ -459,12 +459,13 @@ Every test that depends on a flagged stack **skips with an explicit reason** whe
 13. **E2E-CFG-01**, second to last. Its `SESSION_SECURE=false` case contradicts the job-level `SESSION_SECURE=true` and requires a recreate in each direction, so it runs where nothing after it depends on the original setting. Its `LOCAL_LOGIN_ENABLED` and `USE_HTTPS` rows skip here and run in the nightly `oidc-mail` leg.
 14. **E2E-SEC-03**, then E2E-SEC-04 as part of artifact collection.
 15. **E2E-AUTH-02 and E2E-AUTH-03 last**, on their own harness address, because they poison it for roughly five minutes, and against a dedicated throwaway lockout user rather than the admin or manager fixtures (Section 3.2).
+16. **The `ui` project's SPA tests, after the `api` project**, in the order E2E-SPA-01, E2E-SPA-02, E2E-CSP-01, E2E-SPA-03. They sign in as the admin fixture or as their own disposable user, and E2E-SPA-03 is last in its file because it stops the backend (Section 3.16).
 
 #### 3.0.4 The stop-a-service barrier
 
 Every test that stops, restarts or kills a container runs behind a shared **start-and-wait-healthy barrier**, never in parallel with issuance, and must restore the service and wait for healthy before releasing it. This is the canonical list, and the individual tests carry only the tag:
 
-E2E-PROV-02, E2E-ADM-03, E2E-CERT-11, E2E-CERT-12, E2E-CFG-01, E2E-CFG-02 (restarts `step-webui` between header variants and recreates it before its widened-CIDR phase), E2E-HLTH-01, E2E-HLTH-03, E2E-HLTH-04, E2E-HLTH-05, E2E-HLTH-06, E2E-AUTH-09 (which restarts `step-webui` to clear its reset budget), and E2E-AUTH-03's teardown fallback.
+E2E-PROV-02, E2E-ADM-03, E2E-CERT-11, E2E-CERT-12, E2E-CFG-01, E2E-CFG-02 (restarts `step-webui` between header variants and recreates it before its widened-CIDR phase), E2E-HLTH-01, E2E-HLTH-03, E2E-HLTH-04, E2E-HLTH-05, E2E-HLTH-06, E2E-AUTH-09 (which restarts `step-webui` to clear its reset budget), E2E-SPA-03 (which stops `step-webui` and starts it again), and E2E-AUTH-03's teardown fallback.
 
 #### 3.0.5 Log-absence isolation
 
@@ -485,7 +486,7 @@ These IDs are not in use. They are recorded so that an external reference to one
 | E2E-RBAC-N+3 | subsumed by E2E-AUTH-14, which asserts privilege changes reaching a live session |
 | E2E-BAK-02 | subsumed by E2E-RBAC-01 row and E2E-CSRF-01 row: the manager-403 case is a cell of E2E-RBAC-01's matrix (`/admin/backup/download` POST), and the no-token-303 case, including the gzip-body check, is the `/admin/backup/download` row of E2E-CSRF-01. E2E-SEC-05 keeps only its bundle-content assertions, having dropped its duplicate viewer/manager 403 steps |
 | E2E-RBAC-03 | both halves are cells already in E2E-RBAC-01's matrix: the viewer `200` on `/certificates/{id}` and the viewer `403` on `/download/key/{id}`. The note that this pair is the RBAC boundary moved onto those two matrix rows |
-| E2E-CFG-03 | its first two cases byte-duplicated E2E-BOOT-07 case (d) and are subsumed by it. Its unique third case, `TRUST_PROXY=false` boots healthy and a forged `X-Forwarded-For` is ignored, became a final phase of E2E-CFG-02 |
+| E2E-CFG-03 | its first two cases byte-duplicated E2E-BOOT-07 case (d) and are subsumed by it. Its unique third case, `TRUST_PROXY=false` boots healthy and a forged `X-Forwarded-For` is ignored, became a final phase of E2E-CFG-02. Case (d)'s empty-list sub-case has since stopped being fatal (it keeps running while `WEB_UPSTREAM_HOST` does not resolve), so only its malformed-list sub-case still exits |
 
 ### 3.1 Startup and bootstrap matrix
 
@@ -551,12 +552,12 @@ If the root cert is absent, `stepca.New` fails eagerly on the missing file, `caC
 
 *Steps:*
 1. `docker compose up -d --build step-webui`.
-2. Poll `docker compose logs --no-color --timestamps step-webui` every 2s until the exact line `step-ca certificate issuance failed after retries — falling back to self-signed` appears. Bound at 90s.
+2. Poll `docker compose logs --no-color --timestamps step-webui` every 2s until the exact line `step-ca certificate issuance failed after retries, falling back to self-signed` appears. Bound at 90s.
 3. `curl -sk -o /dev/null -w '%{http_code}\n' https://localhost:${UI_HTTPS_PORT:-443}/login`.
 4. `openssl s_client -connect localhost:${UI_HTTPS_PORT:-443} </dev/null 2>/dev/null | openssl x509 -noout -issuer -subject`.
 
 *Assertions:*
-- The log contains the exact full message `step-ca certificate issuance failed after retries — falling back to self-signed`. Not the substring `falling back to self-signed`, which three distinct code paths emit.
+- The log contains the exact full message `step-ca certificate issuance failed after retries, falling back to self-signed`. Not the substring `falling back to self-signed`, which three distinct code paths emit.
 - That line is **preceded** by the exact line `obtaining UI leaf certificate from step-ca` (`tlsbootstrap.go:218`). This line is logged only when a non-nil CA client entered the loop, and it is the only observable that separates the retry path from the nil-client short-circuit.
 - The gap between the two timestamps is **at least 28s**. The loop is 30 attempts at 1s, so anything materially under 30s means the loop did not run. The 2s tolerance absorbs container clock granularity.
 - Step 3 returns `200`. TLS bootstrap failure is non-fatal, which is the R2 property.
@@ -632,7 +633,7 @@ The last two assertions are the point of the test. Without them it passes agains
 
 *Steps:*
 1. `docker compose up -d --build`.
-2. Poll the logs every 2s for the exact line `could not fetch root CA certificate after retries — continuing without it`. Bound at 90s.
+2. Poll the logs every 2s for the exact line `could not fetch root CA certificate after retries, continuing without it`. Bound at 90s.
 3. `docker compose ps --format json step-ca`.
 4. `docker compose exec step-ca curl -sk https://localhost:9443/health`.
 5. `docker compose exec step-webui test -e /opt/step-webui/data/root_ca.crt`.
@@ -673,7 +674,7 @@ The last two assertions are the point of the test. Without them it passes agains
 - Step 3 returns 0. The positive control for that absence is E2E-BOOT-01, which produced the line under the same override earlier in this job. **The scenario driver must persist E2E-BOOT-01's captured log text to the job workspace before that test tears down**, or the control does not survive to be compared against.
 - The written file matches the supplied PEM exactly.
 - Leaf issuance succeeded, so the inline root satisfied `ca.WithRootFile` and the CA client constructed.
-- `/ready` returns `200` with `{"status":"ready"}`.
+- `/ready` returns `200` and, parsed as JSON, `status == "ready"`, `backendCert == "ok"` and `webCert == "ok"`. Both leaves chain to the CA, so `/ready` names them as well as the status (the full key set is listed under E2E-HLTH-02).
 
 *Teardown:* `docker compose down -v`.
 
@@ -693,12 +694,12 @@ The last two assertions are the point of the test. Without them it passes agains
 | (a) weak `SECRET_KEY` | write the literal `change-me-in-production-32chars!` into `secrets/secret_key`, then repeat with a string shorter than 32 bytes | Container exits non-zero. Logs contain `FATAL: SECRET_KEY is the default or shorter than 32 chars` (`main.go:132`). Both sub-cases tested |
 | (b) empty users table with no admin password | fresh `postgres-data`, `STEPWEBUI_ADMIN_PASSWORD` unset | Container exits non-zero once and stays `exited` under the scenario's `restart: "no"` override (see the preconditions above). Logs contain `No admin user exists and STEPWEBUI_ADMIN_PASSWORD is not set` (`db/schema.go:145-162`) |
 | (c) database unreachable | `docker compose stop postgres`, plus `compose.e2e-nodeps.yml` | Container exits non-zero. Logs contain `Cannot connect to database:` (`main.go:161`). Bound the wait at **90s**: `entrypoint.sh:70-77` runs a 60-iteration one-second wait-for-PostgreSQL loop before exec'ing the binary, so the fatal is delayed by up to 60s and is preceded by `PostgreSQL not reachable ... continuing; the app will retry.` |
-| (d) `TRUST_PROXY=true` with no usable CIDR list | `TRUST_PROXY=true`, `TRUSTED_PROXY_CIDRS` unset, then again with `not-a-cidr` | Container exits non-zero. Logs contain `FATAL: TRUST_PROXY=true requires a usable TRUSTED_PROXY_CIDRS` (`main.go:142-145`). This is the suite's only coverage of both sub-cases (Section 3.0.6) |
+| (d) `TRUST_PROXY=true` with a malformed CIDR list, and with an empty one | `TRUST_PROXY=true`, `TRUSTED_PROXY_CIDRS=not-a-cidr`, then again with `TRUSTED_PROXY_CIDRS` unset | The malformed list: container exits non-zero and the logs contain `FATAL: TRUST_PROXY=true requires a usable TRUSTED_PROXY_CIDRS` (`main.go`). The empty list is **not** fatal: the container stays `running` and the logs contain `trusted proxy name does not resolve yet: forwarding headers are ignored until it does`, because the backend resolves `WEB_UPSTREAM_HOST` every five seconds and this scenario has no nginx for the name to resolve to. An empty `WEB_UPSTREAM_HOST` is fatal as well, but compose's default fills it in, so no stack reaches that case. This is the suite's only coverage of both sub-cases (Section 3.0.6) |
 | (e) bad `OIDC_DEFAULT_ROLE` with OIDC on | `OIDC_ENABLED=true`, `OIDC_DEFAULT_ROLE=nonsense` | Container exits non-zero. Logs contain `is not one of viewer, manager, admin` (`main.go:151-153`). The value is operator-supplied and reaches a role field without passing either `UsersPost` check, so it was a second route around the V9 invariant |
 
 The `SECRET_KEY` mechanism in case (a) is not interchangeable with an `.env` edit. `docker-compose.yml:100` passes only `SECRET_KEY_FILE`, and there is no `SECRET_KEY` key in the `step-webui` environment block, so setting it in `.env` is the silent no-op described in Section 2.5. The value has to reach `secrets/secret_key`.
 
-For every case, assert `docker inspect --format '{{.State.ExitCode}}' "$(docker compose ps -q step-webui)"` is non-zero and that `curl` against the UI port fails to connect. A container that logs the fatal message and keeps serving is a regression this test must catch.
+For every fatal case, wait for the container to reach `exited` and assert `docker inspect --format '{{.State.ExitCode}}' "$(docker compose ps -q step-webui)"` is non-zero. A container that logs the fatal message and keeps serving never reaches `exited`, so the bounded wait fails, which is the regression this test must catch. There is no `curl` against a UI port, because the backend publishes none.
 
 *Positive control:* the same job runs one `up` with none of the five conditions injected and asserts the container reaches `healthy`. Without it, a compose override that simply prevented `step-webui` from starting at all would pass all five cases.
 
@@ -740,7 +741,7 @@ For every case, assert `docker inspect --format '{{.State.ExitCode}}' "$(docker 
 *Steps:*
 1. `docker compose up -d --build step-webui`, wait for healthy.
 2. `docker compose logs --no-color --timestamps step-webui | grep -F 'CA client construction failed during TLS bootstrap'`.
-3. `docker compose logs --no-color --timestamps step-webui | grep -F 'UI_TLS_MODE=stepca but no CA client is available — falling back to self-signed'`.
+3. `docker compose logs --no-color --timestamps step-webui | grep -F 'UI_TLS_MODE=stepca but no CA client is available, falling back to self-signed'`.
 4. Log in as admin, `POST /admin/console` with `command_id=ca.health`.
 5. Write a valid root cert into place **at runtime, without restarting**: `docker compose exec step-ca cat /home/step/certs/root_ca.crt` piped into `docker compose exec -T step-webui sh -c 'cat > /opt/step-webui/data/root_ca.crt'`.
 6. `POST /admin/console` with `command_id=ca.health` again, still with no restart.
@@ -802,7 +803,7 @@ Do **not** assert "the session cookie value changed". `securecookie` encrypts wi
 
 *Not covered:* `notifyAsync("auth.failed_burst", ...)`, the webhook dispatch this failed-login burst triggers. `sendNotification` returns `nil` and writes nothing observable, anywhere, unless `NotificationSettings.WebhookEnabled` is true with a non-empty `WebhookURL` (`handlers/notifications.go:198-200`), and no stack in this suite configures a webhook receiver. The event fires; there is nothing here that can see it fire.
 
-**Flash delivery is load-bearing for this test and roughly thirty others.** `models.FlashMsg` went unregistered with `gob` until 2026-08-10, so `sess.Save` failed and every flash was discarded (Section 6.11). Attempts 1 through 4 above are the suite's most direct check that the mechanism works at all.
+**Flash delivery is load-bearing for this test and roughly thirty others.** `models.FlashMsg` went unregistered with `gob` until the fix described in Section 6.11, so `sess.Save` failed and every flash was discarded (Section 6.11). Attempts 1 through 4 above are the suite's most direct check that the mechanism works at all.
 
 
 #### E2E-AUTH-03: a correct password is rejected while the IP is blocked
@@ -911,7 +912,7 @@ Do **not** assert "the session cookie value changed". `securecookie` encrypts wi
 
 *Assertions:*
 - Step 3 completes login and `appdb.UpsertOIDCUser` created the user with role `manager`.
-- Step 4 flashes `OIDC state mismatch — possible CSRF attack` and creates no session.
+- Step 4 flashes `OIDC state mismatch, possible CSRF attack` and creates no session.
 - Step 5 flashes `Access denied: your account is not in an authorised group` and creates **no user row**. Verify the absence directly against the `users` table, with step 3's successful creation in the same run as the positive control.
 - Step 6 resolves to `admin`. Admin precedence over the other two mappings (`handlers/oidc.go:26-47`).
 - Step 7 re-synchronises the role back to `manager`, since `OIDC_SYNC_ROLE` defaults to true.
@@ -1098,7 +1099,7 @@ E2E-AUTH-12 covers the stronger property, that a **copy** of the cookie taken be
 
 Three test users: `viewer_user`, `manager_user`, and the seeded `admin`. Create the first two via `POST /admin/users` as admin with `csrf_token`, `action=create`, `username`, `password`, `role`.
 
-The table below is exhaustive against `main.go`'s router as of `e53236f`. A route missing from it is a route nobody is guarding.
+The table below is exhaustive against `main.go`'s router as of `9b9d40a`. A route missing from it is a route nobody is guarding.
 
 **Authenticated routes.** `RequireRole` writes the body `403 Forbidden\n`, including the trailing newline, at `middleware/middleware.go:151` and `:155`. It reads the role from the user row `RequireLogin` loaded, so a role change applies to the next request rather than to the next login.
 
@@ -1724,7 +1725,7 @@ Run the `delete` case last, since it destroys the subject.
 *Assertions:*
 - Step 4 succeeds: the restored `users` table carries a working password hash for admin.
 - Step 5 finds the seeded certificate's row, restored from the dump, with its file present under the restored `step-webui-certs` volume.
-- Step 6 returns `200` with `{"status":"ready"}`.
+- Step 6 returns `200` with `status == "ready"` in the parsed body, which also carries the certificate keys listed under E2E-HLTH-02.
 
 *Teardown:* `docker compose down -v` on the disposable restore stack. The source stack and its bundle are untouched throughout, since this test only ever reads from them.
 
@@ -1748,9 +1749,9 @@ Every test in this section runs behind the barrier defined in Section 3.0.4.
 
 *Tier:* PR (e2e-main). Oracle pair with E2E-HLTH-03.
 
-*Steps:* `GET /ready`.
+*Steps:* `GET /ready` straight to the backend (`BACKEND_URL`), since the test asserts the backend's own body.
 
-*Assertions:* `200`, body exactly `{"status":"ready"}`.
+*Assertions:* `200`, and the body **parsed as JSON** has exactly the keys `backendCert`, `backendCertNotAfter`, `status`, `webCert` and `webCertNotAfter`, with `status == "ready"`, `backendCert == "ok"` and `webCert == "ok"`. Each `NotAfter` value is an RFC 3339 time in the future. Both leaves are `stepca`-issued on the e2e stack, so a key appearing here unannounced is a contract change. `handlers/health.go`'s `leafStatus` reports `ok`, `missing <path>`, `self-signed-fallback <marker>` or `renewal-overdue` per leaf, and goes non-200 on any of the last three.
 
 #### E2E-HLTH-03: `/ready` reports the CA down
 
@@ -1760,7 +1761,7 @@ Every test in this section runs behind the barrier defined in Section 3.0.4.
 
 *Assertions:* `503`, and the body **parsed as JSON** yields `status == "not ready"`, `db == "ok"`, `ca == "unreachable"`.
 
-Do not string-compare the body. `Readiness` builds it with `json.Marshal` over a `map[string]string` (`handlers/health.go:53-57`), and Go sorts map keys, so the wire order is `ca`, `db`, `status`. Any literal written in the request order will never match.
+Do not string-compare the body. `Readiness` builds it with `json.Marshal` over a `map[string]string` (`handlers/health.go:53-57`), and Go sorts map keys, so the wire order is alphabetical, `backendCert`, `backendCertNotAfter`, `ca`, `db`, `status`, `webCert`, `webCertNotAfter`, the certificate keys being present whether or not the CA is up. Any literal written in the request order will never match.
 
 `"ca":"unreachable"` is returned for **any** `client.Do` error (`checkCAReachability`, `handlers/health.go:97`), so this assertion means "the CA was not reachable" and nothing more specific. E2E-BOOT-05 asserts the same string for an entirely different cause and carries a disambiguating triple for that reason.
 
@@ -1778,7 +1779,7 @@ This entry leaves `step-ca` stopped. The restore is E2E-HLTH-04's own teardown, 
 3. Bound at 60s.
 
 *Assertions:*
-- `/ready` returns `200` with `{"status":"ready"}` within the bound.
+- `/ready` returns `200` with `status == "ready"` in the parsed body within the bound.
 - The recorded traces show `/ready` recovering within one second of step-ca's own `/health` first answering. `checkCAReachability` does a live HTTPS GET on every `/ready` call with no caching, so there is no propagation delay beyond the handshake.
 
 Do not "immediately GET" after `docker compose start`. step-ca's healthcheck has a 15-second start period and a 10-second interval (`docker-compose.yml:50-55`), so the container is not ready when `start` returns. Probing step-ca directly inside the same loop is what separates the two failure modes: a slow CA boot and a broken `checkCAReachability` both present as a `503`, and only the direct probe distinguishes them.
@@ -1830,7 +1831,7 @@ Asserting instead that "the other checks stay ok" asserts an environment fact ra
 1. `docker compose up -d --build`, wait for healthy.
 2. Confirm `stepca`-mode bootstrap succeeded using E2E-BOOT-01's log assertions.
 3. `openssl s_client -connect localhost:${UI_HTTPS_PORT:-443} </dev/null 2>/dev/null | openssl x509 -noout -dates -serial`. Record `notBefore`, `notAfter` and the serial.
-4. `docker compose logs --no-color --timestamps step-webui | grep -F 'UI cert auto-renewer started'`.
+4. `docker compose logs --no-color --timestamps step-webui | grep -F 'TLS leaf auto-renewer started'`.
 5. Poll the same `s_client` probe every 15s, bounded at 6 minutes, recording every observed serial and every handshake outcome.
 
 *Assertions:*
@@ -1838,8 +1839,8 @@ Asserting instead that "the other checks stay ok" asserts an environment fact ra
 - The renewer goroutine started.
 - The serial changes at approximately two thirds of the **observed** window from step 3, not two thirds of the nominal `6m` request, and **before** the original certificate's `notAfter`. Deriving the renewal point from the requested duration rather than the observed one would make this assertion fail on the backdate margin alone, for a reason unrelated to the renewer's own correctness. That ordering is the property: a renewer that fires after expiry is a renewer that causes an outage.
 - **Every probe in the polling loop completes a handshake successfully**, with no connection error and no expired-certificate error. `certReloader.GetCertificate` re-stats both files on each handshake and reloads on an mtime change (`tlsreload.go`), so the swap is invisible to clients. A single failed handshake in the trace is a real finding.
-- `docker compose logs --no-color --timestamps step-webui | grep -F 'UI cert renewed'` shows the line with `nextRenewalIn` of roughly two thirds of the observed window (around 4 to 5 minutes, not a fixed 4).
-- If renewal fails, `UI cert renewal failed — will retry` appears with `retryIn=5m0s` (`uiCertRenewFailureBackoff`, `tlsbootstrap.go:35`). Treat its presence as a failure of this test, but capture it, since the backoff path is otherwise unobserved.
+- `docker compose logs --no-color --timestamps step-webui | grep -F 'leaf renewed'` shows the backend leaf's line (`certPath` ending `server.crt`, `reason=due`) with `nextRenewalIn` of roughly two thirds of the observed window (around 4 to 5 minutes, not a fixed 4). The web leaf logs its own `leaf renewed` line in the same iteration, since one loop renews both and sleeps on the minimum.
+- If renewal fails, `leaf renewal failed, will retry` appears with `retryIn=5m0s` (`uiCertRenewFailureBackoff`, which is `leafcert.RenewFailureBackoff`). Treat its presence as a failure of this test, but capture it, since the backoff path is otherwise unobserved.
 
 *Teardown:* `docker compose down -v`.
 
@@ -2076,6 +2077,79 @@ Behind `E2E_LE_ENABLED`, skipped with an explicit reason when it is not set, on 
 - `POST /admin/notifications/test` delivers exactly one message to mailpit above the precondition's baseline.
 - An invalid `smtp_security` value is rejected with `SMTP security must be one of: none, starttls, tls`.
 
+### 3.16 The SPA and the origin
+
+These five tests exist because of the split in `plans/frontend-backend-split.md`, and they land with its Phase 3c. They drive the four-container stack through the published origin, `BASE_URL`, which names `step-webui-web`, with `SESSION_SECURE=true` so the `__Host-` cookie names apply. The SPA is mounted under `SPA_BASE` (`/app`), a single constant in `helpers/env.ts` that becomes the empty string when Phase 9 flips the base path. E2E-SPA-01 to E2E-SPA-03 and E2E-CSP-01 are the `ui` project, in `test/e2e/specs/spa/spa-shell.ui.spec.ts`, one serial `describe`. E2E-ORIGIN-01 is the `api` project, in `test/e2e/specs/origin/origin-01.api.spec.ts`.
+
+#### E2E-SPA-01: log in at `/app/`, navigate, hard-refresh a deep link, log out
+
+*Tier:* PR (e2e-main, `ui` project, `specs/spa`).
+
+*Steps:*
+1. Open `/app/login`, fill the Username and Password fields as the admin fixture, click Sign In, and capture the `POST /api/v1/session` response.
+2. Read the cookies on that response and in the browser's jar, then reload the dashboard.
+3. Click "All Certificates".
+4. Open `/app/admin/users/1` cold, then reload it.
+5. Open `/app/certificates`, click Sign Out, then `GET /api/v1/session`.
+
+*Assertions:*
+- The login answers `200`, and every `Set-Cookie` on it is `__Host-step-webui` or `__Host-step-webui-csrf` with `Secure`, `Path=/` and no `Domain`. There are at least two, and the browser's jar holds both. A wrong attribute would make the browser drop a `__Host-` cookie silently, so the jar check is what catches it.
+- The dashboard (`data-testid="page-dashboard"`) is visible at the base path and again after a reload.
+- Client-side navigation lands on `/app/certificates` with `page-certificates` visible.
+- The deep link renders `page-admin-user` on a cold load and after a reload, so nginx's fallback serves the shell and the router resolves the path under its basename.
+- After Sign Out, `page-login` is visible at `/app/login` and `GET /api/v1/session` reports `state: "anonymous"`.
+
+#### E2E-SPA-02: a refresh mid-MFA resumes on the code step
+
+*Tier:* PR (e2e-main, `ui` project).
+
+*Preconditions:* a disposable viewer created through the admin fixture, then `totp_enabled = true` and a fixed base32 `totp_secret` written with `psql`.
+
+*Steps:* sign in with the username and password, reload the page at the code step, enter the current TOTP code, and confirm.
+
+*Assertions:* the "2FA Code" field is visible after the password step and still visible after a hard refresh, and the "Password" field is absent. Entering the code reaches the dashboard.
+
+*Teardown:* the disposable user stays, under a unique name.
+
+#### E2E-CSP-01: every route loads under nginx's CSP with no violation
+
+*Tier:* PR (e2e-main, `ui` project). Five-minute timeout.
+
+*Coverage:* every entry of `frontend/src/routes/routeList.ts`, read as text so the harness needs no frontend build. A route added to the router without an entry cannot exist, so the list is complete by construction.
+
+*Steps:*
+1. In an anonymous browser context, `GET /app/` and read the `Content-Security-Policy` header and the shell.
+2. Sign in as the admin fixture in a second context.
+3. For each route, open its smoke path in the anonymous context when its layout is `auth` and in the signed-in context otherwise, collecting console messages that mention the policy, page errors and `securitypolicyviolation` events.
+
+*Assertions:*
+- The policy is read off the response, not the config file. It contains `default-src 'self'` and no `unsafe-inline`.
+- Every inline `<script>` in the shell is allowed by a `'sha256-...'` source in that header, so the hash the entrypoint computed at container start matches the bundle it serves.
+- Each route answers `200`, carries a policy byte-identical to the shell's, renders `page-<name>`, and produces no violation and no page error.
+
+#### E2E-SPA-03: with the backend stopped the API answers problem+json and the SPA renders the unavailable state
+
+*Tier:* PR (e2e-main, `ui` project). Behind the Section 3.0.4 barrier. Four-minute timeout. Last in its file, since it stops the backend.
+
+*Steps:* `docker compose stop step-webui`, `GET /api/v1/session` through the origin, then open `/app/certificates`.
+
+*Assertions:*
+- The API answers `503` with `Content-Type: application/problem+json` and a `type` ending `/upstream-unavailable`, which is nginx's `@apidown` document.
+- The page shows the unavailable state (`data-testid="unavailable"`), with no `page-login` and no Password field. A login form here would invite a password into a form that cannot work.
+
+*Teardown:* `docker compose start step-webui`, then wait for the backend and nginx to report healthy.
+
+#### E2E-ORIGIN-01: every server-rendered route and `/static` asset reaches the backend through the origin
+
+*Tier:* PR (e2e-main, `api` project). Carries the `PHASE9-DELETE` marker and leaves with the routes it covers.
+
+*Objective:* during the migration window nginx serves the SPA under `/app/` and passes every other path to the backend. A route or asset the passthrough lost would come back as the SPA shell, an nginx 404 or the `@apidown` 503, and nothing else in the `api` project requests most of these pages.
+
+*Steps and assertions, three tests under one ID:*
+1. Every `r.Get(` pattern registered in `backend/main.go` is requested through the origin as the admin fixture, with each `{param}` replaced by `999999`. `/logout` and the two OIDC routes are skipped, since the first would end the fixture's session and the others `404` unless OIDC is on. The status is `200`, `302` or `303`, plus `404` for a parameterised path and for `/profile/2fa/qr`. The body contains neither the SPA shell's `<div id="root"></div>` nor `upstream-unavailable`.
+2. Every file under `backend/static` is requested at `/static/<path>` anonymously and answers `200` with a non-empty `Content-Type`.
+3. `GET /app/certificates/1` through the origin answers `200` with the shell and `Cache-Control: no-store`, and the same path sent straight to `BACKEND_URL` is not the shell, which is what makes the origin the only way to the bundle.
+
 ## 4. Automation and CI
 
 ### 4.1 The harness
@@ -2090,11 +2164,11 @@ One config, three `projects` selected by `testMatch`. A test's project determine
 
 | Project | Drives | Owns |
 |---|---|---|
-| `api` | `APIRequestContext` over HTTP, no browser | the majority of the suite: Section 3.2 auth flows, 3.3 RBAC, 3.4 certificates, 3.6 history and security log, 3.7 admin, 3.8 backup, 3.9 health, 3.11 CSRF, 3.12 config switches, 3.13 temporary users, 3.14 Let's Encrypt, 3.15 notifications |
+| `api` | `APIRequestContext` over HTTP, no browser | the majority of the suite: Section 3.2 auth flows, 3.3 RBAC, 3.4 certificates, 3.6 history and security log, 3.7 admin, 3.8 backup, 3.9 health, 3.11 CSRF, 3.12 config switches, 3.13 temporary users, 3.14 Let's Encrypt, 3.15 notifications, and E2E-ORIGIN-01 from 3.16 |
 | `ui` | Chromium | what is genuinely browser-shaped, and nothing else |
 | `infra` | Node driving child processes | `docker compose` lifecycle, `openssl s_client`, container log assertions, `psql`, and the fresh-volume bootstrap scenarios of Section 3.1, plus Section 3.10 |
 
-**The `ui` project is deliberately small.** Four tests are in it, and each is there because its property cannot be observed over HTTP:
+**The `ui` project is deliberately small.** Eight tests are in it, four against the server-rendered pages that the SPA replaces and four against the SPA, and each is there because its property cannot be observed over HTTP:
 
 | Test | Why it needs a browser |
 |---|---|
@@ -2102,6 +2176,10 @@ One config, three `projects` selected by `testMatch`. A test's project determine
 | E2E-AUTH-04 | the QR image at `GET /profile/2fa/qr` must decode to the same secret the page renders in its readonly input. That is a rendering property of a PNG |
 | E2E-AUTH-11 | logout is a POST from an inline form in both base templates. Whether that form is present, carries a token and submits is a page property |
 | E2E-CFG-01 | the CSP header is compared exactly in `api`. The `ui` companion loads each page template with a browser and asserts **zero** console errors and **zero** CSP violation events, which catches a directive that blocks a real asset without changing any status code |
+| E2E-SPA-01 | the session and CSRF cookies carry the `__Host-` prefix and are accepted by a browser, and client-side routing, a cold deep link and a sign-out all work under the `/app/` base. Only a browser enforces the prefix rules and runs the router |
+| E2E-SPA-02 | a hard refresh in the middle of the two-step login resumes on the code step, which is a property of the SPA's boot sequence |
+| E2E-CSP-01 | every route loads under nginx's real document CSP with zero violations, which only a browser's enforcement can report |
+| E2E-SPA-03 | with the backend stopped the SPA renders its unavailable state rather than a login form, a rendering branch |
 
 Everything else stays out of `ui`. The admin-console dropdown is server-rendered, so a form POST is equivalent. The RBAC matrix, the CSRF sweep and every certificate assertion are status codes and response bodies, which `APIRequestContext` reports directly and faster.
 
@@ -2223,7 +2301,7 @@ Appendix B carries the workflow file.
 - **Branch protection** gains exactly one required check, `e2e`.
 - **`test/e2e` is a separate Node project** for the reason given in Section 2.7.2, and is deliberately outside the repo-root frontend tooling.
 - e2e must not duplicate build, vet, test, lint, coverage, gosec, trivy or gitleaks. It never compiles the application. It consumes the image the `image` job produced.
-- Every `uses:` is pinned to a 40-character commit SHA with a trailing `# vX.Y.Z` comment, matching the convention in all five existing workflows, and reuses the SHAs already present there.
+- Every `uses:` is pinned to a version tag (`vX.Y.Z`), matching the convention in the existing workflows, and reuses the versions already present there.
 - No inline flow mappings. `.github/.yamllint.yml` extends `default` and overrides only `line-length` and `truthy`, so the default `braces` rule applies at error level with `max-spaces-inside: 0`, and `lint-meta.yml:48` runs yamllint over `.github/`.
 
 ### 4.5 Secrets
@@ -2422,7 +2500,7 @@ Reverse index. If you changed a file on the left, the tests on the right are the
 
 These are findings about the product, not about the tests. Several of them determine whether a test in Section 3 can be green at all.
 
-**Every finding below is closed.** All twelve were fixed on 2026-08-10. The write-ups are kept because they are the rationale for the tests that now assert the fixed behaviour, and each carries a *Fixed* paragraph naming the mechanism.
+**Every finding below is closed.** All twelve are fixed in the code this document was verified against. The write-ups are kept because they are the rationale for the tests that now assert the fixed behaviour, and each carries a *Fixed* paragraph naming the mechanism.
 
 | ID | Severity | Finding | Covering test |
 |---|---|---|---|
@@ -2447,7 +2525,7 @@ V11 is the one with the widest reach into this document. Around thirty assertion
 
 *Impact.* A viewer renames themselves to the `preferred_username` of an OIDC administrator who has not yet logged in. That administrator's first single sign-on promotes the attacker's existing row to `admin` while leaving the attacker's own bcrypt hash in place. The attacker then signs in locally as an administrator. End state is the CA's root and intermediate private keys via `POST /admin/backup/download`. No non-default setting is required beyond OIDC being enabled with a group mapping, which is the intended production configuration.
 
-*Fixed, 2026-08-10,* at both ends of the chain.
+*Fixed,* at both ends of the chain.
 
 - **The rename is gone.** `ProfilePost action=update_info` no longer reads a username, `UpdateUserInfo` lost its username parameter, `UsernameExistsExceptID` was deleted, and the input is out of the profile template. A user can change their display name and email and nothing else.
 - **The upsert can no longer take over a local row.** A new `users.auth_source` column (`VARCHAR(10) NOT NULL DEFAULT 'local'`, backfilled to `'oidc'` where `password_hash='oidc:jumpcloud'`) is written as `'oidc'` on insert, and both `UpsertOIDCUser` branches carry `WHERE users.auth_source = 'oidc'` on the `DO UPDATE`. A collision against a local row updates nothing, `RowsAffected()` is 0, and the function returns `appdb.ErrOIDCLocalUser`. `OIDCCallback` treats that as a denied login: it writes `auth_log` reason `OIDC: username collides with a local account`, flashes a message pointing at an administrator, redirects to `/login`, and never reaches `completeLogin`.
@@ -2462,7 +2540,7 @@ V11 is the one with the widest reach into this document. Around thirty assertion
 
 *The correct pattern already exists next door.* `templates/admin_notifications.html` renders no value for the SMTP password, and `handlers/notifications.go:149-156` implements preserve-on-blank. Apply the same shape to both LE fields.
 
-*Fixed, 2026-08-10.* `le_settings.html` renders no `value` for `cf_token` or `r53_secret`, and both carry `placeholder="leave blank to keep existing"` and `autocomplete="new-password"`. `LESettingsPost` loads the current row first and `parseLESettingsFields` preserves either secret when its field comes back blank, and the handler aborts with a flash rather than saving over them if that load fails. `r53_key_id` deliberately still renders: an AWS access key ID is an identifier rather than a credential, which is the same treatment `smtp_username` gets.
+*Fixed.* `le_settings.html` renders no `value` for `cf_token` or `r53_secret`, and both carry `placeholder="leave blank to keep existing"` and `autocomplete="new-password"`. `LESettingsPost` loads the current row first and `parseLESettingsFields` preserves either secret when its field comes back blank, and the handler aborts with a flash rather than saving over them if that load fails. `r53_key_id` deliberately still renders: an AWS access key ID is an identifier rather than a credential, which is the same treatment `smtp_username` gets.
 
 *What the suite does.* E2E-LE-04 asserts the canaries never reach the page and that a blank resubmission preserves them.
 
@@ -2470,7 +2548,7 @@ V11 is the one with the widest reach into this document. Around thirty assertion
 
 *Evidence.* The session store is a client-side `gorilla/sessions` `CookieStore`. There was no server-side session record, so `Logout` could do nothing but ask the browser to drop its copy. A cookie captured before logout stayed valid until the idle timeout at 8h or the absolute lifetime at 24h, and nothing short of rotating `SECRET_KEY` revoked it.
 
-*Fixed, 2026-08-10, by a session epoch.* A new `users.session_epoch INTEGER NOT NULL DEFAULT 0` column is the server-side handle the cookie store lacks.
+*Fixed, by a session epoch.* A new `users.session_epoch INTEGER NOT NULL DEFAULT 0` column is the server-side handle the cookie store lacks.
 
 - `completeLogin` stamps the user's current epoch into the session (`handlers/auth.go:199`).
 - `RequireLogin` now takes a `UserLoader` (`middleware/middleware.go:19,69`). After its existing cookie, absolute-lifetime and idle checks it re-reads the user row and rejects the session when the user is missing, is inactive, or carries an epoch that does not match the cookie's (`:114-125`). Rejection clears the session and redirects to `/login` (`rejectSession`, `:133`).
@@ -2488,7 +2566,7 @@ This closes V3, V5 and V8 together. E2E-AUTH-12, E2E-AUTH-14, E2E-AUTH-15 and E2
 
 *Impact.* Rotating `X-Forwarded-For` gave unlimited password, TOTP and reset-token guessing, and wrote forged source addresses into the audit log, which is the record an incident responder relies on.
 
-*Fixed, 2026-08-10,* by replacing it with `middleware/realip.go`.
+*Fixed,* by replacing it with `middleware/realip.go`.
 
 - A forwarding header is believed **only when the socket peer's own address falls inside a block in the new `TRUSTED_PROXY_CIDRS` key** (`clientFromHeaders`, `middleware/realip.go:55-59`). A client connecting directly can set any header it likes and none of them are read.
 - `X-Forwarded-For` is walked **right to left with trusted hops skipped**, so the first untrusted address wins (`:62-70`). Entries an attacker prepends sit to the left of the real client and are never reached.
@@ -2501,13 +2579,13 @@ This closes V3, V5 and V8 together. E2E-AUTH-12, E2E-AUTH-14, E2E-AUTH-15 and E2
 
 Same root cause as V3, and sharper: the temporary-user feature's entire purpose is time-boxed access, and an expired temporary **admin** kept admin for up to 24 hours.
 
-*Fixed, 2026-08-10,* by the session epoch in Section 6.3. `UpdateUserRole` and the deactivation path bump it inline (`db/users.go:115,122`), `ExpireOverdueTempUsers` bumps it as part of the same statement that deactivates the row (`db/users.go:371`), and a deleted user fails `RequireLogin`'s existence check rather than its epoch check. Asserted by E2E-AUTH-14 and E2E-TEMP-02.
+*Fixed,* by the session epoch in Section 6.3. `UpdateUserRole` and the deactivation path bump it inline (`db/users.go:115,122`), `ExpireOverdueTempUsers` bumps it as part of the same statement that deactivates the row (`db/users.go:371`), and a deleted user fails `RequireLogin`'s existence check rather than its epoch check. Asserted by E2E-AUTH-14 and E2E-TEMP-02.
 
 ### 6.6 V6 Medium, design, fixed: no X.509 name policy anywhere
 
 Any manager could have the CA sign a certificate for any name, including one belonging to somebody else. Defensible as accepted risk for an internal CA whose root is in no public trust store, but undocumented and unasserted, so nobody could say whether it was a decision or an omission.
 
-*Fixed, 2026-08-10, as a mechanism whose default is the old behaviour.* A new `ALLOWED_DOMAIN_SUFFIXES` key.
+*Fixed, as a mechanism whose default is the old behaviour.* A new `ALLOWED_DOMAIN_SUFFIXES` key.
 
 - **Empty means unrestricted**, which is exactly what the application did before, and the process logs one startup warning saying so (`main.go:154-156`). Upgrading changes no behaviour until an operator opts in.
 - When set, a requested name must equal an entry or be a subdomain of one, matched on **label boundaries** via `name == suffix || strings.HasSuffix(name, "."+suffix)` (`checkDomainPolicy`, `handlers/cert_ops.go:105-116`), so `evil-example.com` does not satisfy `example.com`. A wildcard is judged by the name under its `*.` prefix.
@@ -2522,7 +2600,7 @@ Any manager could have the CA sign a certificate for any name, including one bel
 
 The generated username and password were returned to the browser as a `username|password` value in a `new_temp_cred` cookie scoped to `Path=/`. Short-lived and admin-only, but it put a live credential in a cookie jar and in any intermediary that logs headers.
 
-*Fixed, 2026-08-10,* by a one-shot server-side handoff. `AdminUsersTempPost` mints a token with `security.GenerateToken`, files the credential in a process-local mutex-guarded store with a two-minute TTL, and redirects with the token in the query string (`handlers/admin_temp.go:140-145`). The GET spends the token on read and renders the credential once (`:18-25`).
+*Fixed,* by a one-shot server-side handoff. `AdminUsersTempPost` mints a token with `security.GenerateToken`, files the credential in a process-local mutex-guarded store with a two-minute TTL, and redirects with the token in the query string (`handlers/admin_temp.go:140-145`). The GET spends the token on read and renders the credential once (`:18-25`).
 
 Three properties fall out of `handlers/temp_creds.go` and each is worth asserting:
 
@@ -2538,13 +2616,13 @@ The store is deliberately process-local and unpersisted. Losing an uncollected c
 
 Same root cause as V3.
 
-*Fixed, 2026-08-10,* by the session epoch. All three password-write paths bump it: the user's own change (`handlers/users.go:272`), an administrator's reset (`handlers/users.go:142`), and a completed reset-token flow (`handlers/password_reset.go:200`). The first re-stamps the acting session so the user is not logged out of the page they just used. Asserted by E2E-AUTH-15.
+*Fixed,* by the session epoch. All three password-write paths bump it: the user's own change (`handlers/users.go:272`), an administrator's reset (`handlers/users.go:142`), and a completed reset-token flow (`handlers/password_reset.go:200`). The first re-stamps the acting session so the user is not logged out of the page they just used. Asserted by E2E-AUTH-15.
 
 ### 6.9 V9 Low, fixed: `UsersPost action=create` did not validate `role`
 
 `UsersPost`'s `create` branch passed `r.FormValue("role")` straight to `appdb.CreateUser`. A typo produced an account whose role matched no key in `roleLevel`, so every role-gated route returned `403`, the account could still log in, and the administrator who created it saw no error.
 
-*Fixed, 2026-08-10,* by making the allowlist an invariant of the data layer rather than a habit of one handler. `ValidRole` and `ErrInvalidRole` live in `db/users.go:21-28` and are enforced in `CreateUser` (`:100`), `UpdateUserRole` (`:112`) and `UpsertOIDCUser` (`:270`). The `create` and `change_role` handlers check first so the operator gets `Role must be one of: viewer, manager, admin` rather than a database error (`handlers/users.go:52,92`).
+*Fixed,* by making the allowlist an invariant of the data layer rather than a habit of one handler. `ValidRole` and `ErrInvalidRole` live in `db/users.go:21-28` and are enforced in `CreateUser` (`:100`), `UpdateUserRole` (`:112`) and `UpsertOIDCUser` (`:270`). The `create` and `change_role` handlers check first so the operator gets `Role must be one of: viewer, manager, admin` rather than a database error (`handlers/users.go:52,92`).
 
 `OIDC_DEFAULT_ROLE` was a second route around the same invariant, since it is operator-supplied and lands in a role field without passing through either handler. The process now refuses to boot on a bad value when OIDC is enabled (`main.go:151-153`).
 
@@ -2552,7 +2630,7 @@ Same root cause as V3.
 
 *Evidence.* Logout was `r.Get("/logout", h.Logout)`, outside the `RequireLogin` group and with no token check, so any page that could make the browser issue that GET could log the user out. The weakness was pre-existing, but its blast radius grew with the V3 fix: once logout bumps `session_epoch` it terminates every session that user holds on every device, rather than dropping one browser's cookie.
 
-*Fixed, 2026-08-10.* Logout is now `r.Post("/logout", h.Logout)` behind `requireCSRF` (`main.go:225`, `handlers/auth.go:215`), offered as an inline form in both `base.html` and `admin_base.html`. `r.Get("/logout", h.LogoutGet)` is kept as a safe redirect to `/login` that logs nobody out (`main.go:224`, `handlers/auth.go:209-211`), so an old bookmark degrades rather than breaking.
+*Fixed.* Logout is now `r.Post("/logout", h.Logout)` behind `requireCSRF` (`main.go:225`, `handlers/auth.go:215`), offered as an inline form in both `base.html` and `admin_base.html`. `r.Get("/logout", h.LogoutGet)` is kept as a safe redirect to `/login` that logs nobody out (`main.go:224`, `handlers/auth.go:209-211`), so an old bookmark degrades rather than breaking.
 
 *What the suite does.* E2E-AUTH-11 asserts both halves, and `/logout` is now one of the twenty-three routes in E2E-CSRF-01's sweep.
 
@@ -2562,7 +2640,7 @@ Same root cause as V3.
 
 *Impact on this specification.* Around thirty assertions in Section 3 check flash text. Until this was fixed, every one of them would have failed against otherwise-correct code. That makes V11 the single most consequential finding for the suite, and it is the reason a flash assertion is worth writing at all rather than being noise.
 
-*Fixed, 2026-08-10.* `gob.Register(FlashMsg{})` in `models`' own `init` (`models/models.go:79`) as well as in `main` (`main.go:126`). Registering only in `main` would have left the type unregistered under `go test ./models/...` and every other package test, which is precisely the configuration in which the defect would keep hiding.
+*Fixed.* `gob.Register(FlashMsg{})` in `models`' own `init` (`models/models.go:79`) as well as in `main` (`main.go:126`). Registering only in `main` would have left the type unregistered under `go test ./models/...` and every other package test, which is precisely the configuration in which the defect would keep hiding.
 
 *What the suite does.* Every flash assertion in Section 3 is now a live check. The three that changed shape as a result are named in V12.
 
@@ -2585,7 +2663,7 @@ The duplicate flash blocks in `admin_notifications.html` and `admin_console.html
 Reviewed against source with no action required: the path-containment helpers (`containedPath`, `containedAbsPath`, `safeName`), `csrfOK`'s constant-time comparison and empty-token guard, the OIDC state, nonce and PKCE handling, `resetLink`'s refusal to derive an origin from the request, password-reset token storage, single use and TTL, the provisioner password being read per call, the admin console's argv being wholly server-side, `pg_dump` receiving its password through `PGPASSFILE`, uniformly parameterised SQL, the static handler's embedded sub-FS boundary, the TOTP replay guard, and the Let's Encrypt domain validation.
 ## Appendix A: test index
 
-All 78 tests, sorted by ID. "Stack" is the CI job or nightly leg that runs it.
+All 83 tests, sorted by ID. "Stack" is the CI job or nightly leg that runs it.
 
 | ID | Property | Tier | Stack | Section |
 |---|---|---|---|---|
@@ -2637,6 +2715,7 @@ All 78 tests, sorted by ID. "Stack" is the CI job or nightly leg that runs it.
 | E2E-CERT-13 | an import name collision destroys the existing certificate | PR | `e2e-main` | 3.4 |
 | E2E-CFG-01 | the response-header and config-switch matrix | PR | `e2e-main`, two rows nightly `oidc-mail` | 3.12 |
 | E2E-CFG-02 | a forwarding header is believed only from a trusted peer | nightly | nightly `oidc-mail` | 3.12 |
+| E2E-CSP-01 | every route loads under nginx's CSP with no violation | PR | `e2e-main` | 3.16 |
 | E2E-CSRF-01 | every POST route rejects a missing and a wrong token | PR | `e2e-main` | 3.11 |
 | E2E-CSRF-05 | a token from a different session is rejected | PR | `e2e-main` | 3.11 |
 | E2E-HIST-01 | history pagination | PR | `e2e-main` | 3.6 |
@@ -2653,6 +2732,7 @@ All 78 tests, sorted by ID. "Stack" is the CI job or nightly leg that runs it.
 | E2E-LE-03 | auto-renew toggle and delete | nightly | nightly `le` | 3.14 |
 | E2E-LE-04 | DNS-provider credentials are never echoed to the client | nightly | nightly `le` | 3.14 |
 | E2E-NOTIF-01 | notification settings round-trip and test send | nightly | nightly `oidc-mail` | 3.15 |
+| E2E-ORIGIN-01 | every server-rendered route and `/static` asset reaches the backend through the origin | PR | `e2e-main` | 3.16 |
 | E2E-PROV-01 | the provisioner list matches the CA's own configuration | PR | `e2e-main` | 3.5 |
 | E2E-PROV-02 | the page degrades rather than failing when the CA is unreachable | PR | `e2e-main` | 3.5 |
 | E2E-RBAC-01 | the route-by-role matrix, driven as data | PR | `e2e-main` | 3.3 |
@@ -2664,13 +2744,16 @@ All 78 tests, sorted by ID. "Stack" is the CI job or nightly leg that runs it.
 | E2E-SEC-04 | the log artifact is safe to publish | PR | `e2e-main` | 3.6 |
 | E2E-SEC-05 | the backup bundle is CA-key-equivalent and gated accordingly | PR | `e2e-main` | 3.6 |
 | E2E-SEC-06 | sensitive pages are not cacheable | PR | `e2e-main` | 3.6 |
+| E2E-SPA-01 | log in at `/app/`, navigate, hard-refresh a deep link, log out | PR | `e2e-main` | 3.16 |
+| E2E-SPA-02 | a refresh mid-MFA resumes on the code step | PR | `e2e-main` | 3.16 |
+| E2E-SPA-03 | with the backend stopped the API answers problem+json and the SPA renders the unavailable state | PR | `e2e-main` | 3.16 |
 | E2E-STATIC-01 | static assets are served with correct MIME types and resist traversal | PR | `e2e-main` | 3.12 |
 | E2E-TEMP-01 | a temporary user is handed over by one-shot token and expires on the ticker | PR | `e2e-main` | 3.13 |
 | E2E-TEMP-02 | an expired temporary admin loses access immediately | PR | `e2e-main` | 3.13 |
 
 ## Appendix B: workflow file
 
-`.github/workflows/e2e.yml`. Action SHAs are the ones already pinned in the repository's existing workflows.
+`.github/workflows/e2e.yml`. Actions are pinned by version tag, as in the repository's existing workflows.
 
 ```yaml
 name: E2E
@@ -2693,7 +2776,7 @@ env:
   # <digest> is a placeholder: fill it in from the tag's current manifest
   # before this workflow's first run, and again on any deliberate bump. It
   # must also match the @playwright/test version pinned in test/e2e/package.json.
-  PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.49.1-noble@sha256:<digest>
+  PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:<digest>
 
 jobs:
   image:
@@ -2701,11 +2784,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@v7.0.1
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+        uses: docker/setup-buildx-action@v4.4.1
       - name: Build the application image and warm its layer cache
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@v7.4.0
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -2715,7 +2798,7 @@ jobs:
           cache-from: type=gha,scope=e2e
           cache-to: type=gha,scope=e2e,mode=max
       - name: Build the harness image (Playwright base plus docker CLI)
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@v7.4.0
         with:
           context: ./test/e2e
           file: ./test/e2e/Dockerfile
@@ -2734,11 +2817,11 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@v7.0.1
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+        uses: docker/setup-buildx-action@v4.4.1
       - name: Materialise the application image from the layer cache
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@v7.4.0
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -2747,7 +2830,7 @@ jobs:
           load: true
           cache-from: type=gha,scope=e2e
       - name: Materialise the harness image from the layer cache
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@v7.4.0
         with:
           context: ./test/e2e
           file: ./test/e2e/Dockerfile
@@ -2829,7 +2912,7 @@ jobs:
         run: ./test/e2e/assert-redacted.sh artifacts/
       - name: Upload artifacts
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: e2e-main-${{ github.run_attempt }}
           path: |
@@ -2854,15 +2937,15 @@ jobs:
           - fatals
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@v7.0.1
       - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        uses: actions/setup-node@v7.1.0
         with:
           node-version: "20"
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+        uses: docker/setup-buildx-action@v4.4.1
       - name: Materialise the application image from the layer cache
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@v7.4.0
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -2891,7 +2974,7 @@ jobs:
         run: ./test/e2e/assert-redacted.sh artifacts/
       - name: Upload artifacts
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: e2e-bootstrap-${{ matrix.scenario }}-${{ github.run_attempt }}
           path: |

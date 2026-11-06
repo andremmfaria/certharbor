@@ -1,12 +1,12 @@
 # Plan: Split step-ca-webui into a React SPA and an OpenAPI-described Go backend-for-frontend
 
-Status: revision 10, 2026-09-02. Written 2026-08-13 against `main` at `a549750`, revised through two four-phase reviews, and **partly executed: Phases 0, 1 and 2 are complete and merged** (Phase 1 merged 2026-08-15, Phase 2 merged 2026-09-02, last code commit `d38354c`), so the decisions they tested are now measured rather than proposed. **All seven open questions are answered as of 2026-08-15, so nothing in this plan is blocked on a decision.** The e2e track is active, not paused, with a scope correction recorded in Section 10. Revision 9 folded in a 2026-09-02 maintenance pass (Go 1.26.8, Vite 8.2.2, GitHub Actions pinned by version tag rather than commit SHA, npm added to Dependabot for `frontend`, `clients/ts` and `test/e2e`) and removed the stale `plans/step-cli-to-ca-lib-swap.md` draft, recorded in Section 12. Revision 10 records Phase 2's completion.
+Status: revision 12, 2026-11-06. Written 2026-09-23 against `main` at `9b9d40a`, revised through two four-phase reviews, and **partly executed: Phases 0, 1, 2 and 3 are complete** (Phase 0 completed 2026-10-06, Phase 1 on 2026-10-16, Phase 2 on 2026-10-28, last code commit `17afc94`, and Phases 3a, 3b and 3c on 2026-11-06), so the decisions they tested are now measured rather than proposed. **The tree is past the clean stop point and inside the range that carries scaffolding** (Section 8): the nginx origin, the `/app/` base path, the duplicated CSS and the legacy passthrough blocks all exist now, and the next phase is Phase 4. **All seven open questions are answered as of 2026-10-12, so nothing in this plan is blocked on a decision.** The e2e track is active, not paused, with a scope correction recorded in Section 10. Revision 9 folded in a 2026-10-21 maintenance pass (Go 1.26.8, Vite 8.2.2, GitHub Actions pinned by version tag rather than commit SHA, npm added to Dependabot for `frontend`, `clients/ts` and `test/e2e`) and removed the stale `plans/step-cli-to-ca-lib-swap.md` draft, recorded in Section 12. Revision 10 records Phase 2's completion. Revision 11 was reconciled against the repository tree. Revision 12 records Phase 3's completion and corrects the plan text that the three sub-phases falsified.
 
 This plan replaces the server-rendered Go UI in `backend/` with a React single-page application, served by its own nginx container, talking to the Go process over a versioned JSON API. The Go side becomes a backend-for-frontend: it keeps sessions, authorisation, database and CA access, and publishes an OpenAPI 3.1 description that a generated TypeScript client consumes. A CI gate ties the frontend build to that exact description, so a contract change that breaks the frontend fails in the same run rather than at runtime.
 
-Cost: a full rewrite of the user interface across 33 templates, 65 routes and 46 handler files, plus a second deployable, run as ten additive phases on `main` with no long-lived branch. Nothing is deployed today, so there is no rollout risk, only the risk of the migration stalling half-finished. Phase 9, deleting the old UI, is the only irreversible step. **Read Section 1.0 before deciding to proceed**, because the stated motive for this work does not survive contact with the repository and the cheaper alternatives are real.
+Cost: a full rewrite of the user interface across 33 templates, 65 routes and 25 non-test handler files, plus a second deployable, run as ten additive phases on `main` with no long-lived branch. Nothing is deployed today, so there is no rollout risk, only the risk of the migration stalling half-finished. Phase 9, deleting the old UI, is the only irreversible step. **Read Section 1.0 before deciding to proceed**, because the stated motive for this work does not survive contact with the repository and the cheaper alternatives are real.
 
-**The three original open questions were answered on 2026-08-13** and folded into the decisions: the API is versioned even though no second consumer exists yet (5.1), "separate" means two containers with nginx serving the SPA (D1, D5), and there is no deadline (Section 8). **The two-container answer then opened four more (Q4 to Q7), and those were answered on 2026-08-15.** Compose is the only supported topology, but D5 drops the mechanisms that would hard-block an orchestrator later (Q4); the operator is every self-hoster of this repository and is unreachable for questions, so every key ships with a safe default and a README row (Q6); and the breaking-change gate demands a `docs/contract-changes.md` row rather than a MINOR bump (Q5). Q7 was answered in Section 8: the clean stop is after Phase 2.
+**The three original open questions were answered on 2026-09-23** and folded into the decisions: the API is versioned even though no second consumer exists yet (5.1), "separate" means two containers with nginx serving the SPA (D1, D5), and there is no deadline (Section 8). **The two-container answer then opened four more (Q4 to Q7), and those were answered on 2026-10-12.** Compose is the only supported topology, but D5 drops the mechanisms that would hard-block an orchestrator later (Q4); the operator is every self-hoster of this repository and is unreachable for questions, so every key ships with a safe default and a configuration-reference row (Q6); and the breaking-change gate demands a `docs/contract-changes.md` row rather than a MINOR bump (Q5). Q7 was answered in Section 8: the clean stop was after Phase 2, and the tree has now passed it.
 
 ## 0. Using this document
 
@@ -19,11 +19,11 @@ Cost: a full rewrite of the user interface across 33 templates, 65 routes and 46
 | [5. API conventions](#5-api-conventions) | 5.1 Base path · 5.2 Error model · 5.3 Authentication · 5.4 CSRF · 5.5 Authorisation · 5.6 Lists · 5.7 Binary responses · 5.8 Naming and shapes · 5.9 Frontend conventions · 5.10 Two-container failure modes · 5.11 One operation, end to end |
 | [6. Endpoint map](#6-endpoint-map) | every current route to its replacement, with roles |
 | [7. The contract pipeline](#7-the-contract-pipeline) | 7.1 Spec generation · 7.2 Drift gate · 7.3 Client generation · 7.4 Packaging · 7.5 Publication · 7.6 Consumption |
-| [8. Phases](#8-phases) | Phases 0, 1, 2, 3a, 3b, 3c, 4 to 9, all on `main`. 0, 1 and 2 are complete, only Phase 9 is irreversible |
+| [8. Phases](#8-phases) | Phases 0, 1, 2, 3a, 3b, 3c, 4 to 9, all on `main`. 0, 1, 2, 3a, 3b and 3c are complete, only Phase 9 is irreversible |
 | [9. CI and CD](#9-ci-and-cd) | 9.1 Job graph · 9.2 Workflow changes · 9.3 Rollback and recovery |
 | [10. Impact on the e2e suite](#10-impact-on-the-e2e-suite) | active, not paused. what survives, and the resumption order |
 | [11. Risk register](#11-risk-register) | R1 to R34, each with a trigger and an owner phase unless explicitly parked; the live ones also carry a status |
-| [12. Open questions](#12-open-questions) | All seven answered. Q1 to Q3 on 2026-08-13, Q4 to Q7 on 2026-08-15 |
+| [12. Open questions](#12-open-questions) | All seven answered. Q1 to Q3 on 2026-09-23, Q4 to Q7 on 2026-10-12 |
 
 ---
 
@@ -35,13 +35,13 @@ The stated motive was that the current architecture is "not very scalable". Noth
 
 ### 1.1 What exists today
 
-**What is being asked for is not a separation, it is a rewrite of the user interface.** The request described moving an existing TypeScript frontend off the Go backend. No such frontend exists to move. Every page is rendered by Go from `html/template`, so nothing is relocated: 33 templates, 16 scripts and every form post are deleted and written again as React components against 70 new JSON operations, and 27 of the 34 written e2e test IDs are rewritten with them and one is retired. The backend keeps its database, session, CA and ACME code, but all 65 of its routes change shape. Twelve phases of work, of which one is irreversible. Size the decision against that, not against the word "separate".
+**What is being asked for is not a separation, it is a rewrite of the user interface.** The request described moving an existing TypeScript frontend off the Go backend. No such frontend exists to move. Every page is rendered by Go from `html/template`, so nothing is relocated: 33 templates, 16 scripts and every form post are deleted and written again as React components against 70 new JSON operations, and 30 of the 40 written e2e test IDs have their `api` bodies rewritten with them and one is retired. The backend keeps its database, session, CA and ACME code, but all 65 of its routes change shape. Twelve phases of work, of which one is irreversible. Size the decision against that, not against the word "separate".
 
 The Go side becomes a backend-for-frontend (BFF): it owns sessions, authorisation, step-ca access, the database and ACME orchestration, and it publishes a machine-readable OpenAPI 3.1 description of everything the browser is allowed to call. That description, and nothing else, is the contract. The frontend never hand-writes a request. It imports a TypeScript client package that the BFF's own CI generates from the spec, and its build fails if the package it resolves was not generated from the commit under test.
 
 **One clause of the request could not be delivered as stated.** It asked both that "the frontend uses [the OpenAPI definition] to generate a client" and that it "consumes a package generated by BoF's ci". Those cannot both be literally true, since one has the frontend generating and the other has it consuming. This plan takes the second: generation happens once, in the BFF's CI, and the frontend consumes the result. D8 explains why that is the stronger form.
 
-**A naming note that applies to every path in this document.** The Go directory is called `backend/` on disk today and is renamed to `backend/` by this plan (D11). Every path below, including the ones describing current state, uses the **post-rename** name. Where a path is quoted out of a file that has not been changed yet, the pre-rename name is what is actually in that file.
+**A note on references.** The Go code lives in `backend/` and the SPA in `frontend/` (D11). Unless a passage says otherwise, file and line references in this document are against `main` at `9b9d40a`, the commit this plan was written against, and later phases have moved some of them.
 
 The evidence for the rewrite framing above:
 
@@ -62,7 +62,7 @@ Everything else that matters:
 - CSP is already strict with no `unsafe-inline` (`middleware/middleware.go:56-61`). `Cache-Control: no-store` is global, and the static handler deliberately overrides it (`:62-65`, `main.go:97`).
 - `models/models.go` has **no `json` tags on any type**. `models.User` carries `PasswordHash`, `TOTPSecret` and `TOTPPendingSecret`. `models.NotificationSettings` carries `SMTPPassword`. Today's protection is that templates name fields one at a time. That protection is being deleted, which is why R15 exists.
 - There are **no per-object ownership checks anywhere**. `certFromURL` and `leCertFromURL` (`handlers/cert_ops.go:30,44`) fetch by id with no owner predicate, and the schema has no owner column. This is a single-tenant CA. Role-only authorisation is a faithful port, not a regression.
-- **The project has no live deployments, operators, or existing volumes.** Stated in `plans/step-cli-to-ca-lib-swap.md` and still true. No backward compatibility to preserve, no staged rollout, no strangler pattern.
+- **The project has no live deployments, operators, or existing volumes.** Stated in `plans/step-cli-to-ca-lib-swap.md` before its removal (Section 12) and still true. No backward compatibility to preserve, no staged rollout, no strangler pattern.
 
 ### 1.2 What changes
 
@@ -72,7 +72,7 @@ Everything else that matters:
 4. A new `frontend/` Vite + React application consumes that tarball. Its CI asserts the tarball was generated from the commit under test, so a spec change that breaks the frontend fails in the same run.
 5. The SPA is served by its own nginx container, which is also the single public origin: it serves the static bundle and reverse-proxies `/api/`, `/auth/`, `/health`, `/ready` and `/openapi.json` to the Go container. Two deployables, one origin.
 6. `templates/`, `static/js/` and the flash-message mechanism are deleted.
-7. `backend/` is renamed to `backend/`, matching the new `frontend/`.
+7. The Go code stays in `backend/` and the SPA gets the sibling `frontend/` (D11).
 
 ### 1.3 Non-goals
 
@@ -90,7 +90,7 @@ Every acceptance criterion in Section 2 is internal and mechanical. None says wh
 
 **Buys.** A typed contract a reviewer can diff and a compiler can enforce. Three action multiplexers become ten single-purpose operations, each with its own role marker and audit point. Authorisation stops being "it is in the right chi group" and becomes an enumerable table a test asserts. A description the e2e suite and any future automation can be generated against. Deep-linkable table state, per-item certificate import, and correct pagination, which is a live bug today.
 
-**Costs.** First paint needs a JavaScript bundle. The strict CSP means toast, theming and anything else that would normally be a dependency is hand-rolled. 27 e2e specs are rewritten. For six phases the system carries two UIs and two authorisation implementations (R22). Ongoing: two runtime images on two CVE cadences, a third-party base image to pin, a Node build stage no image scanner sees, three new npm ecosystems totalling several hundred transitive packages, an nginx config that is now the security perimeter, and a cross-container certificate reload mechanism that does not exist today. 9.1's claim that two images is a net win holds for CI cache scoping and not for total ongoing work.
+**Costs.** First paint needs a JavaScript bundle. The strict CSP means toast, theming and anything else that would normally be a dependency is hand-rolled. 30 e2e test IDs have their `api` bodies rewritten. For six phases the system carries two UIs and two authorisation implementations (R22). Ongoing: two runtime images on two CVE cadences, a third-party base image to pin, a Node build stage no image scanner sees, three new npm ecosystems totalling several hundred transitive packages, an nginx config that is now the security perimeter, and a cross-container certificate reload mechanism that does not exist today. 9.1's claim that two images is a net win holds for CI cache scoping and not for total ongoing work.
 
 **Rejected, and why.** *htmx or Alpine over the existing SSR* delivers no machine-readable contract, which was asked for explicitly, and leaves the untyped `static/js` layer. *A hand-written spec over the existing handlers, with no SPA* gives half the value for a tenth of the cost, but a spec no Go tool checks drifts immediately, which is D2's whole argument. *Fixing the concrete rough edges in place* (the three multiplexers, `json` tags, the pagination order, typing the static JS) leaves no contract, though this plan does all four anyway as side effects of Phases 4 to 8. *Stopping early* is not rejected: Section 8 sets out where the clean stop is.
 
@@ -106,7 +106,7 @@ Every box below is either **mechanical** (a named command or test decides it) or
 - [ ] `go run ./cmd/openapi` regenerates it byte-identically, twice in a row, with `DATABASE_URL` and the CA URL pointed at `127.0.0.1:1` so any accidental dial fails loudly rather than succeeding on a runner that happens to have network.
 - [ ] The spec is generated twice under two materially different environments (differing `UI_CERT_DURATION`, provisioner names, allowed-domain lists, `LE_*`) and the outputs are byte-compared. **This is the only enforcement D3 rule 1 has.** Without it the rule is a convention.
 - [ ] The drift gate fails on any diff, proven once by a deliberate negative-test commit. A `yq` assertion confirms the gate and the client generation are steps of the same CI job.
-- [ ] `apitypes/` imports only the standard library and other in-repo `apitypes` packages, and `api/` imports no `step-webui/models`. Enforced by `depguard` **allowlist** rules (not a denylist, which an aliasing package defeats), with a committed negative fixture the lint run must reject. Note `depguard` is not currently in `.golangci.yml`'s `enable` list and must be added.
+- [ ] `apitypes/` imports only the standard library and other in-repo `apitypes` packages, and `api/` imports no `step-webui/models`. Enforced by `depguard` **allowlist** rules (not a denylist, which an aliasing package defeats), with a committed negative fixture the lint run must reject. `depguard` is enabled in `backend/.golangci.yml`.
 - [ ] A test walks the spec and fails if any property name matches `(?i)(password|secret|token|hash|privateKey|certPath|keyPath|recovery|otpauth|dsn|databaseUrl|connectionString|args|env)` outside `openapi/secret-allowlist.txt`, and asserts every allowlisted property is `writeOnly: true` and absent from every response schema. The allowlist carries a CODEOWNERS entry.
 - [ ] Zero `additionalProperties: true` schemas. `jq -e '[..|objects|select(.additionalProperties==true)]|length==0'`.
 - [ ] Every operation has a `camelCase` `operationId`, a `summary`, and a `tags` entry from the fixed list (`session`, `certificates`, `acme`, `provisioners`, `security`, `admin`, `users`, `profile`, `system`, `dashboard`), asserted by `jq`. The golden table carries a `tag` column and the role-matrix test asserts the spec agrees with it, because tag assignment drives 5.9's invalidation map and an unreviewed tag silently breaks cache invalidation.
@@ -144,8 +144,8 @@ Every box below is either **mechanical** (a named command or test decides it) or
 - [ ] A list of 60 rows sharing one `created_at`, paged at 10, returns 60 distinct ids across 6 pages with no repeat and no omission, against `history`, `audit-events`, `security/events` and `acme/events`. `pageSize=201` returns `422`, absent defaults to 25, and `page * pageSize > 10000` returns `422`, with `maximum: 200` present in the spec and not only in code.
 - [ ] An unmatched path under `/api/` or `/auth/` returns `404 application/problem+json`, including the 405 case.
 - [ ] On a clean checkout with no Node run: `go build ./...`, `go vet ./...`, `golangci-lint run` and `go test -race ./...` all pass, and a `yq` assertion confirms `build-test-lint` contains no `setup-node` or `npm` step. Trivially true now that no Go package embeds a build artifact.
-- [ ] `TRUST_PROXY=true` **and** `TRUSTED_PROXY_CIDRS` are present in the base compose environment block and in `.env.example`. `TRUSTED_PROXY_CIDRS` is a comma-separated **list**, empty by default, and when empty the backend resolves `WEB_UPSTREAM_HOST` at startup and trusts the resulting `/32` (D5 rule 3, Q4). Setting `TRUST_PROXY` with neither the list nor a resolvable upstream is `log.Fatalf` (`main.go:140-147`), not a degradation. `step-net` declares an explicit `ipam.config.subnet` whose default is outside `172.16/12`, and no service carries a static address.
-- [ ] **(Phase 3b)** Every environment key the split introduces has a row in `README.md`'s configuration table with a default and a stated failure mode: `WEB_TLS_MODE`, `WEB_HOSTNAME`, `WEB_UPSTREAM_HOST`, `TRUST_PROXY`, `TRUSTED_PROXY_CIDRS`, `STEP_NET_SUBNET`, `WEB_HSTS_MAX_AGE`, `PUBLIC_BASE_URL` and `IMAGE_TAG`. A CI check greps the table for each key, because the operator is a stranger who cannot ask (Q6).
+- [ ] `TRUST_PROXY=true` **and** `TRUSTED_PROXY_CIDRS` are present in the base compose environment block and in `.env.example`. `TRUSTED_PROXY_CIDRS` is a comma-separated **list**, empty by default, and when empty the backend resolves `WEB_UPSTREAM_HOST` through the platform's DNS every five seconds and trusts the resulting addresses, trusting nothing until the first lookup succeeds (D5 rule 3, Q4). Only a malformed list or an empty `WEB_UPSTREAM_HOST` is `log.Fatal` (`main.go`), because an unresolvable name at startup is the normal state: nginx exists only once the backend is healthy. `step-net` declares an explicit `ipam.config.subnet` whose default is outside `172.16/12`, and no service carries a static address.
+- [ ] **(Phase 3b)** Every environment key the split introduces has a row in `docs/configuration.md`'s table (`README.md` is an index and carries no table) with a default and a stated failure mode, and a line in `.env.example`: `WEB_TLS_MODE`, `WEB_HOSTNAME`, `WEB_UPSTREAM_HOST`, `TRUST_PROXY`, `TRUSTED_PROXY_CIDRS`, `STEP_NET_SUBNET`, `WEB_HSTS_MAX_AGE`, `PUBLIC_BASE_URL` and `IMAGE_TAG`. `scripts/check-config-keys.sh` greps both for each key, because the operator is a stranger who cannot ask (Q6).
 - [ ] **Four forgery tests, not one.** Table-driven over `X-Forwarded-For`, `X-Real-IP`, `True-Client-IP` and `Forwarded`, against both an `/api/v1` operation and (during the migration window) `/login`, asserting the recorded address is the real peer in every case. A test that only forges `X-Forwarded-For` passes while the `realip.go:71-74` fallback is wide open, which is exactly how the CRITICAL finding survived an earlier draft.
 - [ ] `middleware.forwardedHeaders` is **deleted**, and `rg -n 'X-Real-IP|True-Client-IP|forwardedHeaders' backend/middleware/` returns only the test asserting they are ignored. "Or gated behind an opt-in" is withdrawn: an opt-in is a config a future edit can set, which is the failure mode the criterion exists to remove.
 - [ ] Two rate-limit tests, not one. A wrong password from one client address does not block a second. And a request carrying a forged `X-Forwarded-For` rate-limits on the real peer, which is what `proxy_set_header X-Forwarded-For $remote_addr` guarantees. **Getting either wrong locks out every user after five failures from anyone**, on a rolling five-minute window (`security.go:112`; the login page and the API's `Retry-After` both derive from that same window, `BlockTime` is gone).
@@ -153,15 +153,14 @@ Every box below is either **mechanical** (a named command or test decides it) or
 - [ ] **(From Phase 3b)** No response under `/api/v1` carries a document CSP, and `mw.SecurityHeaders` emits `Strict-Transport-Security` on no path at all. Legacy template routes keep Go's document CSP and, deliberately, no HSTS, for the length of the migration window (R27).
 - [ ] `go.mod` pins huma at `v2.30.0` or newer, asserted with `semver.Compare`.
 - [ ] `scripts/coverage-gate.sh` fails both below the floor **and** when measured coverage exceeds the floor by more than 5 points, so the floor ratchets without anyone deciding to raise it.
-- [ ] `backend/` does not exist and `rg --hidden -g '!.git' -g '!plans/**' 'backend'` returns nothing outside quoted pre-rename material.
 - [ ] **(Phase 9)** `rg -n 'staticHandlerFromFS|mimeByExt|go:embed templates|go:embed static|fs\.Sub' backend/` returns nothing, and the backend Dockerfile contains no `COPY templates` or `COPY static` line.
 - [ ] `rg -n 'go:embed' backend/` returns exactly one hit after Phase 9, `openapi/openapi.json`, and a `yq` assertion confirms `build-test-lint` declares no `setup-node` and no `npm` step. The property is that the Go build never depends on a Node-produced artefact.
 
 **Frontend**
 
 - [ ] `npm ci && npm run build` emits content-hashed filenames for every JS, CSS and font asset.
-- [ ] A test computes the sha256 of every inline `<script>` and `<style>` in the built `index.html` and asserts each appears in the CSP the Go server emits, failing on any unhashed inline block. This is what lets D12.3's theme bootstrap exist without `unsafe-inline`. `rg 'eval\(|new Function\(' dist` returns nothing.
-- [ ] A CSP smoke spec loads every route against the compose stack with a console collector and fails on any Content Security Policy message. It is registered as a new ID in `plans/e2e-tests.md`'s appendix rather than borrowing an existing one.
+- [ ] A test computes the sha256 of every inline `<script>` and `<style>` in the built `index.html` and asserts each appears in the CSP nginx emits, failing on any unhashed inline block. The hashes are computed at container start from the `index.html` the container serves, so the policy cannot fall behind the bundle. This is what lets D12.3's theme bootstrap exist without `unsafe-inline`. `rg 'eval\(|new Function\(' dist` returns nothing.
+- [ ] A CSP smoke spec loads every route against the compose stack with a console collector and fails on any Content Security Policy message. It is registered as E2E-CSP-01 in `plans/e2e-tests.md`'s appendix rather than borrowing an existing one.
 - [ ] `npm run lint`, `typecheck` and `test` run in the `frontend` job.
 - [ ] Every route in `navigation.ts` and the router table renders against a seeded stack with a 200 shell, its `data-testid="page-<name>"` present, and zero console errors. Table-driven from the committed route list, so a route with no smoke coverage fails.
 - [ ] **Judgement, owner: the repository owner.** Each phase PR carries a `Parity` table, one row per template it replaces, listing the fields rendered, the actions offered, and either the covering e2e test ID or a one-line deliberate-deviation note. Equivalence is not the goal: `import/scan` is removed, `GET /logout` is removed, `tab` is dropped, `auto` theme now resolves client-side, and OIDC operations exist and 404 when disabled.
@@ -200,7 +199,7 @@ Every box below is either **mechanical** (a named command or test decides it) or
 - [ ] `rg -n '"/api/v1'` over `backend/` returns exactly one non-test hit (5.1), and `jq -e '[.paths|keys[]|select(startswith("/")|not)]|length==0'` passes, since a path without a leading slash resolves relative to the current route under `baseUrl: ''` and lands on the SPA shell with `200`.
 - [ ] `make nginx-lint` starts a **prebuilt fixture image** (nginx plus the real config and a committed placeholder `dist/`, no Node stage) against a stub upstream and a throwaway self-signed leaf, with no postgres, no step-ca and no compose project, and asserts the SPA fallback, the proxied prefixes, the header set, the cache directives and the `@apidown` document. It depends on no target that builds the real image, so it is fast by construction. Fail above 60 seconds if a budget is wanted: a fifteen-second assertion on a shared runner is a flaky gate that gets deleted, taking the rung with it. Without a fast rung, every `nginx.conf` edit costs a full stack bring-up and the config stops being tested.
 - [ ] The compose healthcheck on `step-webui` is `curl -fsk https://localhost:8443/health`. It currently curls `/login` without `-f`, so it both passes on any status and points at a route this plan deletes.
-- [ ] The proxied path prefix list in `frontend/nginx.conf` and in `frontend/vite.config.ts` derive from one source, asserted by a test (4.4).
+- [ ] The proxied path prefix list in `frontend/nginx.conf.template` and in `frontend/vite.config.ts` derive from one source, `frontend/proxy-prefixes.json`, a flat list. nginx uses one flat regex location built from it, and `scripts/check-proxy-routes.sh` (`make proxy-routes-check`, a step of the `origin` job) fails when the regex line or the Vite import disagrees with the file (4.4).
 - [ ] After the backend renews its leaf, nginx serves the new certificate without a container restart (D5, R13).
 - [ ] `vite.config.ts` declares proxies for `/api`, `/auth`, `/health`, `/ready` and `/openapi.json` with `secure: false` and declares no `server.cors` key. Hot reload is verified by hand in the Phase 3a PR and is not a CI gate.
 - [ ] The e2e suite meets the pass level stated in Section 10, and `e2e-gate` is a required check.
@@ -235,7 +234,7 @@ Every box below is either **mechanical** (a named command or test decides it) or
 
 1. **Huma owns the request lifecycle for the operations it registers.** Existing chi middleware still runs, but per-operation concerns move from `r.Group(...)` into huma middleware. Section 5.5 fixes the mechanism.
 2. **A huma operation handler has the signature `func(ctx context.Context, in *In) (*Out, error)`.** No `http.ResponseWriter`, no `*http.Request`. `gorilla/sessions` needs both, so every session write in this codebase (`completeLogin` at `handlers/auth.go:192`, `Handler.sess` at `handlers/handler.go:260`, `Handler.csrf` at `:301`, `Handler.Logout` at `handlers/auth.go:227`, the MFA park at `:117-124`, `mw.RequireLogin`'s slide at `middleware/middleware.go:113,130`) is unreachable from a handler as written. The fix is one middleware that unwraps the pair onto the context. See 5.5.
-3. **Huma is pinned at `v2.30.0` or newer**, because `humachi.Unwrap` does not exist before it. Current release is `v2.39.1`. Without `Unwrap`, point 2 degrades to hand-encoding `securecookie` values and abandoning `store.Save`, which is bad enough that `oapi-codegen` becomes the better answer.
+3. **Huma is pinned at `v2.30.0` or newer**, because `humachi.Unwrap` does not exist before it. `backend/go.mod` pins `v2.40.0`. Without `Unwrap`, point 2 degrades to hand-encoding `securecookie` values and abandoning `store.Save`, which is bad enough that `oapi-codegen` becomes the better answer.
 4. **Huma auto-registers routes on the adapter, below `api.UseMiddleware`.** `/openapi.json`, `/openapi.yaml` and `/docs` from `DefaultConfig` never see the authorisation middleware. That is not merely an exposure question, it is a demonstration that the middleware is not a perimeter, and it is why D9 turns those routes off.
 
 **The price of the Phase 0 off-ramp, so it is a real option and not a gesture.** If the spike rejects huma and the plan switches to `oapi-codegen`, five things change and the reader should know that before Phase 0 rather than during it. The drift gate reverses direction, from "the spec must match the Go" to "the Go must match the spec", which is a different tool and a different failure mode. All of 5.5 is rewritten: `roleOp`, `Metadata["role"]`, `x-required-role` and the in-process role-matrix test are huma constructs, and roles would live in the document with a differently-shaped runtime check. 5.2's specifics go with it, since 422-not-400, the problem-document default and the auto-registered error responses are all "what huma emits". R12 and the entire unwrap middleware evaporate, because `oapi-codegen` hands the handler `(r, w)`, which removes the plan's self-declared highest-risk mechanic. And Section 2 loses the huma pin and the `CreateHooks` criterion while D9 loses its rationale entirely.
@@ -274,73 +273,83 @@ Every box below is either **mechanical** (a named command or test decides it) or
 
 Everything below was verified against the repository. Eleven things that looked obvious turned out to be wrong, so they are stated as numbered rules rather than as advice, and the config is given as the artefact rather than as prose.
 
-The config below is the **Phase 9 end state**. For the migration window Phase 3c substitutes a `/app/` block plus a `location /` passthrough to the backend, every temporary block marked `PHASE9-DELETE`.
+The config below is the **Phase 9 end state** of `frontend/nginx.conf.template`. For the migration window Phase 3c substitutes a `/app/` block plus a `location /` passthrough to the backend, every temporary block marked `PHASE9-DELETE`, and the file as built carries those. The template is the whole main config rather than a `conf.d` snippet, rendered by `entrypoint.sh` to `/etc/nginx/nginx.conf`, so that the stock `default.conf` and the stock `http`-level directives cannot survive beside it. Only `${WEB_HOSTNAME}` and `${WEB_RESOLVER}` are substituted, every other `$name` is nginx's own.
 
 ```nginx
-# frontend/nginx.conf.template. REPLACES /etc/nginx/conf.d/default.conf, which
-# must be deleted in the image or the stock port-80 server survives internally.
+# frontend/nginx.conf.template. What may live here: routing, TLS, headers,
+# caching and limits. Nothing that depends on a user, a role or a resource.
 
-server_tokens off;
-log_format origin '$remote_addr $request_id "$request_method $uri" $status '
-                  'ua=$upstream_status urt=$upstream_response_time';   # $uri, never $request
-access_log /dev/stdout origin;
+http {
+  server_tokens off;
+  log_format origin '$remote_addr $request_id "$request_method $uri" $status '
+                    'ua=$upstream_status urt=$upstream_response_time';   # $uri, never $request
+  access_log /dev/stdout origin;
 
-client_header_timeout 10s;  client_body_timeout 15s;  send_timeout 15s;
-keepalive_timeout 30s;      proxy_connect_timeout 3s;  proxy_read_timeout 180s;
-limit_conn_zone $binary_remote_addr zone=perip:10m;
-limit_req_zone  $binary_remote_addr zone=api:10m rate=20r/s;
-resolver 127.0.0.11 valid=10s ipv6=off;
-resolver_timeout 2s;   # timeout= is NOT a resolver parameter; nginx refuses to start
+  client_header_timeout 10s;  client_body_timeout 15s;  send_timeout 15s;
+  keepalive_timeout 30s;      proxy_connect_timeout 3s;  proxy_read_timeout 180s;
+  proxy_buffer_size 16k;      proxy_busy_buffers_size 16k;   # a redirect with three cookies plus its CSP overflows the default
+  limit_conn_zone $binary_remote_addr zone=perip:10m;
+  limit_req_zone  $binary_remote_addr zone=api:10m rate=20r/s;
+  resolver ${WEB_RESOLVER} valid=10s ipv6=off;   # 127.0.0.11 unless WEB_RESOLVER says otherwise
+  resolver_timeout 2s;   # timeout= is NOT a resolver parameter; nginx refuses to start
 
-server {
-  listen 8443 ssl;  http2 on;
-  server_name ${WEB_HOSTNAME};
-  ssl_certificate     /etc/step-webui/ssl/web.crt;
-  ssl_certificate_key /etc/step-webui/ssl/web.key;
-  ssl_protocols TLSv1.2 TLSv1.3;
-  gzip on;
-  client_max_body_size 1m;
-  limit_conn perip 32;  limit_req zone=api burst=40 nodelay;
+  server {
+    listen 8443 ssl;  http2 on;
+    server_name ${WEB_HOSTNAME};
+    root /usr/share/nginx/html;     # not implicit: the main config replaces the stock one
+    ssl_certificate     /etc/step-webui/ssl/web.crt;
+    ssl_certificate_key /etc/step-webui/ssl/web.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    gzip on;
+    absolute_redirect off;          # an absolute Location would name the internal port 8443
+    client_max_body_size 1m;
+    limit_conn perip 32;  limit_req zone=api burst=40 nodelay;
+    limit_req_status 429;  limit_conn_status 429;   # the default 503 would reach @apidown and report the backend down
 
-  location = /nginx-health { access_log off; return 200; }
-  location ~ ^/(docs|openapi\.yaml|schemas)(/|$) { return 404; }
+    location = /nginx-health { access_log off; return 200; }
+    location ~ ^/(docs|openapi\.yaml|schemas)(/|$) { return 404; }
 
-  location /assets/ {
-    include conf.d/doc-headers.conf;
-    add_header Cache-Control "public, max-age=31536000, immutable" always;
-    try_files $uri =404;
+    location /assets/ {
+      include conf.d/doc-headers.conf;
+      add_header Cache-Control "public, max-age=31536000, immutable" always;
+      try_files $uri =404;
+    }
+
+    location / {
+      include conf.d/doc-headers.conf;          # CSP with the inline hashes, XFO, nosniff, Referrer-Policy, HSTS when set
+      add_header Cache-Control "no-store" always;
+      try_files $uri /index.html;
+    }
+
+    # One flat regex, built from every entry of frontend/proxy-prefixes.json.
+    location ~ ^/(api|auth|health|ready|openapi\.json)(/|$) {
+      include conf.d/proxy-headers.conf;        # MUST be included in EVERY proxying block
+      add_header X-Content-Type-Options "nosniff" always;   # opts this block OUT of inheritance
+      proxy_hide_header X-Content-Type-Options;             # the backend sends its own, and two would reach the client
+      client_max_body_size 8m;                  # above 5.7's 5 MiB Go ceiling, so Go owns the 413
+      proxy_buffering off;
+      set $backend "step-webui:8443";
+      proxy_pass https://$backend$request_uri;  # $request_uri mandatory with a variable
+      proxy_ssl_trusted_certificate /etc/step-webui/ssl/root_ca.crt;
+      proxy_ssl_verify on;  proxy_ssl_verify_depth 2;
+      proxy_ssl_name step-webui;  proxy_ssl_server_name on;
+      proxy_ssl_protocols TLSv1.2 TLSv1.3;
+      error_page 502 503 504 = @apidown;       # nginx-generated failures only, see the note below
+    }
+
+    location @apidown {
+      default_type application/problem+json;
+      add_header Cache-Control "no-store" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      return 503 '{"type":"https://step-ca-webui/errors/upstream-unavailable",'
+                 '"title":"Service Unavailable","status":503}';
+    }
   }
-
-  location / {
-    include conf.d/doc-headers.conf;          # CSP, XFO, nosniff, Referrer-Policy, HSTS
-    add_header Cache-Control "no-store" always;
-    try_files $uri /index.html;
-  }
-
-  location ~ ^/(api|auth)/|^/(health|ready|openapi\.json)$ {
-    include conf.d/proxy-headers.conf;        # MUST be included in EVERY proxying block
-    add_header X-Content-Type-Options "nosniff" always;   # opts this block OUT of inheritance
-    client_max_body_size 8m;                  # above 5.7's 5 MiB Go ceiling, so Go owns the 413
-    proxy_buffering off;
-    set $backend "step-webui:8443";
-    proxy_pass https://$backend$request_uri;  # $request_uri mandatory with a variable
-    proxy_ssl_trusted_certificate /etc/step-webui/ssl/root_ca.crt;
-    proxy_ssl_verify on;  proxy_ssl_verify_depth 2;
-    proxy_ssl_name step-webui;  proxy_ssl_server_name on;
-    proxy_ssl_protocols TLSv1.2 TLSv1.3;
-    proxy_intercept_errors on;
-    error_page 502 503 504 = @apidown;
-  }
-
-  location @apidown {
-    default_type application/problem+json;
-    add_header Cache-Control "no-store" always;
-    return 503 '{"type":"https://step-ca-webui/errors/upstream-unavailable",'
-               '"title":"Service Unavailable","status":503}';
-  }
+  server { listen 8443 ssl default_server; ssl_reject_handshake on; return 444; }
 }
-server { listen 8443 ssl default_server; ssl_reject_handshake on; return 444; }
 ```
+
+**`proxy_intercept_errors on` is deliberately absent.** It would replace the backend's own 503 bodies, `/ready`'s detail among them, with the generic document. `error_page` alone covers what nginx itself generates: a 502 or 504 when the backend is down, unresolvable or fails TLS verification. The file also needs an explicit `root`, a 429 for both limiters, a 16k `proxy_buffer_size` with a matching `proxy_busy_buffers_size` (nginx refuses to start when the second is smaller), and `absolute_redirect off`, each of which the built template requires.
 
 `conf.d/proxy-headers.conf`, included by **every** location that proxies, legacy blocks included:
 
@@ -363,15 +372,15 @@ The fix is unchanged and is both halves: nginx sets `X-Real-IP`, clears `True-Cl
 
 **Rule 2: `proxy_set_header` inherits exactly like `add_header`, and the legacy blocks are where it bites.** Directives at one level are inherited only when that level defines none of its own. Phase 3c's legacy passthrough blocks either define a subset and silently lose the rest, or define none and inherit from a server level that defines none. Either way `POST /login`, the one route the rate limiter protects during Phases 3c to 8, would take the client's raw headers. Hence the `include` file above, in every proxying block, with no exceptions.
 
-**Rule 3: the trusted list is resolved from nginx's name, not pinned to an address.** `docker-compose.yml:151-156` declares `step-net` with no `ipam` block, so Docker allocates dynamically and no hardcoded CIDR survives a `docker network rm`. Q4's answer shapes the fix. `TRUSTED_PROXY_CIDRS` is a **list**, empty by default, and when it is empty the backend resolves `WEB_UPSTREAM_HOST` (default `step-webui-web`) through the platform's DNS at startup and trusts the resulting `/32`, so the address is discovered per boot rather than written down. When the list **is** set it is used verbatim and no resolution happens, which is the path a deployment behind an ingress or a load balancer takes without any of this being redesigned. Trusting the subnet is wrong: the bridge gateway sits inside it. `step-net` still gets `ipam.config.subnet` as an env-var default, since `172.16/12` is where corporate VPNs live and a self-hoster who collides with theirs (Q6) needs exactly one key to change, but no service carries a static address. **Adding an upstream hop later is a change to nginx, not to this list**: the mechanism is nginx's realip module (`set_real_ip_from`, `real_ip_header`, `real_ip_recursive on`), after which `$remote_addr` is the true client and the replace form stays correct. Widening `TRUSTED_PROXY_CIDRS` instead collapses the rate limiter to one bucket for the whole internet.
+**Rule 3: the trusted list is resolved from nginx's name, not pinned to an address, and resolution is a loop rather than a startup step.** `docker-compose.yml` declares `step-net` with an `ipam` subnet that is an env-var default and gives no service a static address, so no hardcoded CIDR survives a `docker network rm`. Q4's answer shapes the fix. `TRUSTED_PROXY_CIDRS` is a **list**, empty by default. When it **is** set it is used verbatim and no resolution happens, which is the path a deployment behind an ingress or a load balancer takes without any of this being redesigned. When it is empty the backend resolves `WEB_UPSTREAM_HOST` (default `step-webui-web`) through the platform's DNS and re-resolves it every five seconds (`middleware.ResolvedProxies`), trusting the resulting addresses and trusting nothing until the first lookup succeeds. **Resolving once at startup and being fatal when the name is unknown deadlocks the stack.** nginx exists only after the backend is healthy (`depends_on: service_healthy`), so the name cannot resolve while the backend boots, and a fatal there keeps the backend from ever becoming healthy. The loop also follows a recreated nginx container to its new address within one interval, with no backend restart. A failed lookup keeps the last good set, since a stopped proxy sends no traffic. The fatals are a malformed list and an empty `WEB_UPSTREAM_HOST` with no list. Trusting the subnet is wrong: the bridge gateway sits inside it. `step-net` still gets `ipam.config.subnet` as an env-var default (`STEP_NET_SUBNET`, `10.213.0.0/24`), since `172.16/12` is where corporate VPNs live and a self-hoster who collides with theirs (Q6) needs exactly one key to change, but no service carries a static address. **Adding an upstream hop later is a change to nginx, not to this list**: the mechanism is nginx's realip module (`set_real_ip_from`, `real_ip_header`, `real_ip_recursive on`), after which `$remote_addr` is the true client and the replace form stays correct. Widening `TRUSTED_PROXY_CIDRS` instead collapses the rate limiter to one bucket for the whole internet.
 
-**Rule 4: `TRUST_PROXY=true` without `TRUSTED_PROXY_CIDRS` is a crash, not a degradation.** `main.go:140-147` `log.Fatalf`s, and `ParseTrustedProxies` errors on an empty list (`realip.go:32-34`). Neither key reaches the container today (`docker-compose.yml:76-109`), so setting them in `.env` alone is a silent no-op. Both go in the compose environment block and `.env.example`. Note `compose.e2e-oidc.yml:62-63` currently defaults `TRUST_PROXY` to false and would silently flip it off for that scenario.
+**Rule 4: `TRUST_PROXY=true` with a list nobody can parse is a crash, and an empty list that has a name to resolve is not.** `main.go` `log.Fatal`s on a malformed `TRUSTED_PROXY_CIDRS` entry (`ParseTrustedProxies`, `realip.go`) and on an empty `WEB_UPSTREAM_HOST` with no list. An empty list alone is not fatal (rule 3), and while the name does not resolve the backend logs `trusted proxy name does not resolve yet: forwarding headers are ignored until it does`. Neither key reaches the container unless compose passes it, so setting them in `.env` alone is a silent no-op: both are in the `step-webui` environment block and `.env.example`. `compose.e2e-oidc.yml` no longer sets either, so it inherits the base default of `TRUST_PROXY=true` rather than silently flipping it off for that scenario.
 
 **Rule 5: nginx gets its own certificate, governed by its own mode key.** Four independent reasons a shared one cannot work. The root CA is not in `step-webui-ssl` (it is at `/home/step/certs/root_ca.crt` on `step-ca-data`, `config/config.go:93`). The compose default `UI_TLS_MODE` is `self-signed` (`docker-compose.yml:95`), which chains to nothing and 502s every request under `proxy_ssl_verify on`. One certificate cannot carry both the public browser name and `step-webui`, because `issueUICert` requests exactly one SAN (`stepca/issue.go:58,69-70`) and `IssueRequest` has no SAN list. And sharing the file shares a private key between the Go binary and a C web server with a far larger attack surface.
 
-So: **`UI_TLS_MODE` keeps its current three-way meaning for the backend leaf** (SAN `step-webui`, internal hop only), unchanged, so E2E-BOOT-01 to -09 stay valid. A new **`WEB_TLS_MODE`** with values `stepca` (default) and `provided` governs `web.crt`/`web.key`. Collapsing both under one key produces two unworkable states: `provided` writes no web leaf and nginx cannot start (`tlsbootstrap.go:208-209` is a bare `return nil`), and `self-signed` writes a backend leaf `proxy_ssl_verify` rejects. `WEB_HOSTNAME` has **no hostname fallback** and an empty value is `log.Fatalf`, because falling through to `os.Hostname()` writes a `web.crt` whose only SAN is a container id, which survives on the volume and is rejected by every browser on the next `make up` with no clue where it came from.
+So: **`UI_TLS_MODE` keeps its current three-way meaning for the backend leaf** (SAN `step-webui`, internal hop only), unchanged, so E2E-BOOT-01 to -09 stay valid. A new **`WEB_TLS_MODE`** with values `stepca` (default) and `provided` governs `web.crt`/`web.key`. Collapsing both under one key produces two unworkable states: `provided` writes no web leaf and nginx cannot start (`tlsbootstrap.go:208-209` is a bare `return nil`), and `self-signed` writes a backend leaf `proxy_ssl_verify` rejects. `WEB_HOSTNAME` has **no hostname fallback**, because falling through to `os.Hostname()` writes a `web.crt` whose only SAN is a container id, which survives on the volume and is rejected by every browser on the next `make up` with no clue where it came from. The compose default is empty rather than `${WEB_HOSTNAME:?}`, since `:?` also breaks `down`, `logs` and `collect.sh`, which need no hostname. An empty value instead makes the web container exit at start with a message naming the key, and makes the backend do the same under `WEB_TLS_MODE=stepca`.
 
-The Go container also **copies `cfg.RootCert` into the `step-webui-web-ssl` volume as `root_ca.crt`** at the end of the bootstrap. nginx therefore mounts exactly one volume, `step-webui-web-ssl:ro`, carrying `web.crt`, `web.key` and `root_ca.crt`, and never gets read access to `step-webui-ssl` (which holds the backend's `server.key`, the credential for impersonating the backend) or to the CA's `/home/step`. The fingerprint scenario relocates the root CA on `step-ca-data`, which the copy step is upstream of, so `compose.e2e-fingerprint.yml` needs no volume edit.
+The Go container also **copies `cfg.RootCert` into the `step-webui-web-ssl` volume as `root_ca.crt`** at the end of the bootstrap, and issues the web leaf afresh on every backend boot under `WEB_TLS_MODE=stepca`. nginx therefore mounts exactly one volume, `step-webui-web-ssl:ro`, carrying `web.crt`, `web.key` and `root_ca.crt`, and never gets read access to `step-webui-ssl` (which holds the backend's `server.key`, the credential for impersonating the backend) or to the CA's `/home/step`. The fingerprint scenario relocates the root CA on `step-ca-data`, which the copy step is upstream of, so `compose.e2e-fingerprint.yml` needs no volume edit. Under `WEB_TLS_MODE=provided` nothing copies anything, so the operator mounts `root_ca.crt` beside `web.crt` and `web.key`, and the entrypoint exits naming whichever of the three is missing.
 
 **Rule 6: the self-signed fallback and `proxy_ssl_verify on` are incompatible, and the stack must say so rather than 502 in silence.** `ensureUICert` falls back to self-signed after 30 retries, on context cancel and on a nil CA client (`tlsbootstrap.go:215-245`). That fallback exists to keep the UI up when the CA is down; under this design it guarantees the opposite, with both healthchecks green and every API call 502ing. Three changes: `ensureUICert` writes a `.fallback` marker whenever it self-signs in `stepca` mode, `/ready` reports it and the compose healthcheck treats it as unhealthy so `depends_on` holds nginx off, and `startUICertRenewer` runs whenever the mode is `stepca`, constructing its CA client lazily per iteration rather than requiring a non-nil client at boot (`main.go:436`), so a CA that comes up late is recovered from without a restart. For the **web** leaf specifically the fallback is a hard failure rather than a self-signed cert, because nothing downstream can work and a fast crash-loop is diagnosable where a silent 502 wall is not.
 
@@ -379,13 +388,13 @@ The Go container also **copies `cfg.RootCert` into the `step-webui-web-ssl` volu
 
 **Rule 8: `add_header` needs `always`, any `add_header` in a block drops every inherited header, and the proxy block therefore defines one deliberately.** Without `always` a header is emitted only on 2xx and 3xx, so a CSP set in `location /` is absent from every 4xx and 5xx. And because inheritance is all-or-nothing per level, the proxy block currently inherits nothing only because it defines nothing: the day someone adds a single server-level `add_header`, the document CSP and HSTS get stamped onto every API response and browsers enforce the intersection with Go's `default-src 'none'`. The `X-Content-Type-Options` line in the proxy block exists to opt out of that, and says so in a comment.
 
-**Rule 9: nginx waits for its certificate instead of dying on it, and the reload lives in its own container.** `ssl_certificate` is fatal at config load, and `depends_on` does not survive a host reboot, where the daemon restarts containers in no guaranteed order. `frontend/entrypoint.sh` polls for `web.crt` and `web.key` for up to 120 seconds, logging the paths, then starts nginx against a bundled ephemeral certificate serving a fixed 503 naming the missing file. **This applies to `WEB_TLS_MODE=stepca` only**, where the file is expected to arrive. Under `provided` the entrypoint does not poll: both files must exist at start and their absence is an immediate non-zero exit naming both paths. The same entrypoint runs the reload watcher: sha256 the certificate every 60 seconds, and on change `nginx -t && nginx -s reload`, logging both outcomes and re-arming on failure. **It cannot live in the Go container**: `nginx -s reload` signals a process in another container, so a Go-side watcher would need the Docker socket, which is host root held by the container that runs an allowlisted shell console. That is a prohibition, not a preference. Separately, `tlsbootstrap.go`'s two `os.WriteFile` calls become write-to-`.tmp`-then-`os.Rename`, which removes the torn-PEM race at the source for both readers.
+**Rule 9: nginx waits for its certificate instead of dying on it, and the reload lives in its own container.** `ssl_certificate` is fatal at config load, and `depends_on` does not survive a host reboot, where the daemon restarts containers in no guaranteed order. `frontend/entrypoint.sh` polls for `web.crt`, `web.key` and `root_ca.crt` for up to `WEB_CERT_WAIT_SECONDS` (120), logging the paths, then starts nginx against a bundled ephemeral certificate serving a fixed 503 naming the missing file. **This applies to `WEB_TLS_MODE=stepca` only**, where the files are expected to arrive. Under `provided` the entrypoint does not poll: all three must exist at start and the absence of any is an immediate non-zero exit naming each missing path. The same entrypoint runs the reload watcher in both modes: every `WEB_RELOAD_INTERVAL` (60) seconds it hashes `web.crt` and `web.key` together, and on change runs `nginx -t && nginx -s reload`, logging both outcomes and re-arming on failure. In the waiting state the same tick swaps in the real config once the files arrive. The entrypoint renders the config with its own `envsubst` call and stays nginx's parent, which is the reason it replaces the stock entrypoint rather than adding a `/docker-entrypoint.d` script: a parent that stays can forward `SIGTERM` so nginx drains, and can run the watcher beside it. **It cannot live in the Go container**: `nginx -s reload` signals a process in another container, so a Go-side watcher would need the Docker socket, which is host root held by the container that runs an allowlisted shell console. That is a prohibition, not a preference. Separately, `tlsbootstrap.go`'s two `os.WriteFile` calls become write-to-`.tmp`-then-`os.Rename`, which removes the torn-PEM race at the source for both readers.
 
 **Rule 10: three absolute URLs must name nginx's origin, and one of them is not the variable an earlier draft named.** `OIDC_REDIRECT_URL` (`config/config.go:116`, used at `handlers/handler.go:90`) is what the OIDC flow registers, **not** `PUBLIC_BASE_URL`, which `resetLink` uses for password-reset emails (`handlers/password_reset.go:112,260-271`) and which refuses to send when unset. Both, plus `WEB_HOSTNAME`, must name the published origin, and all three go in the compose environment block and `.env.example`. Note the emailed reset link targets `/reset-password?token=...`, which is now an SPA route resolved by `try_files`, so an e2e must assert the path `resetLink` emits actually resolves.
 
 **Rule 11: two long operations exceed nginx's default timeouts.** `writePGDump` runs under a two-minute context (`handlers/backup.go:179`) and `buildBackupBundle` tars three directories unbounded, against a default `proxy_read_timeout` of 60s. The invariant, which any new long operation moves: **`proxy_read_timeout` exceeds the longest backend operation.** 180s covers today. `proxy_buffering off` on the proxy block stops nginx spooling a whole backup bundle to disk before the first byte reaches the browser. `/admin/integrity`, whose cost Phase 6 measures, joins this class if it walks every certificate.
 
-**Who owns the security headers.** nginx owns the document headers because Go serves no document. Three specific corrections rather than a principle. **Go stops emitting `Strict-Transport-Security` entirely**: it emits `max-age=0` when `EnableHSTS` is false (`middleware/middleware.go:47`), the compose default, and on one origin that API response **clears** the policy nginx set on the document. nginx's HSTS stays env-gated through an `/etc/nginx/templates/` substitution rather than being hardcoded, because a two-year `max-age` on a name whose certificate chains to a private root is a trap with no downgrade path. **Go's CSP is scoped off `/api/v1`.** And `server_tokens off` removes the version but not the `Server` header, which stock `nginx:alpine` cannot do without a third-party module, so the acceptance criterion says "no version disclosed" rather than "no header".
+**Who owns the security headers.** nginx owns the document headers because Go serves no document. Three specific corrections rather than a principle. **Go stops emitting `Strict-Transport-Security` entirely**: it emits `max-age=0` when `EnableHSTS` is false (`middleware/middleware.go:47`), the compose default, and on one origin that API response **clears** the policy nginx set on the document. nginx's HSTS stays env-gated through `WEB_HSTS_MAX_AGE`, which `entrypoint.sh` writes into `conf.d/hsts.conf` (empty when unset) rather than being hardcoded, because a two-year `max-age` on a name whose certificate chains to a private root is a trap with no downgrade path. **Go's CSP is scoped off `/api/v1`.** And `server_tokens off` removes the version but not the `Server` header, which stock `nginx:alpine` cannot do without a third-party module, so the acceptance criterion says "no version disclosed" rather than "no header".
 
 What Go keeps on JSON responses is the subset that means anything there: `nosniff`, `Cache-Control: no-store`, `X-Frame-Options`, `Referrer-Policy`, and a minimal `default-src 'none'; frame-ancestors 'none'`. `form-action`, `base-uri`, `style-src`, `font-src` and `img-src` are inert on `application/json`.
 
@@ -394,15 +403,15 @@ What Go keeps on JSON responses is the subset that means anything there: `nosnif
 **Two images.** `openapi.json` is committed, so the frontend image reads it from the build context and needs no Go stage.
 
 ```
-frontend/Dockerfile   node:22-alpine -> npm ci, generate the client, build the SPA
-                      nginx:alpine   -> COPY dist + nginx.conf, no Node at runtime
+frontend/Dockerfile   node:24-alpine -> npm ci, generate the client, build the SPA
+                      nginx:1.29-alpine -> the rendered config, the entrypoint and the bundle, no Node at runtime
 backend/Dockerfile    golang-alpine  -> go build
                       alpine         -> the binary plus the committed openapi.json
 ```
 
 `nginx:alpine` is **pinned to a minor or a digest**, not a floating tag, and `frontend/Dockerfile` joins dependabot's docker ecosystem. The frontend Dockerfile **copies narrowly and in dependency order** (`frontend/package*.json` and `clients/ts/package*.json`, then `npm ci`, then `backend/openapi/openapi.json`, then `clients/ts/`, then `frontend/`): a bare `COPY . .` at a root context hashes the whole repository, so every backend commit would trigger a full `npm ci` and Vite build, which is exactly the cost 9.1 claims the split avoids.
 
-The backend image keeps `context: ./backend`. The frontend image's context is the repository root, hence `.dockerignore`, covering **five** `node_modules` trees after the split:
+The backend image keeps `context: ./backend`. The frontend image's context is the repository root, hence `.dockerignore`, covering **four** `node_modules` trees (`frontend/`, `clients/ts/`, `test/e2e/`, and the repository root, where `lint-meta.yml`'s style job installs its linters):
 
 ```
 .git
@@ -460,6 +469,8 @@ See D12 for the eight architecture decisions this stack does not make on its own
 node -p "require('@andremmfaria/step-ca-webui-client/package.json').version"   # must contain the short sha
 ```
 
+The package exposes four subpaths and no others: `.` for the SDK functions and types, `./client` for the client instance that `src/api/client.ts` configures, `./react-query` for the generated query options and query keys, and `./package.json` for the provenance command above. The generator's index re-exports neither the client instance nor the TanStack Query layer, so a subpath missing from the `exports` map is an `ERR_PACKAGE_PATH_NOT_EXPORTED` for the first call site that needs it.
+
 That assertion is the point of the whole design. Without it the frontend job can install a stale client from an npm cache, a previously published version, or a lockfile a developer edited, and go green against a contract the Go code does not implement. Keeping the client out of the lockfile also removes the content-addressed-integrity question that would otherwise churn the lockfile on every contract change.
 
 **Publication.** Not on every merge. Every push and pull request produces the tarball as a workflow artifact. **A `v*` tag additionally publishes to GitHub Packages and attaches the tarball to the release.** Both in-repo consumers, `frontend` and eventually `test/e2e`, resolve the artifact from the current run and never the registry. Publishing per merge would add the republish-collision failure class, the R3 token trap, and a registry version that a developer could install and thereby reproduce exactly the stale-client bug the design exists to prevent.
@@ -481,48 +492,26 @@ That assertion is the point of the whole design. Without it the frontend job can
 
 **Boundary on mutations.** Today's `POST /admin/users` switches on a form field with six cases. It is split into five operations. `POST /profile` splits into three and `POST /import` into two (Section 6).
 
-### D11. `backend/` is renamed to `backend/`, and the SPA lives in `frontend/`
+### D11. The layout is fixed: `backend/` holds the Go code and `frontend/` holds the SPA
 
-**Decision.** Fixed by the repository owner: the Go directory becomes `backend/` and the new SPA directory is `frontend/`. Neither name is up for revision. The rename lands **directly on `main` as its own pull request, before any API work starts.** Every phase lands on `main` (Section 8), and a tree-wide rename that is not first in that sequence turns every subsequent phase pull request into a rename-versus-content conflict across the whole repository.
+**Decision.** Fixed by the repository owner: the Go code lives in `backend/` and the SPA lives in `frontend/`. Neither name is up for revision and no phase moves either directory.
 
-**What the rename does not touch.** The Go module is `module step-webui` (`go.mod:1`) and every internal import is `step-webui/handlers` and similar. The module path is independent of the directory and is left alone. The reason is not "no benefit": the binary, the compose service name, the session cookie name and the image name are all `step-webui`, the compose service name and the cookie name are load-bearing (`BASE_URL=https://step-webui:8443` and `docker compose exec step-webui` throughout the e2e harness), and neither can be renamed cheaply. Renaming the module alone would trade one inconsistency for a worse one.
+**The module path and the names built on it.** The Go module is `module step-webui` (`backend/go.mod:1`) and every internal import is `step-webui/handlers` and similar. The module path is independent of the directory name. The binary, the compose service name, the session cookie name and the image name are all `step-webui`, and the compose service name and the cookie name are load-bearing (`BASE_URL=https://step-webui:8443` and `docker compose exec step-webui` throughout the e2e harness), so none of them is renamed to match a directory.
 
-**The compose service names also stay**, for the same reason. The Go service remains `step-webui` and the new nginx service is `step-webui-web`. Renaming the Go service to match its new directory would churn every `docker compose exec step-webui` and every `BASE_URL` in the harness in the same commit as a tree-wide path rename, which is exactly the kind of compound diff this decision exists to avoid.
-
-**Blast radius, all in the same commit.** 52 occurrences across 15 files:
-
-| File | What breaks |
-|---|---|
-| `.github/workflows/ci.yml` | `working-directory` on both jobs, `go-version-file`, `cache-dependency-path`, the coverage artifact path, golangci-lint's `working-directory` |
-| `.github/workflows/codeql.yml` | `go-version-file`, `cache-dependency-path`, `cd backend && go build ./...`. Goes red on the rename commit if missed |
-| `.github/workflows/e2e.yml` | `context:` and `file:` on the application build (the harness build at `context: ./test/e2e` is unaffected) |
-| `.github/workflows/docker-build.yml` | same context and file pins |
-| `.github/workflows/security.yml` | four distinct sites: gosec's `./backend/...` plus its setup-go pair, govulncheck's `working-directory` plus its setup-go pair, and `trivy-image`'s `docker build -f backend/Dockerfile backend`, which is a **Docker context** and therefore also needs Phase 3c's context widening |
-| `.github/workflows/lint-meta.yml` | the `style` job's stylelint, eslint and djlint globs, **and** the `hadolint` job's `dockerfile:` path |
-| `.github/dependabot.yml` | the `gomod` and `docker` directories |
-| `docker-compose.yml` | `context: ./backend` |
-| `Makefile` | `GO_DIR := backend` at line 7 |
-| `.gitignore` | `backend/step-webui`, `*.exe`, `ssl/`, `vendor/` |
-| `.pre-commit-config.yaml` | five `--config` and `files` sites plus the golangci config path |
-| `test/e2e/helpers/routes.ts` | reads `backend/main.go` by path and **throws if it derives zero routes**, so it fails loudly |
-| `test/e2e/specs/config/static-01.api.spec.ts:82` | `path.join(REPO_ROOT, "backend", "static")`, a written passing spec |
-| `test/e2e/eslint.config.js` | comments only |
-| `plans/*.md`, `README.md` | prose, can follow |
-
-Also confirm `scripts/coverage-gate.sh` holds no hardcoded path. **`dependabot.yml` is read from the default branch only**, so its path change takes effect only after merge, and open Dependabot pull requests should be closed before the rename lands.
+**The compose service names are fixed too.** The Go service is `step-webui` and the new nginx service is `step-webui-web`. Renaming the Go service to match its directory would churn every `docker compose exec step-webui` and every `BASE_URL` in the harness for no benefit.
 
 ### D12. Frontend architecture decisions, made once
 
 D7 picks dependencies. It does not make these eight decisions, and without them five phases will answer each of them differently.
 
-1. **Forms.** React Hook Form plus zod for client-side shape. The server remains the only authority on rules, and generated types give request shapes, never validators.
+1. **Forms.** React Hook Form plus zod for client-side shape. The server remains the only authority on rules, and generated types give request shapes, never validators. **zod v4 probes for `eval` with `new Function` the first time a schema is defined**, which `script-src 'self'` reports as a CSP violation even though zod catches the throw. `frontend/src/zodConfig.ts` calls `z.config({ jitless: true })` and is the first import in `main.tsx`, ahead of any module that defines a schema, so the probe never runs. E2E-CSP-01 is what fails if that ordering is lost.
 2. **Toast.** The flash mechanism is deleted and 5.2 promises client-side toast. Most toast libraries inject a runtime `<style>` tag, which `style-src 'self'` blocks. **Hand-roll a small toast context against the ported CSS.** Discovering this in Phase 4 is the failure mode.
 3. **Theme, and the flash of wrong theme.** `base.html:4` sets `data-theme` server-side from the session. In an SPA the theme is unknown until the session query resolves, and the usual inline bootstrap script is illegal under this CSP. Decision: a small **hashed** `<head>` script reads `localStorage`, applies `data-theme` before first paint, and reconciles against `GET /api/v1/session`. `auto` resolves via `prefers-color-scheme`, which is an improvement, since the server currently degrades `auto` to dark.
 4. **Router versus data.** No React Router loaders. All server data flows through TanStack Query inside components. The router routes.
 5. **Auth gate.** `<AuthGate>` renders a splash until the boot session query settles and branches on the `state` discriminator (5.3), never on a 401.
 6. **Boundaries and states.** One root error boundary plus one per layout. Three shared primitives, `<Skeleton>`, `<EmptyState>`, `<ErrorState>`, with the rule that no route renders a bare spinner and no list renders nothing.
 7. **Code splitting.** Admin routes are a lazy chunk. The rest ships in the main bundle. `manualChunks` is not hand-tuned until a measured problem exists.
-8. **Route structure.** `routes/` does **not** mirror templates one for one. Two layout routes (`AppLayout`, `AdminLayout`) with nested children, an auth layout shared by login, forgot and reset, `/` and `/dashboard` as one component, and nav items in a single `navigation.ts` carrying `requiredRole`, filtered by the role ordering from `GET /api/v1/config`. 33 templates is roughly 28 routes and two layouts.
+8. **Route structure.** `routes/` does **not** mirror templates one for one. Two layout routes (`AppLayout`, `AdminLayout`) with nested children, an auth layout shared by login, forgot and reset, `/` and `/dashboard` as one component, and nav items in a single `navigation.ts` carrying `requiredRole`, filtered by the role ordering from `GET /api/v1/config`. 33 templates is roughly 28 routes and two layouts. The routes keep the template names, so the ACME pages are `/le`, `/le/issue`, `/le/settings` and `/le/logs` with `page-acme*` test ids, and the `acme` rename waits for Phase 7.
 
 ---
 
@@ -530,7 +519,7 @@ D7 picks dependencies. It does not make these eight decisions, and without them 
 
 ### 4.1 Repository layout
 
-Post-rename (D11).
+Paths follow D11.
 
 ```
 step-ca-webui/
@@ -543,8 +532,10 @@ step-ca-webui/
 │   │   └── main.tsx
 │   ├── index.html
 │   ├── vite.config.ts
-│   ├── nginx.conf                   the origin: static, SPA fallback, CSP, proxy to backend (D5)
-│   ├── Dockerfile                   node build stage -> nginx:alpine runtime
+│   ├── proxy-prefixes.json          the proxied path prefixes, read by nginx's regex and Vite's dev proxy (4.4)
+│   ├── nginx.conf.template          the origin: static, SPA fallback, CSP, proxy to backend (D5)
+│   ├── entrypoint.sh                renders the config, waits for the certificate, runs the reload watcher
+│   ├── Dockerfile                   node build stage -> nginx:1.29-alpine runtime
 │   └── package.json                 does NOT declare the client package (D8)
 ├── backend/
 │   ├── api/                         huma operation registration, split by domain
@@ -573,9 +564,9 @@ browser ──TLS──> step-webui-web (nginx)  ──TLS──> step-webui (Go
                    └─ proxy: /api /auth /health /ready /openapi.json
 ```
 
-Volumes: the six existing ones plus a new `step-webui-web-ssl`, read-write to `step-webui` and read-only to `step-webui-web`, carrying `web.crt`, `web.key` and `root_ca.crt`. `step-webui-ssl` is not mounted into nginx at all (D5 rule 5). Compose gains `step-webui-web depends_on: step-webui: condition: service_healthy`, and the healthcheck inside the Go container stays where it is, corrected to `curl -fsk https://localhost:8443/health` (it currently curls `/login` without `-f`), with a second, simpler one on nginx.
+Volumes: the six existing ones plus a new `step-webui-web-ssl`, read-write to `step-webui` and read-only to `step-webui-web`, carrying `web.crt`, `web.key` and `root_ca.crt`. `step-webui-ssl` is not mounted into nginx at all (D5 rule 5). Compose gains `step-webui-web depends_on: step-webui: condition: service_healthy`, and the healthcheck inside the Go container stays where it is, corrected to `curl -fsk https://localhost:8443/health && test ! -e /opt/step-webui/ssl/.fallback` (it used to curl `/login` without `-f`, and the `.fallback` marker means the backend leaf is self-signed and nginx cannot verify it), with the nginx image's own `HEALTHCHECK` on `/nginx-health` as the second.
 
-The frontend image's build context is the repository root, which requires `.dockerignore` in the same commit or all five `node_modules` trees land in the context and destroy caching. The backend image's context stays `./backend`.
+The frontend image's build context is the repository root, which requires `.dockerignore` in the same commit or all four `node_modules` trees land in the context and destroy caching. The backend image's context stays `./backend`.
 
 ### 4.3 Request lifecycle
 
@@ -603,9 +594,9 @@ Two consequences of nginx owning the first hop. The SPA fallback is `try_files` 
 
 ### 4.4 Development loop
 
-`make dev` brings postgres, step-ca **and the Go container** up under compose with `--wait` (a `stepca` bootstrap can take a minute, and Vite starting immediately means the first `getSession` hits nothing), and runs only Vite on the host. The Go container still issues `web.crt` in this mode even though nothing reads it, which is harmless in itself and is the reason `WEB_HOSTNAME` must be required rather than falling back to `os.Hostname()`: otherwise a `make dev` run writes a certificate whose only SAN is a container id, it survives on the volume, and the next `make up` serves it to a browser that rejects it with no clue where it came from. `step-webui-web` is not started in this mode: Vite replaces nginx as the origin, using the same path-routing rules, which is what keeps the dev loop honest. Running the Go binary on the host would need postgres and step-ca reachable from the host and the secrets files readable there, which is a mode the repository does not support and this plan is not going to build.
+`make dev` brings postgres, step-ca **and the Go container** up under compose with `--wait` (a `stepca` bootstrap can take a minute, and Vite starting immediately means the first `getSession` hits nothing), and runs only Vite on the host. The backend publishes no host port, so Vite reaches it at its container address on `step-network` (`DEV_BACKEND_URL`), which needs a host that routes to bridge networks, meaning Linux and not Docker Desktop. Dev is plain HTTP on `localhost`, so `make dev` starts the backend with `SESSION_SECURE=false`. The Go container still issues `web.crt` in this mode even though nothing reads it, which is harmless in itself and is the reason `WEB_HOSTNAME` must be required rather than falling back to `os.Hostname()`: otherwise a `make dev` run writes a certificate whose only SAN is a container id, it survives on the volume, and the next `make up` serves it to a browser that rejects it with no clue where it came from. `step-webui-web` is not started in this mode: Vite replaces nginx as the origin, using the same path-routing rules, which is what keeps the dev loop honest. Running the Go binary on the host would need postgres and step-ca reachable from the host and the secrets files readable there, which is a mode the repository does not support and this plan is not going to build.
 
-Vite proxies the same five path prefixes nginx proxies, to the same backend, with `secure: false`. **The proxy rules in `vite.config.ts` and the `location` blocks in `nginx.conf` are the same routing table written twice**, and a divergence between them is a bug that only shows up in one environment. Keep the prefix list in one place in the repository, generate or lint both from it, and say so in the Phase 3b PR.
+Vite proxies the same five path prefixes nginx proxies, to the same backend, with `secure: false`. **The proxy rules in `vite.config.ts` and the `location` blocks in `nginx.conf` are the same routing table written twice**, and a divergence between them is a bug that only shows up in one environment. The prefix list lives in one place, `frontend/proxy-prefixes.json`. Vite's dev proxy imports it, nginx carries one flat regex location written from it, and `make proxy-routes-check` fails when the two disagree.
 
 **The claim that Vite "keeps the dev loop honest" is only half true, and the half it misses is the expensive one.** It keeps origin-sameness honest, which is what cookies and CSRF depend on. It exercises nothing else nginx does. The full divergence list: no CSP at all, so `style-src 'self'` with no `unsafe-inline`, the single hardest constraint in D7 and D12, is never tested where the code is written; no `X-Forwarded-For`, so with `TRUST_PROXY=true` and a `/32` list every dev request shares the gateway address and five bad passwords lock the developer out in a way that reads as a login bug; no cache headers; no `client_max_body_size`; different `try_files` precedence on encoded paths; a different `Host`; no HTTP/2; no compression. **A dev loop that never exercises the origin is fine for component work and unacceptable for anything touching headers, CSP, routing prefixes, caching or auth transport**, which is precisely the set this migration introduces.
 
@@ -616,7 +607,7 @@ Same origin from the browser's point of view, so cookies and CSRF behave as in p
 - Dev is HTTP, so TLS is not exercised and `Secure` cookies work only because browsers treat `http://localhost` as a secure context. `__Host-` prefixing is therefore off in dev (D6), and cookies are not scoped by port, so a session set against the compose UI port is also sent to `:5173`, which produces confusing state if both are used in one browser profile.
 - **OIDC does not traverse the Vite proxy.** The issuer redirects the browser to the registered redirect URI, which comes from `OIDC_REDIRECT_URL`, **not** `PUBLIC_BASE_URL` (D5 rule 10). Without `OIDC_REDIRECT_URL=http://localhost:5173/auth/oidc/callback` in the dev environment and a matching redirect URI registered at the issuer, the callback lands on the backend origin and is served the placeholder.
 
-Makefile targets, following the existing file's conventions (`GO_DIR`, `##` help comments), with two new directory variables `WEB_DIR := frontend` and `CLIENT_DIR := clients/ts` (and `GO_DIR` becomes `backend`). None of these names collide with existing targets.
+Makefile targets, following the existing file's conventions (`GO_DIR`, `##` help comments), with two new directory variables `WEB_DIR := frontend` and `CLIENT_DIR := clients/ts` beside the existing `GO_DIR := backend`. None of these names collide with existing targets.
 
 ```makefile
 openapi:   ## Regenerate openapi.json from Go source
@@ -628,14 +619,14 @@ client:    ## Generate, build and pack the TS client, install into the React app
 	cd $(WEB_DIR) && npm ci && npm install --no-save ../$(CLIENT_DIR)/dist/client.tgz
 
 dev:       ## Compose backend up (with --wait), Vite on host with hot reload
-	$(COMPOSE) up -d --wait postgres step-ca step-webui
-	cd $(WEB_DIR) && npm run dev
+	SESSION_SECURE=$${SESSION_SECURE:-false} $(COMPOSE) up -d --wait postgres step-ca step-webui
+	cd $(WEB_DIR) && DEV_BACKEND_URL="https://<step-webui's address on step-network>:8443" npm run dev
 
 clean:     ## also removes the generated client and the SPA bundle
 	rm -rf $(CLIENT_DIR)/src $(CLIENT_DIR)/dist $(WEB_DIR)/dist
 ```
 
-Plus `frontend-install`, `frontend-build`, `frontend-lint`, `frontend-typecheck`, `frontend-test`, and `hooks` (registers 7.2's merge driver). The **rename of the packed tarball to the fixed path `clients/ts/dist/client.tgz` is load-bearing**, because `npm pack` emits a version-stamped filename and both CI and local development resolve the fixed path (D8).
+Plus `frontend-install`, `frontend-build`, `frontend-lint`, `frontend-typecheck`, `frontend-test`, and `hooks` (registers 7.2's merge driver). The origin adds `preview`, `up-backend`, `up-web`, `logs-ui`, `logs-web`, `nginx-test`, `web-reload`, `nginx-lint` and the three checks the `origin` CI job runs (`proxy-routes-check`, `config-keys-check`, `backend-port-check`). The **rename of the packed tarball to the fixed path `clients/ts/dist/client.tgz` is load-bearing**, because `npm pack` emits a version-stamped filename and both CI and local development resolve the fixed path (D8).
 
 **`make dev` never passes `--build`.** With it, every invocation triggers the full frontend image build, Node and SPA stages included, just to start a backend whose SPA nobody is about to load. Without it, a changed Go source silently serves a stale image. The rule: `make up` builds, `make dev` starts what is already built. Say so in the target's help text.
 
@@ -816,7 +807,7 @@ Without these, five phases produce five answers. Each is one module.
 
 | Concern | Convention |
 |---|---|
-| Invalidation | `src/api/invalidation.ts` owns a `tag → queryKey[]` map derived from the spec's `tags`. Every mutation invalidates by tag (`invalidate('certificates','dashboard')`). No call site assembles a query key by hand. Aggregates make this mandatory: every certificate mutation also invalidates `dashboard`, and that fact lives in one file. |
+| Invalidation | `src/api/invalidation.ts` owns a `tag → operationId[]` map derived from the spec's `tags` through a Vite virtual module (`virtual:operation-tags`, `frontend/vite/operationTags.ts`), because the generator puts the `operationId` in each query key and no tag. A tag resolves to a predicate over those ids. Every mutation invalidates by tag (`invalidate('certificates','dashboard')`). No call site assembles a query key by hand. Aggregates make this mandatory: every certificate mutation also invalidates `dashboard`, and that fact lives in one file. |
 | QueryClient defaults | One client with `retry: (n, e) => n < 2 && !isClientError(e)`, `refetchOnWindowFocus: false` (5.3), `staleTime: 30_000`, `throwOnError: false` so query errors are values and error boundaries only catch render crashes. `getSession` overrides to `retry: (n, e) => n < 3 && isNetworkOrServerError(e)`, never on a 4xx (5.10). |
 | List and table state | `useListParams()` reads `page`, `pageSize`, `q`, `sort`, `order` from the URL search string as the single source of truth, debounces `q` at 300 ms, and every list query uses `placeholderData: keepPreviousData` so paging does not flash empty. Table state is deep-linkable for the same reason routes are. |
 | Server field errors | `problemToFieldErrors(problem)` maps `errors[].location` (`body.name`) to form field paths and is the only path from a `422` to a form. |
@@ -934,15 +925,15 @@ Every route in `main.go:222-325` and what replaces it.
 | `GET /health` | public | `GET /health`, unversioned, not mirrored | `HEALTHCHECK` depends on it |
 | `GET /ready` | public | `GET /ready`, unversioned, not mirrored | compose gates depend on it |
 | `GET /login` | public | deleted | SPA route |
-| `POST /login` | public | `POST /api/v1/session` and `POST /api/v1/session/mfa` | split, 5.3 |
+| `POST /login` | public | `POST /api/v1/session` and `POST /api/v1/session/mfa` | split, 5.3. **Implemented in Phase 3a** (`createSession`, `submitMfa`), additive to the contract and so with no `docs/contract-changes.md` row |
 | `GET /forgot-password` | public | deleted | SPA route |
-| `POST /forgot-password` | public | `POST /api/v1/password-reset/requests` | always `202`, no state leak |
-| `GET /reset-password` | public | `POST /api/v1/password-reset/validate` body `{token}` | **not** a path segment: a token in a path lands in `instance` of every problem document, in route-templated metrics and in trace labels. The SPA strips the token from the address bar with `history.replaceState` after reading it. Validates without consuming, as `handlers/password_reset.go:139-148` does today, so link scanners do not burn tokens |
-| `POST /reset-password` | public | `POST /api/v1/password-reset/confirm` | |
+| `POST /forgot-password` | public | `POST /api/v1/password-reset/requests` | always `202`, no state leak. **Assigned to Phase 8, not implemented** |
+| `GET /reset-password` | public | `POST /api/v1/password-reset/validate` body `{token}` | **not** a path segment: a token in a path lands in `instance` of every problem document, in route-templated metrics and in trace labels. The SPA strips the token from the address bar with `history.replaceState` after reading it. Validates without consuming, as `handlers/password_reset.go:139-148` does today, so link scanners do not burn tokens. **Assigned to Phase 8, not implemented** |
+| `POST /reset-password` | public | `POST /api/v1/password-reset/confirm` | **Assigned to Phase 8, not implemented** |
 | `GET /logout`, `POST /logout` | public | `DELETE /api/v1/session` | the state-changing GET disappears |
 | `GET /auth/oidc/login` | public | unchanged, outside the spec | browser redirect |
 | `GET /auth/oidc/callback` | public | unchanged, outside the spec | redirect to `/`, or `/login?error=<code>` |
-| n/a | public | `GET /api/v1/config` | **new.** `{oidcEnabled, oidcButtonLabel, acmeEnabled, appVersion, contractSha, roleLevels, sessionIdleTimeoutSeconds, expiringSoonDays}`. `templates/login.html:24` gates the OIDC button on a server-side flag today and the endpoint map otherwise exposes it nowhere, leaving "click and get a 404" as the only discovery mechanism. The SPA hides navigation and login affordances from this and never hardcodes a feature flag or a role ordering |
+| n/a | public | `GET /api/v1/config` | **new.** `{oidcEnabled, localLoginEnabled, oidcButtonLabel, acmeEnabled, appVersion, contractSha, roleLevels, sessionIdleTimeoutSeconds, expiringSoonDays}`. `templates/login.html:24` gates the OIDC button on a server-side flag today and the endpoint map otherwise exposes it nowhere, leaving "click and get a 404" as the only discovery mechanism. The SPA hides navigation and login affordances from this and never hardcodes a feature flag or a role ordering |
 
 ### Session and dashboard
 
@@ -1103,7 +1094,7 @@ The gate lives in the **`client` job**, not in `build-test-lint`:
 
 Putting it in `build-test-lint` would let the `client` job generate a client from a stale committed spec while the gate fails in parallel. That is contained today only because both checks are required, and any path filter or non-required check reopens it. Generating the client immediately after the gate, in the same job, makes the client provably derived from the spec this commit's Go code produces.
 
-**Line endings first.** `.gitattributes` today has rules for `*.sh`, `Dockerfile`, `*.yml` and `*.yaml` but **no blanket `* text=auto` and no JSON rule**. `cmd/openapi` writes `\n`, so a contributor with `core.autocrlf=true` gets CRLF on checkout, sees every line change when running `make openapi`, and CI on Linux cannot reproduce it. Add `backend/openapi/openapi.json text eol=lf` in Phase 0.
+**Line endings first.** `.gitattributes` has rules for `*.sh`, `Dockerfile`, `*.yml` and `*.yaml` but **no blanket `* text=auto`**, so `backend/openapi/openapi.json text eol=lf` is set explicitly. `cmd/openapi` writes `\n`, so without it a contributor with `core.autocrlf=true` gets CRLF on checkout, sees every line change when running `make openapi`, and CI on Linux cannot reproduce it.
 
 **`openapi.json` is never merged by hand.** It is a pure function of the Go source. `.gitattributes` registers `merge=openapi-regen`, and `make hooks` registers the driver as `cd backend && go run ./cmd/openapi -out openapi/openapi.json`, discarding all three inputs and regenerating from the merged source. Developers who have not run `make hooks` resolve with `git checkout --ours` then `make openapi`.
 
@@ -1113,7 +1104,7 @@ Putting it in `build-test-lint` would let the `client` job generate a client fro
 
 **Two things that would otherwise make the gate annoying enough to disable.** D3 rule 2 keeps third-party types out of DTOs, so no dependency bump other than huma's can move the spec. And `huma/v2` plus `humachi` are excluded from dependabot's `go-minor-patch` group so a huma bump always arrives as its own pull request with the spec diff reviewable in isolation, the same treatment R2 gives the TypeScript generator.
 
-**A second gate on breaking changes.** `oasdiff breaking` between the base's `openapi.json` and the pull request's, failing if a breaking change lands without a matching row in `docs/contract-changes.md` (Q5). The row is `| operationId | what changed | why |`, the file is append-only, and the gate asserts a row exists for every operation `oasdiff` names, so the remedy is a sentence a reviewer reads rather than an integer no resolver reads. This is the only mechanism that turns "remember to bump" into something enforced, and it gives reviewers a far better signal than the raw JSON diff. Three mechanics to specify rather than assume: `oasdiff` is not preinstalled on runners and must be **pinned to a release**, not `@latest`, since every `uses:` in this repository pins to a version tag (not a commit SHA, as of the 2026-09-02 maintenance pass) and an unpinned tool install would be the only exception to that discipline. Obtaining the base document needs `fetch-depth: 0`. And the base ref differs by trigger: on `pull_request` it is the PR's actual base ref, which is not necessarily `main`, while on `push: main` there is no base branch and the comparison is against `github.event.before`.
+**A second gate on breaking changes.** `oasdiff breaking` between the base's `openapi.json` and the pull request's, failing if a breaking change lands without a matching row in `docs/contract-changes.md` (Q5). The row is `| operationId | what changed | why |`, the file is append-only, and the gate asserts a row exists for every operation `oasdiff` names, so the remedy is a sentence a reviewer reads rather than an integer no resolver reads. This is the only mechanism that turns "remember to bump" into something enforced, and it gives reviewers a far better signal than the raw JSON diff. Three mechanics to specify rather than assume: `oasdiff` is not preinstalled on runners and must be **pinned to a release**, not `@latest`, since every `uses:` in this repository pins to a version tag (not a commit SHA, as of the 2026-10-21 maintenance pass) and an unpinned tool install would be the only exception to that discipline. Obtaining the base document needs `fetch-depth: 0`. And the base ref differs by trigger: on `pull_request` it is the PR's actual base ref, which is not necessarily `main`, while on `push: main` there is no base branch and the comparison is against `github.event.before`.
 
 The pre-commit mirror is scoped to `files: ^backend/(api|apitypes)/`, because otherwise every commit touching any `.go` file, including `db/`, triggers a full module compile.
 
@@ -1142,12 +1133,14 @@ export default defineConfig({
 
 ```
 @andremmfaria/step-ca-webui-client
-├── dist/index.js        ESM
-├── dist/index.d.ts
-└── package.json         "type": "module", "sideEffects": false
+├── dist/index.js                         ESM, the SDK         exports "."
+├── dist/client.gen.js                    the client instance  exports "./client"
+├── dist/@tanstack/react-query.gen.js     query options, keys  exports "./react-query"
+├── dist/*.d.ts
+└── package.json         "type": "module", "sideEffects": false, exports "./package.json"
 ```
 
-No runtime dependencies. `@tanstack/react-query` and the fetch client are peers. The version is stamped by CI per D8.
+No runtime dependencies. `@tanstack/react-query` is a peer, and the fetch client is bundled by the generator, so it is not a dependency at all. The version is stamped by CI per D8.
 
 ### 7.5 Publication
 
@@ -1191,21 +1184,21 @@ client.interceptors.response.use((res, req) => {
 
 **There is no long-lived feature branch.** Phases 0 to 8 are additive by construction: huma mounts alongside chi and every template route keeps working. Nothing in Phases 0 to 8 breaks `main`, so each phase is a pull request straight to `main` and **Phase 9 is the only removal, and the only irreversible, pull request.**
 
-**Rejected: a long-lived `feat/spa` branch.** It fails for the same reason D11 puts the rename first: a months-long branch taking eleven phases while `main` receives e2e work, dependabot across three new npm ecosystems, and any hotfix, produces exactly the rename-versus-content conflict class the rename ordering exists to avoid, across 46 handler files, `go.mod`, `go.sum` and six workflows. See R20. The coexistence state (two UIs, two authorisation paths) is designed to be indefinitely stable, which is what makes landing on `main` safe and what makes a stall expensive rather than broken.
+**Rejected: a long-lived `feat/spa` branch.** It fails because a months-long branch taking ten phases while `main` receives e2e work, dependabot across three new npm ecosystems, and any hotfix, produces a conflict class that grows with every week, across the 46 files under `backend/handlers/` (25 of them non-test), `go.mod`, `go.sum` and six workflows. See R20. The coexistence state (two UIs, two authorisation paths) is designed to be indefinitely stable, which is what makes landing on `main` safe and what makes a stall expensive rather than broken.
 
 Each phase PR names the D-numbers and acceptance criteria it discharges, and carries its `Parity` table where it replaces templates.
 
-**Rough size, and the cheapest useful stopping point.** No estimate here is a commitment and Phase 0 recalibrates all of them, but the shape is decision-relevant now. Phases 0 to 3c are contract and scaffolding: high risk, low volume, and they produce **no user-visible change at all**. Phases 4 to 8 are the UI rewrite: low risk, high volume, scaling with 33 templates rather than with anything in this document. Phase 9 is small. Expect roughly a third of the calendar in Phases 0 to 3 and the rest in 4 to 8, with Phase 4 costing more per operation than 5 to 8 because R23's handler-splitting work is front-loaded and unpriced. **There is no deadline**, which the owner has confirmed. That removes schedule pressure and replaces it with a different risk: with nothing forcing a finish, a half-migrated tree can quietly become the permanent state (R18).
+**Rough size, and the cheapest useful stopping point.** No estimate here is a commitment and Phase 0 recalibrates all of them, but the shape is decision-relevant now. Phases 0 to 3c are contract and scaffolding: high risk, low volume, and they produce **no user-visible change at all**. All of them are complete. Phases 4 to 8 are the UI rewrite: low risk, high volume, scaling with 33 templates rather than with anything in this document. Phase 9 is small. Expect roughly a third of the calendar in Phases 0 to 3 and the rest in 4 to 8, with Phase 4 costing more per operation than 5 to 8 because R23's handler-splitting work is front-loaded and unpriced. **There is no deadline**, which the owner has confirmed. That removes schedule pressure and replaces it with a different risk: with nothing forcing a finish, a half-migrated tree can quietly become the permanent state (R18).
 
-**There are two legitimate end states, and Phase 4 is not one of them.** An earlier draft offered Phase 4 as a clean stopping point, which contradicted R27's own description of everything that makes Phase 4 reachable. The correction:
+**There are two legitimate end states, and Phase 4 is not one of them.** R27 describes everything that makes Phase 4 reachable as scaffolding, so Phase 4 cannot be a clean stopping point.
 
-**Stopping after Phase 2 is clean.** The contract exists, the client pipeline is proven, the drift gate is a required check, and no user-visible change has shipped. Nothing temporary has been built: no `/app/` base path, no duplicated CSS, no legacy proxy blocks, no second authorisation implementation. The old UI is untouched, and the work has bought a machine-readable description of the system that the e2e suite and any future consumer can be generated against. That is the point at which appetite should be re-tested.
+**Stopping after Phase 2 was clean, and the tree is now past it.** The contract exists, the client pipeline is proven, the drift gate is a required check, and no user-visible change has shipped. Nothing temporary has been built: no `/app/` base path, no duplicated CSS, no legacy proxy blocks, no second authorisation implementation. The old UI is untouched, and the work has bought a machine-readable description of the system that the e2e suite and any future consumer can be generated against. That was the point at which appetite should have been re-tested. Phases 3a to 3c have since built the scaffolding it lists as absent: the nginx origin, the `/app/` base path, the duplicated CSS and the legacy passthrough blocks all exist, so the tree is inside the range below and the next phase is Phase 4.
 
 **Completing Phase 9 is the other one.** Everything between those two points carries scaffolding whose only justification is that it is being removed. Stopping inside that range leaves two user interfaces, two authorisation implementations that Section 6 makes deliberately disagree on revocation and the CA chain downloads, a SPA at a path that is now in bookmarks, and a CSS file that exists twice. That state works, which is exactly why it would persist.
 
-If a stop after Phase 4 is nonetheless chosen it is neither clean nor free: it must also retire the template routes for the certificate domain, flip the base path back to the root, and delete the CSS duplicate, which is Phase 4 plus a partial Phase 9. Budget for that before starting Phase 3b, not on reaching it.
+If a stop after Phase 4 is nonetheless chosen it is neither clean nor free: it must also retire the template routes for the certificate domain, flip the base path back to the root, and delete the CSS duplicate, which is Phase 4 plus a partial Phase 9. Budget for that before starting Phase 4, not on reaching it.
 
-### Phase 0. Rename, then a vertical slice spike. **COMPLETE, merged 2026-08-13 (`ae98bcf`)**
+### Phase 0. A vertical slice spike. **COMPLETE, 2026-10-06 (`66fd2e9`)**
 
 **Outcome: go. The unwrap mechanic is sound, so D2 stands and the `oapi-codegen` off-ramp is not taken.** All six workflows green on `main`.
 
@@ -1215,15 +1208,14 @@ If a stop after Phase 4 is nonetheless chosen it is neither clean nor free: it m
 
 **What the spike falsified, all now corrected in place.** D5's `resolver` line did not parse, since `timeout=` is not a `resolver` parameter but the separate `resolver_timeout` directive. D5 rule 1's stated mechanism was wrong, and rule 2 turned out to be the load-bearing half. `SchemasPath` was a third adapter register site D9 did not know about. The plan's 7.6 snippet did not compile, because openapi-ts re-exports only SDK functions and types from its index, so the client instance needs a `./client` subpath export.
 
-**Smaller findings worth carrying.** The generated fetch client needs the `DOM` and `DOM.Iterable` TypeScript libs. `@hey-api/client-fetch` as a standalone dependency is deprecated and unused since the runtime is bundled, so dropping it leaves the client package with genuinely zero runtime dependencies, which is what 7.4 requires. Two high-severity `js-yaml` advisories reach the tree through the generator and needed an npm `overrides` pin, since the only alternative remedy was a four-minor downgrade. `make cover` had been broken independently of this work and is fixed. Measured coverage is 22.9% against a 15% floor, which R8's ratchet must account for.
+**Smaller findings worth carrying.** The generated fetch client needs the `DOM` and `DOM.Iterable` TypeScript libs. `@hey-api/client-fetch` as a standalone dependency is deprecated and unused since the runtime is bundled, so dropping it leaves the client package with genuinely zero runtime dependencies, which is what 7.4 requires. Two high-severity `js-yaml` advisories reach the tree through the generator and needed an npm `overrides` pin, since the only alternative remedy was a four-minor downgrade. `make cover` had been broken independently of this work and is fixed. Coverage measured at Phase 0's completion was 22.9% against a 15% floor, which R8's ratchet must account for.
 
 **Three placeholders shipped deliberately.** `oidcButtonLabel` and `acmeEnabled` in `GET /api/v1/config` have no backing configuration and are stubs; `roleLevels` duplicates `middleware.RequireRole`'s unexported map, which Phase 1's role golden table should de-duplicate. Step 1, branch protection, was deferred by the owner and is recorded below with its re-trigger.
 
 The step list below is retained as the record of what was built.
 
 
-0. **The D11 rename, as its own pull request**, with every file in the blast-radius table. Nothing else in that commit. Close open Dependabot pull requests first, since `dependabot.yml` is read from the default branch only. Fix `test/e2e/helpers/routes.ts` and `specs/config/static-01.api.spec.ts` in the same commit, and fix the pre-existing `make cover` bug while the Makefile is open (`cover` omits the `cd $(GO_DIR)` every other Go target has, so it resolves a repo-root `scripts/coverage-gate.sh` that does not exist) so the implementer does not mistake it for a rename regression.
-1. **Branch protection: deferred by the owner on 2026-08-13, not dropped.** 7.2's clean-merge-of-a-shared-schema failure needs two contract pull requests open at once, which cannot happen with one developer and nothing consuming the spec, so requiring up-to-date branches and making the drift gate a required check on `push: main` buys nothing today. **Re-trigger: a second contributor, or the first time two contract pull requests are open simultaneously.** Whoever hits either condition turns it on before merging the second one.
+1. **Branch protection: deferred by the owner on 2026-09-28, not dropped.** 7.2's clean-merge-of-a-shared-schema failure needs two contract pull requests open at once, which cannot happen with one developer and nothing consuming the spec, so requiring up-to-date branches and making the drift gate a required check on `push: main` buys nothing today. **Re-trigger: a second contributor, or the first time two contract pull requests are open simultaneously.** Whoever hits either condition turns it on before merging the second one.
 2. Add huma pinned at `v2.30.0` or newer and `humachi`. Mount a `huma.API` under chi at `/api/v1` alongside every existing route, with `cfg.CreateHooks = nil`, `cfg.DocsPath = ""`, `cfg.OpenAPIPath = ""` and `cfg.SchemasPath = ""`.
 3. **Add the unwrap middleware from 5.5 and prove a session write works from inside an operation handler.** Highest-risk mechanic in the plan. If it does not work, nothing downstream does.
 4. **Do the registration split here, not in Phase 1**: `api.Register(huma.API, *handlers.Handler)` separate from construction, plus `handlers.NewForSpec()`. `cmd/openapi` cannot exist without it (D3), so it cannot be later work.
@@ -1236,7 +1228,7 @@ The step list below is retained as the record of what was built.
 
 **Exit criterion (met, with the three exceptions recorded above).** Committed as a file, not left in a review comment. `go build ./...` succeeds with no Node run. The spec is byte-identical across two runs, two machines and two environments. The generated client typechecks. The CSRF interceptor works. A protected route returns `application/problem+json` on `401`. A validation failure returns `422` with no submitted value echoed. An unmatched `/api/v1/*` path returns a 404 problem document. If huma's ergonomics, the `Unwrap` mechanic or the spec output are wrong, this is the cheap moment to switch to `oapi-codegen`, and D2 is revisited before Phase 4.
 
-### Phase 1. API foundation. **COMPLETE, merged 2026-08-15**
+### Phase 1. API foundation. **COMPLETE, 2026-10-16 (`16f30f5`)**
 
 **Exit criterion met, verified rather than asserted.** `go test ./...` green across ten packages, `golangci-lint` clean, the committed spec byte-current, and the e2e suite **138 passed / 8 skipped / 0 failed**, run twice: once on the newly built stack and once after it was restored to stock. The 8 skips are the ACME rows, gated on the LE stack being absent from this leg, which is environmental and pre-existing. AUTH 6/6, CSRF 9/9 and RBAC 83/83 passed **unmodified against the live template routes**, which is the criterion this phase is judged on. `SESSION_SECURE=true` in that stack, so the run exercised the prefixed cookie names rather than the bare fallback.
 
@@ -1264,9 +1256,9 @@ The step list below is retained as the record of what was built.
 
 **Exit criterion.** The role-matrix test passes against the golden table for every registered operation. The drift and `oasdiff` gates are required checks and pass on a no-op PR. A `session_epoch` bump returns `401 application/problem+json` on an `/api/v1` route. A CSRF-mismatched mutation returns `403`. All existing AUTH, CSRF and RBAC e2e specs still pass unmodified against the live template routes.
 
-### Phase 2. Client package pipeline. **COMPLETE, merged 2026-09-02**
+### Phase 2. Client package pipeline. **COMPLETE, 2026-10-28 (`ced040e`)**
 
-**Exit criterion met, verified rather than asserted.** `docs/contract-proof.md` records a real red run and a real green run against a deleted `proof/contract-negative` branch, dispatched manually since `ci.yml` takes no automatic trigger from a non-`main` branch and this repository takes no pull requests. The red run failed `frontend` and `ci-gate` on exactly the intended line, an installed client version missing the commit's short sha, while `client` and every other job stayed green, proving the provenance assertion is load-bearing rather than decorative and, in the same run, that `ci-gate` fails closed when one dependency does. The tag `client-v0.1.0` published `@andremmfaria/step-ca-webui-client@0.1.207-sha.d38354c` to GitHub Packages from the workflow's own `GITHUB_TOKEN`, no personal access token or manual grant needed. Re-running that tag's workflow (`gh run rerun`) stayed green and logged `already published ..., publish is idempotent`, with the package's version count still 1.
+**Exit criterion met, verified rather than asserted.** `docs/contract-proof.md` records a real red run and a real green run against a deleted `proof/contract-negative` branch, dispatched manually since a push to a branch other than `main` does not trigger `ci.yml`. The red run failed `frontend` and `ci-gate` on exactly the intended line, an installed client version missing the commit's short sha, while `client` and every other job stayed green, proving the provenance assertion is load-bearing rather than decorative and, in the same run, that `ci-gate` fails closed when one dependency does. A `v*` tag publishes `@andremmfaria/step-ca-webui-client@<VERSION>-sha.<short-sha>` to GitHub Packages from the workflow's own `GITHUB_TOKEN`, no personal access token or manual grant needed, and the release tag `v0.1.0` (commit `86076f9`) derives `0.1.0-sha.86076f9`. Re-running a tag build logs `already published at <version>, publish is idempotent` and stays green, because the publish step checks the registry first.
 
 **Four decisions were taken during execution that this plan did not specify.**
 
@@ -1279,7 +1271,26 @@ The step list below is retained as the record of what was built.
 
 **Exit criterion.** The two-commit proof is committed with one red and one green run URL. A test tag publishes to GitHub Packages idempotently (re-running the tag build does not fail). `ci-gate` correctly fails when any one dependency fails.
 
-### Phase 3a. Frontend app scaffold
+### Phase 3a. Frontend app scaffold. **COMPLETE, 2026-11-06**
+
+**Exit criterion met, verified rather than asserted.** All six steps are built. The gates are typecheck, ESLint plus Prettier, Vitest (130 tests in 21 files), the dead-SDK-surface script with `clients/ts/unused-allowlist.txt` (`getSpikeBlob`, `postSpikeUpload` and `getStatus`, the three operations with no frontend caller yet) and the build. The `frontend` CI job runs provenance, typecheck, lint, test, `check:sdk-surface` and build on Node 24. The log-in, navigate, deep-link refresh, refresh-mid-MFA and log-out items were demonstrated through nginx on a real stack in Phase 3c rather than through the Vite proxy, because the origin existed by then: E2E-SPA-01 covers log in, navigate, deep-link refresh and log out with `__Host-` cookies under `SESSION_SECURE=true`, E2E-SPA-02 covers a refresh mid-MFA resuming on the code step, and E2E-SPA-03 covers the unavailable state. The unit tests the criterion names pass: the CSRF cookie probe under both `SESSION_SECURE` values, the scoped 401 interceptor and the skew banner.
+
+**Eight decisions were taken during execution that this plan did not specify, and each is recorded because a later phase would otherwise re-litigate it.**
+
+1. **The login operations had no owning phase.** 5.3 and Section 6 describe `createSession` and `submitMfa`, and no phase listed them, yet step 6's login view cannot work without them. They landed here: `backend/handlers/session_login.go`, `backend/handlers/auth_store.go` and `backend/api/session.go`, with tests in `backend/api/login_test.go`. They are additive to the contract, so they carry no `docs/contract-changes.md` row. **The password-reset operations had the same gap and are not implemented.** Section 6 maps three of them and no phase listed them. This is an open assignment, and they are assigned to Phase 8: they belong to the account-credential domain that phase already owns (password change with reauth, recovery codes, MFA disable), and they need no role. Until then the template routes remain the only implementation and the SPA's `forgot-password` and `reset-password` routes are placeholders. R31 still binds the emailed `/reset-password` path to the root.
+2. **`GET /api/v1/config` gained `localLoginEnabled`**, which the login view reads to hide the credential form when local login is off.
+3. **`password` was added to `backend/openapi/secret-allowlist.txt`**, as a `writeOnly` property, with `createSession`. The file's own header said the auth domain adds its request fields as it is ported.
+4. **`clients/ts/package.json` needed a `./react-query` subpath export** that 7.4 and D8 omitted, for the same reason Phase 2 needed `./package.json`. Both sections now list the four subpaths.
+5. **Toolchain versions.** `frontend/package.json` requires Node 22.22 or newer, the floor of jsdom, which the test toolchain needs. CI and the image build stage use Node 24. TypeScript is pinned at 6.0.3, because typescript-eslint's peer range stops below 6.1.
+6. **Query invalidation keys on `operationId`, not on tags.** The generator puts the `operationId` in every query key and no tag, so 5.9's `tag → queryKey[]` map could not be derived from the spec as written. A Vite virtual module (`virtual:operation-tags`, `frontend/vite/operationTags.ts`) derives `tag → operationId[]` from the spec instead, and `invalidation.ts` turns a tag into a predicate over those ids.
+7. **Routes keep the template names**, so the ACME pages are `/le`, `/le/issue`, `/le/settings` and `/le/logs`. The `acme` rename stays in Phase 7.
+8. **zod v4 probes for `eval` with `new Function`**, which `script-src 'self'` reports as a CSP violation. `frontend/src/zodConfig.ts` sets `jitless: true` and is imported first in `main.tsx`. D12.1 records it.
+
+**R21's evidence, and the part it did not settle.** The CSS copy needed zero selector edits: all seven files are byte-identical to `backend/static/css`. The cascade collides when every sheet loads together, because `pages.css`'s login `body` and `.logo` rules fight `base.css`'s app shell, and that is resolved additively in `frontend/src/styles/spa.css` rather than by editing the copies. Scoping the login rules is deferred to Phase 4 onward. The exit criterion's side-by-side of the dashboard and one admin page against the current UI was **not done** and is carried forward, so R21 stays open.
+
+**Carried forward, and why.** The main chunk is about 505 kB and trips Vite's 500 kB warning. D12.7 deliberately leaves chunking untuned until a measured problem exists, and this is the first measurement.
+
+The step list below is retained as the record of what was built.
 
 No nginx, no Docker. Runs against Phase 0's `vite dev` proxy straight to the Go container, so nothing here depends on the origin existing.
 
@@ -1288,35 +1299,75 @@ No nginx, no Docker. Runs against Phase 0's `vite dev` proxy straight to the Go 
 3. **Copy**, do not move, `static/css/*` to `frontend/src/styles/`, with `build.assetsInlineLimit` set so no font inlines to a data URI under `font-src 'self'`, and `build.sourcemap: false` for production. The copy is deliberate: `//go:embed templates static` stays until Phase 9, the live templates reference 39 `/static/...` paths, and moving the files breaks the old UI for six phases. The duplication dies in Phase 9.
 4. App shell: the two layouts, navigation from `navigation.ts` filtered by `roleLevels` from `GET /api/v1/config`.
 5. Router with the full route table, every leaf a placeholder, exporting the committed route list that Section 2's smoke criteria are table-driven from.
-6. `<AuthGate>` on the `state` discriminator with its fourth `unavailable` branch (5.10), plus the login view including two-step MFA and refresh-resumes-on-code-step.
+6. `<AuthGate>` on the `state` discriminator with its fourth `unavailable` branch (5.10), plus the login view including two-step MFA and refresh-resumes-on-code-step. The backend half, `createSession` and `submitMfa`, is built in this phase (decision 1).
 
-**Exit criterion.** Log in, see an empty dashboard, navigate, hard-refresh a deep link, refresh mid-MFA, log out, all through the Vite proxy. Unit tests pass for the CSRF cookie probe under both `SESSION_SECURE` values, for the scoped 401 interceptor, and for the skew banner. **A side-by-side of the dashboard and one admin page against the current UI**: if matching it needs restructured selectors rather than renamed ones, decide then whether to keep the CSS port or adopt a utility layer, once rather than six times (R21).
+**Exit criterion (met, with the side-by-side not done).** Log in, see an empty dashboard, navigate, hard-refresh a deep link, refresh mid-MFA, log out, all through the Vite proxy. Unit tests pass for the CSRF cookie probe under both `SESSION_SECURE` values, for the scoped 401 interceptor, and for the skew banner. **A side-by-side of the dashboard and one admin page against the current UI**: if matching it needs restructured selectors rather than renamed ones, decide then whether to keep the CSS port or adopt a utility layer, once rather than six times (R21).
 
-### Phase 3b. The origin and the TLS perimeter
+### Phase 3b. The origin and the TLS perimeter. **COMPLETE, 2026-11-06**
+
+**Exit criterion met, verified rather than asserted.** All eight steps are built and every item of the exit criterion was demonstrated on a real four-container stack. The forgery table passed 12 of 12 with the trusted list resolved and 12 of 12 with an explicit list, each being four headers across three routes: through the origin, direct to the backend on the host, and direct from a container on the network. Trust followed a recreated nginx container. `WEB_TLS_MODE=provided` served an externally mounted leaf while the renewer left it alone. `docker compose restart step-webui` was followed by a successful proxied request with nginx not restarted. A renewal at `UI_CERT_DURATION=6m` renewed both leaves with exactly one nginx reload per cycle and no restart. The proxy hop was verified (`proxy_ssl_verify on`, `proxy_ssl_name step-webui`). With step-ca unreachable the backend self-signed, wrote `.fallback`, `/ready` answered 503 and nginx never started, and the stack healed itself when the CA returned. `make nginx-lint` is green.
+
+**What the build falsified, all now corrected in place.** D5 rule 3 and the acceptance criterion beside it were wrong: resolving `WEB_UPSTREAM_HOST` once at startup and being fatal when it is unresolvable deadlocks the stack under `depends_on: service_healthy`, since nginx exists only after the backend is healthy. Rule 4 and Q4's answer carried the same error. D5's config block lacked an explicit `root`, the 429 limiter statuses, `proxy_buffer_size 16k` with `proxy_busy_buffers_size 16k` (a legacy redirect carrying three cookies plus its CSP overflowed the default buffer) and `absolute_redirect off`, and it used `proxy_intercept_errors on`, which would replace the backend's own 503 bodies. Step 2's claim that the image has no `curl` is false for the pinned image. 4.2's backend healthcheck is `curl -fsk .../health && test ! -e <ssl dir>/.fallback`. The shared prefix source is `frontend/proxy-prefixes.json`, a flat list, and nginx uses one flat regex derived from it. Step 5's "four `generateSelfSignedCert` fallback sites parameterised" described a change that was not needed, because they already took those parameters. `STEP_NET_SUBNET` defaults to `10.213.0.0/24`.
+
+**Decisions were taken during execution that this plan did not specify.**
+
+1. **The entrypoint is custom and runs `envsubst` itself.** Step 2 asked for one of two mechanisms to be picked and written down. The script must stay nginx's parent to forward the stop signal so nginx drains, and to run the watcher beside it, which the stock entrypoint's `exec` cannot do.
+2. **The template is the whole `nginx.conf`**, not a `conf.d` snippet.
+3. **The inline-script and inline-style CSP hashes are computed at container start** from the `index.html` the container serves, so the policy cannot fall behind the bundle.
+4. **The reload watcher hashes `web.crt` and `web.key` together and runs in both TLS modes.**
+5. **Under `WEB_TLS_MODE=provided` the operator also mounts `root_ca.crt`**, since nothing copies it.
+6. **The web leaf is re-issued on every backend boot** under `WEB_TLS_MODE=stepca`.
+7. **The config-key check targets `docs/configuration.md` plus `.env.example`** (`scripts/check-config-keys.sh`), because `README.md` is an index and carries no table.
+8. **Extra keys are documented beyond the nine step 8 names**: `WEB_RESOLVER`, `WEB_RELOAD_INTERVAL`, `WEB_CERT_WAIT_SECONDS`, `BACKEND_IMAGE` and `WEB_IMAGE`. `ENABLE_HSTS` is removed from the Go config, since HSTS belongs to nginx alone.
+
+**Volume ownership rule.** The nginx image must not pre-create the web-ssl mount path. An empty named volume takes its ownership from the first image that has the mount path, and a root-owned directory from the nginx image would leave the backend, uid 10001, unable to write its leaf.
+
+**Carried forward, and why.** One known defect is not fixed here: the Go server's `WriteTimeout` is 60 seconds while `handlers.PGDumpTimeout` is two minutes, so a backup that takes more than 60 seconds is cut off by Go regardless of `proxy_read_timeout`. It is owed to Phase 6, which owns backups, and is recorded there.
+
+The step list below is retained as the record of what was built.
 
 The highest-risk phase in the plan. It owns R13, R25, R26, R30 and R32 in full.
 
-1. `frontend/nginx.conf.template` with every block and every rule from D5, `conf.d/proxy-headers.conf`, `conf.d/doc-headers.conf`, and the shared source that `vite.config.ts` and the nginx prefix list both derive from.
-2. `frontend/entrypoint.sh`: the certificate wait, the `envsubst` substitution, nginx started in the background with a `trap`/`wait` so `docker stop` drains rather than kills, and the reload watcher. **Two mechanics that will not work if left to the obvious reading.** The stock `nginx:alpine` entrypoint is what normally runs `envsubst` over `/etc/nginx/templates/*.template`, and replacing `ENTRYPOINT` bypasses it, so either the custom script calls `envsubst` itself or the cert-wait and watcher logic ships as a `/docker-entrypoint.d/*.sh` script and the stock entrypoint stays. Pick one in this phase and write it down, because D5's prose currently implies both. And `nginx:alpine`'s busybox `wget` is built **without SSL**, with no `curl` in the image, so every healthcheck against `https://localhost:8443/nginx-health` fails until the runtime stage does `apk add --no-cache curl`.
+1. `frontend/nginx.conf.template` with every block and every rule from D5, `conf.d/proxy-headers.conf`, `conf.d/doc-headers.conf`, and the shared source that `vite.config.ts` and the nginx prefix list both derive from, `frontend/proxy-prefixes.json`.
+2. `frontend/entrypoint.sh`: the certificate wait, the `envsubst` substitution, nginx started in the background with a `trap`/`wait` so `docker stop` drains rather than kills, and the reload watcher. **Two mechanics that will not work if left to the obvious reading.** The stock `nginx:alpine` entrypoint is what normally runs `envsubst` over `/etc/nginx/templates/*.template`, and replacing `ENTRYPOINT` bypasses it, so either the custom script calls `envsubst` itself or the cert-wait and watcher logic ships as a `/docker-entrypoint.d/*.sh` script and the stock entrypoint stays. The custom script calls `envsubst` itself, for the reason given in D5 rule 9. And `nginx:alpine`'s busybox `wget` is built **without SSL**, so the healthcheck against `https://localhost:8443/nginx-health` uses `curl`. The pinned `nginx:1.29-alpine` already ships `curl`, and the runtime stage's `apk add --no-cache curl` stays as insurance against a base image that drops it.
 3. `frontend/Dockerfile`, with the narrow ordered COPYs from D5 and a pinned nginx minor.
 4. The second certificate: `WEB_TLS_MODE`, `WEB_HOSTNAME` with no fallback, `web.crt`/`web.key` into `step-webui-web-ssl`, the root CA copied where nginx can read it, and the `.fallback` marker plus its `/ready` reporting. **`WEB_TLS_MODE=provided` is a first-class mode, not an afterthought** (Q4): nginx reads a leaf the operator mounts from outside, the certificate wait and the renewer are both skipped, and no running container then depends on another container writing a file into a shared read-write volume. `stepca` stays the default, because it is what a self-hoster gets with no configuration at all.
-5. **The renewer restructure**, which is six call-site signature changes rather than an addition: `issueUICert`, `renewUICertOnce` and the four `generateSelfSignedCert` fallback sites parameterised on `(certPath, keyPath, hostname)`, one loop renewing both leaves and sleeping on the minimum so there is one reload event and one backoff. The bootstrap context at `main.go:361-364` goes from `2*` to `3*`, comment included, or the third loop gets an already-cancelled context and self-signs on attempt one. `os.WriteFile` becomes write-to-`.tmp`-then-`os.Rename` for both leaves.
+5. **The renewer restructure**, which is two signature changes and a loop over leaves rather than an addition: `issueUICert` and `renewUICertOnce` parameterised on `(certPath, keyPath, hostname)`, the four `generateSelfSignedCert` fallback sites already taking those parameters, one loop renewing both leaves and sleeping on the minimum so there is one reload event and one backoff. The bootstrap context at `main.go:361-364` goes from `2*` to `3*`, comment included, or the third loop gets an already-cancelled context and self-signs on attempt one. `os.WriteFile` becomes write-to-`.tmp`-then-`os.Rename` for both leaves.
 6. **The Go side's proxy adaptation**, which is more than an earlier draft's "and nothing else": `cfg.TrustProxy` plus `TRUSTED_PROXY_CIDRS`, **the deletion of `middleware.forwardedHeaders`** (`realip.go:12`), and the `mw.SecurityHeaders` split from D5 (HSTS removed entirely, CSP scoped off `/api/v1`). `X-Request-Id` is read into the request-scoped log context, so the header nginx sets has a consumer.
 7. `make nginx-lint` and its fixture image, built before Phase 4 rather than after, since it is the only fast rung under a config that is now the security perimeter.
-8. **The operating document** (Q6). The operator is every self-hoster of this repository and is not reachable for questions, so each key the split introduces ships with a safe default, a stated failure mode and a `README.md` row: `WEB_TLS_MODE`, `WEB_HOSTNAME`, `WEB_UPSTREAM_HOST`, `TRUST_PROXY`, `TRUSTED_PROXY_CIDRS`, `STEP_NET_SUBNET`, `WEB_HSTS_MAX_AGE` (unset by default, since a two-year policy on a name chaining to a private root is a trap with no downgrade path), `PUBLIC_BASE_URL` and `IMAGE_TAG` with per-half rollback. R30's rule about what may live in `nginx.conf` is the section's first line. This lands in Phase 3b rather than Phase 9 because the keys go live the moment nginx takes the published port.
+8. **The operating document** (Q6). The operator is every self-hoster of this repository and is not reachable for questions, so each key the split introduces ships with a safe default, a stated failure mode, a `docs/configuration.md` row and an `.env.example` line: `WEB_TLS_MODE`, `WEB_HOSTNAME`, `WEB_UPSTREAM_HOST`, `TRUST_PROXY`, `TRUSTED_PROXY_CIDRS`, `STEP_NET_SUBNET`, `WEB_HSTS_MAX_AGE` (unset by default, since a two-year policy on a name chaining to a private root is a trap with no downgrade path), `PUBLIC_BASE_URL` and `IMAGE_TAG` with per-half rollback. R30's rule about what may live in `nginx.conf` is the section's first line. This lands in Phase 3b rather than Phase 9 because the keys go live the moment nginx takes the published port.
 
-**Exit criterion.** All four forgery headers fail to move the recorded address, through the origin and directly against the backend, with `TRUSTED_PROXY_CIDRS` both empty (resolved) and explicitly set. `WEB_TLS_MODE=provided` serves an externally mounted leaf with the renewer never running. The README key grep passes. `docker compose restart step-webui` and the next proxied request succeeds. A renewal with a low `UI_CERT_DURATION` produces a new served certificate, exactly one reload per cycle, and no restart. A verified proxy hop on a real stack. With step-ca unreachable, the backend self-signs, writes `.fallback`, `/ready` goes non-200 and nginx never starts. `make nginx-lint` green.
+**Exit criterion (met).** All four forgery headers fail to move the recorded address, through the origin and directly against the backend, with `TRUSTED_PROXY_CIDRS` both empty (resolved) and explicitly set. `WEB_TLS_MODE=provided` serves an externally mounted leaf with the renewer never running. The configuration-key check passes. `docker compose restart step-webui` and the next proxied request succeeds. A renewal with a low `UI_CERT_DURATION` produces a new served certificate, exactly one reload per cycle, and no restart. A verified proxy hop on a real stack. With step-ca unreachable, the backend self-signs, writes `.fallback`, `/ready` goes non-200 and nginx never starts. `make nginx-lint` green.
 
-### Phase 3c. Compose, CI and the migration window
+### Phase 3c. Compose, CI and the migration window. **COMPLETE, 2026-11-06**
+
+**Exit criterion met, verified rather than asserted.** All six steps are built. On a real stack the `api` project passed 141 and skipped 15 (the OIDC and Let's Encrypt rows that are flag-gated) with 0 failed, run through nginx. The new specs E2E-SPA-01, E2E-SPA-02, E2E-SPA-03 and E2E-CSP-01 (`test/e2e/specs/spa/spa-shell.ui.spec.ts`) and E2E-ORIGIN-01 (`test/e2e/specs/origin/origin-01.api.spec.ts`) pass, and `make preview` is green. The bootstrap scenarios pass: selfsigned 1 of 1, provided 1 of 1, fingerprint 3 of 3 and ca-down 2 of 2. The fatals scenario is still `test.fixme`. With the fixme lifted, cases (a), (b), (d) and (e) pass and case (c) fails, because the entrypoint's wait for postgres outlasts the 90 seconds the spec allows.
+
+**What the build falsified, all now corrected in place.** Section 10 claimed that `helpers/routes.ts` derives zero routes and throws, which is false during the window and becomes true at Phase 9. It claimed the `infra` project is untouched and that `-fatals`, `-nodeps` and `-fingerprint` need no edits: the override files needed none, but the five boot spec files had to change, four because they dialled the backend's published port, which no longer exists, and now use the backend's network address, and `boot-fatals` because it dropped the same kind of probe. 4.4's claim that `make dev` runs only Vite on the host omitted that the backend now has no host port. Step 2's "four `.gitignore` additions" was one: only `.env.*` with `!.env.example` was missing. Step 3's `-oidc` entry named the wrong redirect path, which is `/auth/oidc/callback`. 9.2's claim that `codeql.yml` needs no change was false, since JavaScript and TypeScript analysis was added. E2E-BOOT-07 case (d) in `plans/e2e-tests.md` had a malformed list and an empty list as one fatal case, when only the malformed list is fatal and an empty list with an unresolvable name keeps running. `/ready` now carries `backendCert`, `backendCertNotAfter`, `webCert` and `webCertNotAfter`, which E2E-HLTH-02 and the boot-fingerprint assertions in `plans/e2e-tests.md` now state.
+
+**Eight decisions were taken during execution that this plan did not specify.**
+
+1. **`/reset-password` and the OIDC callback stay with the backend at the root**, as step 1 required, which is why nginx's `location /` passthrough exists and why R31 holds.
+2. **The compose `WEB_HOSTNAME` default is empty rather than `:?`**, because `:?` also breaks `down`, `logs` and `collect.sh`. The web container refuses to start with a message naming the key, and the backend does the same under `WEB_TLS_MODE=stepca`.
+3. **The bundle is copied to `html/app/` rather than served through `alias`.**
+4. **Legacy passthrough failures return the same `@apidown` 503 problem document** as the API prefixes.
+5. **The images are `ghcr.io/andremmfaria/step-ca-webui`** (the backend, its name kept) **and `ghcr.io/andremmfaria/step-ca-webui-web`**.
+6. **CI runs the `ui` project for `specs/spa` only.** The legacy `ui` specs wait for the phases that replace their pages. A new `origin` job in `ci.yml` runs `proxy-routes-check`, `config-keys-check`, `backend-port-check`, the `collect.sh` service-list assertion and `nginx-lint`, and `ci-gate` now needs it.
+7. **`make dev` reaches the backend by its container address**, which works on Linux only, and sets `SESSION_SECURE=false`.
+8. **`scenario.sh` no longer `exec`s Playwright**, so its `EXIT` trap runs and removes the `.env.e2e-*` copies.
+
+**Carried forward, and why.** Four failures are pre-existing and unrelated to the topology. `auth-04.ui` has no fixture that creates `twofa_user`, and its `waitForURL` regex matches immediately. `auth-11.ui` fails because both base templates render two logout forms. E2E-BOOT-07 case (c) fails on the postgres wait described above, and E2E-BOOT-09 shows a timing flake under load. `scripts/test_deploy.sh` still assumes `credentials.txt` and a mode-600 `.env`. All of these are listed under Remaining in `plans/e2e-implementation-status.md`. Only a CI run on `main` proves the workflow changes: the cache scopes, the single image artifact, the matrix job names and the `origin` job.
+
+The step list below is retained as the record of what was built.
 
 1. **The migration-window routing.** The naive answer, a legacy prefix list beside `location /`, does not work: **every template route is also an SPA route name** under D12.8, so `/certificates` cannot both proxy to Go and fall back to `index.html`, and whichever wins breaks one of this phase's own exit criteria. Instead the SPA is served under `/app/` (Vite `base`, router `basename`), `location /` proxies everything else to the backend, and Phase 9 flips the base to `/`. `__Host-` cookies are `Path=/` and unaffected. Every temporary block carries a `PHASE9-DELETE` marker comment and includes `conf.d/proxy-headers.conf`, without which `POST /login` takes raw client headers for six phases. **Two paths do not move to `/app/`**: `/reset-password` and the OIDC callback landing, because the reset link is emailed and the redirect URI is registered with an IdP this repository cannot edit, so a flip at Phase 9 would break links already in the wild (R31).
-2. **Compose:** the fourth container on a pinned, env-var-defaulted subnet whose default sits outside `172.16/12`, with **no static addresses** (D5 rule 3); `step-webui-web-ssl` read-only into nginx and read-write into Go, with `step-webui-ssl` **not** mounted into nginx at all so an RCE there cannot read `server.key`; `init: true`; `depends_on: service_healthy`; the backend healthcheck corrected to `curl -fsk .../health`, which today lacks `-f` and so passes on any status; `UI_TLS_MODE` defaulting to `stepca`; the new `WEB_TLS_MODE`, `WEB_HOSTNAME`, `WEB_UPSTREAM_HOST`, `WEB_HSTS_MAX_AGE`, `STEP_NET_SUBNET`, `TRUST_PROXY`, `TRUSTED_PROXY_CIDRS`, `PUBLIC_BASE_URL` and `OIDC_REDIRECT_URL` keys, noting the base file passes **no** OIDC keys today; `image:` tags on both services; the host port moving to `step-webui-web` **on 8443 internally** so only the hostname changes in the harness; `step-webui-web-ssl` added to `make backup`'s volume list; `.dockerignore`; and the four `.gitignore` additions the `.dockerignore` implies but does not cause.
-3. **The eight overrides, plus one new one.** `-config`, `-mail` and `-le` are unaffected. `-image` needs a second `image:` pin, which is the one edit that silently defeats the whole override if missed. `-oidc` needs three: `TRUST_PROXY` defaults to false there, `TRUSTED_PROXY_CIDRS` defaults empty, which is no longer a `log.Fatalf` but instead falls through to D5 rule 3's `WEB_UPSTREAM_HOST` resolution, and that name does not resolve in a scenario with no nginx, and `OIDC_REDIRECT_URL` points at the backend on a path that does not match D5 rule 10's published origin. `-fatals`, `-nodeps` and `-fingerprint` need **no edits**, because the new `compose.e2e-noweb.yml` gives `step-webui-web` a never-enabled profile and `scenario.sh` composes it into every scenario, so nginx never exists for the `infra` project.
-4. **CI:** `e2e.yml` builds two application images on separate cache scopes and ships both in **one** `docker save | gzip` artifact rather than two, since the per-artifact overhead dominates; `BASE_URL` moves to `step-webui-web` and a new `BACKEND_URL` names the backend directly for the tests that must legitimately bypass the origin (the `infra` tier, the health tier, and the direct half of the forgery table). `docker-build.yml`, `security.yml` (two scans, the nginx base being a new third-party image), `codeql.yml`, `hadolint` as a matrix over two Dockerfiles, `dependabot.yml` gaining a **docker** ecosystem for `/frontend` as well as the npm ones, and `scripts/test_deploy.sh`.
+2. **Compose:** the fourth container on a pinned, env-var-defaulted subnet whose default sits outside `172.16/12`, with **no static addresses** (D5 rule 3); `step-webui-web-ssl` read-only into nginx and read-write into Go, with `step-webui-ssl` **not** mounted into nginx at all so an RCE there cannot read `server.key`; `init: true`; `depends_on: service_healthy`; the backend healthcheck corrected to `curl -fsk .../health && test ! -e <ssl dir>/.fallback`, which lacked `-f` and so passed on any status; `UI_TLS_MODE` defaulting to `stepca`; the new `WEB_TLS_MODE`, `WEB_HOSTNAME`, `WEB_UPSTREAM_HOST`, `WEB_HSTS_MAX_AGE`, `STEP_NET_SUBNET`, `TRUST_PROXY`, `TRUSTED_PROXY_CIDRS`, `PUBLIC_BASE_URL` and `OIDC_REDIRECT_URL` keys, the base file now passing the OIDC keys as well; `image:` tags on both services; the host port moving to `step-webui-web` **on 8443 internally** so only the hostname changes in the harness; `step-webui-web-ssl` added to `make backup`'s volume list; `.dockerignore`; and the one `.gitignore` addition the `.dockerignore` implies but does not cause, `.env.*` with `!.env.example`.
+3. **The eight overrides, plus one new one.** `-config`, `-mail` and `-le` are unaffected. `-image` needs a second `image:` pin, which is the one edit that silently defeats the whole override if missed. `-oidc` needs two: it stops setting `TRUST_PROXY` and `TRUSTED_PROXY_CIDRS`, so the base defaults apply (an empty list is not a fatal, D5 rule 3), and `OIDC_REDIRECT_URL` defaults to `https://step-webui-web:8443/auth/oidc/callback`, the published origin D5 rule 10 names with the callback path the backend serves. `-fatals`, `-nodeps` and `-fingerprint` need **no edits** to the override files, because the new `compose.e2e-noweb.yml` gives `step-webui-web` a never-enabled profile and `scenario.sh` composes it into every scenario, so nginx never exists for the `infra` project. The boot spec files that dialled the backend's published port are a separate edit (Section 10).
+4. **CI:** `e2e.yml` builds two application images on separate cache scopes and ships both in **one** `docker save | gzip` artifact rather than two, since the per-artifact overhead dominates; `BASE_URL` moves to `step-webui-web` and a new `BACKEND_URL` names the backend directly for the tests that must legitimately bypass the origin (the `infra` tier, the health tier, and the direct half of the forgery table). `docker-build.yml`, `security.yml` (two scans, the nginx base being a new third-party image), `codeql.yml` (which gains JavaScript and TypeScript analysis), `hadolint` as a matrix over two Dockerfiles, `dependabot.yml` gaining a **docker** ecosystem for `/frontend` as well as the npm ones, and `scripts/test_deploy.sh`.
 5. **The harness fixes Section 10's table enumerates**, which land here and not per domain: the three `BASE_URL` definitions, `helpers/session.ts`'s four scraping assumptions, `helpers/routes.ts`, `helpers/compose.ts`'s hardcoded service, `collect.sh`'s service list, and the four spec files asserting container-specific facts.
 6. `make dev` with `--wait`, plus `make preview`, `up-backend`, `up-web`, `logs-ui`, `logs-web`, `nginx-test`, `web-reload`, and the corrected `e2e-reset-ssl` and `clean`. **`clean` is a correction, not an addition**: adding a second `clean:` recipe silently replaces the first in GNU Make, so `go clean` and the backup removal would stop running with only a warning.
 
-**Exit criterion.** Log in through nginx at `/app/`, navigate, hard-refresh a deep link, log out. With `step-webui` stopped, `/api/v1/session` returns `application/problem+json` and the SPA renders the unavailable state rather than a login form. **Every template route and every `/static/*` asset still reachable through the published port.** The existing `api` e2e specs pass against the new topology. `make preview` green. The CSP smoke spec passes against nginx's header, read off the response rather than the config file.
+**Exit criterion (met).** Log in through nginx at `/app/`, navigate, hard-refresh a deep link, log out. With `step-webui` stopped, `/api/v1/session` returns `application/problem+json` and the SPA renders the unavailable state rather than a login form. **Every template route and every `/static/*` asset still reachable through the published port.** The existing `api` e2e specs pass against the new topology. `make preview` green. The CSP smoke spec passes against nginx's header, read off the response rather than the config file.
 
 ### Phase 4. Certificates
 
@@ -1338,6 +1389,8 @@ Includes the list envelope, the total-order fix, the nullable `total`, and D10's
 
 Users including the five-way split and the self-target invariants, temporary users, console with the narrowed DTO, about, integrity, backups with create-then-navigate, notifications as `PATCH` with `writeOnly` secrets, and the IPv6 round-trip for `DELETE /api/v1/security/ip-blocks/{ip}`.
 
+**Owed from Phase 3b: the backup timeout defect.** The Go server's `WriteTimeout` is 60 seconds (`main.go`) while `handlers.PGDumpTimeout` is two minutes, so a backup that takes more than 60 seconds is cut off by Go whatever `proxy_read_timeout` allows. `backend/nginx_timeout_test.go` compares `proxy_read_timeout` only with `PGDumpTimeout`, so nothing catches the conflict, and this phase resolves it before the backup operations are migrated.
+
 Also closes the `/admin/integrity` cost question (Section 12) by measurement rather than by asking: benchmark `/admin/integrity` against a seeded install, and if it walks every certificate on disk, cache it for 60 seconds. Do not ship it uncached with an unknown cost.
 
 **Exit criterion.** Self-target invariants enforced. The console response contains no substring of the database DSN. A notifications `PATCH` omitting `SMTPPassword` leaves it unchanged. `::1` unblocks end to end through the generated client. Rewritten admin specs pass. `Parity` table signed off.
@@ -1351,6 +1404,8 @@ The `le` to `acme` rename at Section 6's stated scope, settings as `PATCH`, even
 ### Phase 8. Profile and MFA
 
 Profile, preferences, password change with reauth, and the full TOTP enrolment flow including the PNG QR operation, recovery codes, and `POST /api/v1/profile/mfa/disable` with its two-factor reauth.
+
+**Also owns the three password-reset operations** (`POST /api/v1/password-reset/requests`, `/validate` and `/confirm`, Section 6), which no phase owned until Phase 3a's record assigned them here. They are the public counterpart of the credential operations above, need no role, carry the `auth` rate limit, and are exempt from the scoped 401 interceptor. The emailed link keeps its root path `/reset-password` (R31), so the SPA page must be reachable there.
 
 **The QR renders as `<img src="blob:...">`, which the current CSP blocks.** Either pull the `img-src 'self' data: blob:` change forward from Phase 9 into this phase, which is the recommended option since it is one directive and nothing depends on it staying absent, or scope this phase's exit bar to API-response verification and defer the live render check. Choose explicitly rather than discovering it.
 
@@ -1366,7 +1421,7 @@ Profile, preferences, password change with reauth, and the full TOTP enrolment f
 4. **Flip the SPA base path from `/app/` to `/`**: Vite `base`, the router `basename`, `PUBLIC_BASE_URL`, `OIDC_REDIRECT_URL` and the harness `BASE_URL`. `/reset-password` and the OIDC callback landing do not move, having stayed at the root throughout (R31). Delete every block carrying the `PHASE9-DELETE` marker.
 5. CSP in `nginx.conf` against the real built bundle: `connect-src 'self'`, `frame-src 'none'`, `worker-src 'none'`, `manifest-src 'self'`, and `img-src 'self' data: blob:` if not already pulled forward by Phase 8. Confirm `@vitejs/plugin-legacy` is not in use, since it emits inline scripts.
 6. Re-floor the coverage gate, which the two-sided ratchet has been doing per phase already.
-7. Retire `E2E-STATIC-01` rather than repathing it: it asserts `GET /static/css/pages.css` returns 200 with an enforced MIME type against a Go handler that no longer exists. D11's blast-radius row for `specs/config/static-01.api.spec.ts` covers the rename during the migration window only.
+7. Retire `E2E-STATIC-01` rather than repathing it: it asserts `GET /static/css/pages.css` returns 200 with an enforced MIME type against a Go handler that no longer exists. Retire `E2E-ORIGIN-01` with it, whose file carries the `PHASE9-DELETE` marker because it asserts that the server-rendered routes and `/static/*` pass through nginx.
 8. Update `README.md`, `Makefile` help, `scripts/test_deploy.sh` (which curls `/login` and two `/static/*` paths), and finalise the `plans/e2e-tests.md` appendix.
 
 **Exit criterion.** Section 10's pass level met. Every acceptance criterion in Section 2 checked.
@@ -1388,32 +1443,37 @@ ci.yml (push:main, pull_request)
 ├── frontend               needs: client
 │     npm ci (frontend)
 │     -> download ts-client -> npm i --no-save -> ASSERT version contains the short sha
-│     -> lint, typecheck, test, build
+│     -> typecheck, lint, test, check:sdk-surface, build
+├── origin                 [parallel, no needs]
+│     proxy-routes-check, config-keys-check, backend-port-check,
+│     the collect.sh service-list assertion, nginx-lint
 ├── contract-negative      workflow_dispatch, and on changes to ci.yml / clients/ts/** / cmd/openapi/**
 │                          re-runs the two-commit stale-client proof. NOT a required check.
-└── ci-gate                needs: [build-test-lint, db-integration, client, frontend]
+└── ci-gate                needs: [build-test-lint, db-integration, client, frontend, origin]
                            if: always(); asserts every result == success
 
 e2e.yml
 ├── image                  two builds, backend and frontend
 │                          docker save -> upload artifact
-├── e2e-main               needs: image; docker load (not rebuild-from-cache)
+├── e2e-main               needs: image; docker load (not rebuild-from-cache);
+│                          api project, then the ui project for specs/spa only
 └── e2e-gate               needs: e2e-main
 ```
 
 `client` deliberately does not need `build-test-lint`, because it runs its own gate. It is one job doing both `setup-go` and `setup-node` on purpose: 7.2's whole argument requires the gate and the generation to be inseparable. It therefore has no `defaults.run.working-directory`, since Go steps run in `backend/` and Node steps in `clients/ts/`, and every step names its own. The two toolchain caches key independently and do not collide.
 
-`ci-gate` cannot be a copy of the existing `e2e-gate`, which has one dependency. With four, and `if: always()`, it needs an explicit loop:
+`ci-gate` cannot be a copy of the existing `e2e-gate`, which has one dependency. With five, and `if: always()`, it needs an explicit loop:
 
 ```yaml
 ci-gate:
-  needs: [build-test-lint, db-integration, client, frontend]
+  needs: [build-test-lint, db-integration, client, frontend, origin]
   if: always()
   runs-on: ubuntu-latest
   steps:
     - run: |
         for r in "${{ needs.build-test-lint.result }}" "${{ needs.db-integration.result }}" \
-                 "${{ needs.client.result }}" "${{ needs.frontend.result }}"; do
+                 "${{ needs.client.result }}" "${{ needs.frontend.result }}" \
+                 "${{ needs.origin.result }}"; do
           [ "$r" = success ] || { echo "::error::a required job did not succeed ($r)"; exit 1; }
         done
 ```
@@ -1432,15 +1492,15 @@ ci-gate:
 
 | Workflow | Change |
 |---|---|
-| `ci.yml` | add the `client`, `frontend` and `ci-gate` jobs per 9.1. `build-test-lint` gains nothing except D11's paths |
-| `e2e.yml` | two application builds instead of one: `backend` at `context: ./backend`, `frontend` at `context: .`. The harness build at `context: ./test/e2e` is unaffected. `docker save`/`load` for both. **`BASE_URL` moves to the nginx service**, and every helper that assumed the UI and the API share a container needs checking |
-| `docker-build.yml` | two images to build, tag and push, on `scope=e2e-frontend` and `scope=e2e-backend` |
-| `codeql.yml` | D11 paths |
-| `security.yml` | D11 paths at four sites, **two** `trivy-image` scans (the nginx base is a new third-party image to keep patched), and `npm audit` or equivalent for `frontend` and `clients/ts` |
+| `ci.yml` | add the `client`, `frontend`, `origin` and `ci-gate` jobs per 9.1. `build-test-lint` gains nothing |
+| `e2e.yml` | two application builds instead of one: `backend` at `context: ./backend`, `frontend` at `context: .`. The harness build at `context: ./test/e2e` is unaffected. `docker save`/`load` for both. **`BASE_URL` moves to the nginx service**, and every helper that assumed the UI and the API share a container needs checking. A new `BACKEND_URL` names the backend for the tests that must bypass the origin, and the `ui` project runs `specs/spa` only |
+| `docker-build.yml` | two images to build, tag and push, on `scope=e2e-frontend` and `scope=e2e-backend`: `ghcr.io/andremmfaria/step-ca-webui` (the backend, its name kept) and `ghcr.io/andremmfaria/step-ca-webui-web` |
+| `codeql.yml` | gains a `javascript-typescript` analysis beside Go, with `build-mode: none` |
+| `security.yml` | **two** `trivy-image` scans, built as a matrix over backend and frontend (the nginx base is a new third-party image to keep patched). `npm audit` or equivalent for `frontend` and `clients/ts` is not yet added |
 | `lint-meta.yml` | no workflow-level path filters exist. The `style` job's stylelint, eslint and djlint globs and the `hadolint` job's `dockerfile:` path are hardcoded. The three style globs are deleted in Phase 9 and replaced by a `frontend/` lint step |
-| `dependabot.yml` | currently three ecosystems and **no npm**. Add `/frontend`, `/clients/ts` and `/test/e2e` (uncovered today). Update the Go and Docker directories for D11. Exclude `huma/v2` and `humachi` from the `go-minor-patch` group. Read from the default branch only, so it takes effect after the rename merges |
-| `.pre-commit-config.yaml` | D11 paths, the drift check scoped to `api/` and `apitypes/`, a frontend lint hook, and `hadolint` gaining the second Dockerfile |
-| `.golangci.yml` | **`depguard` is not in the `enable` list today.** Add it, plus a `settings.depguard.rules` block with `files: ["**/api/**", "**/apitypes/**"]` and the allowlist form from Section 2. `gomodguard` likewise, for the CORS ban. `gofumpt`'s `module-path: step-webui` is correct as-is, since D11 leaves the module path alone |
+| `dependabot.yml` | the npm ecosystems for `/frontend`, `/clients/ts` and `/test/e2e` are in place. The docker ecosystem for `/frontend` is in place (Phase 3c). Still to add: the exclusion of `huma/v2` and `humachi` from the `go-minor-patch` group. Read from the default branch only, so a change takes effect after it merges |
+| `.pre-commit-config.yaml` | the drift check scoped to `api/` and `apitypes/`, a frontend lint hook, and `hadolint` gaining the second Dockerfile |
+| `.golangci.yml` | `depguard` and `gomodguard_v2` are enabled in `backend/.golangci.yml` as of Phase 1, for the import allowlist from Section 2 and the CORS ban. `gofumpt`'s `module-path: step-webui` is correct as-is, since the module path is independent of the directory (D11) |
 
 ### 9.3 Rollback and recovery
 
@@ -1452,25 +1512,27 @@ ci-gate:
 
 ## 10. Impact on the e2e suite
 
-**Corrected 2026-09-02: the e2e track is active, not paused.** A 2026-08-13 note here said the agent had stopped and no further specs were being written against the interface this plan deletes. Commit `c7a96d6` (2026-08-15) landed anyway, adding the three OIDC `api` specs and all four `ui` companions. The freeze did not hold, and nothing about pausing it has been decided since, so this section now describes the suite as it stands rather than as it was frozen.
+**Corrected 2026-10-21: the e2e track is active, not paused.** A note here, present since this plan's first commit (`9b9d40a`, 2026-09-23), said the agent had stopped and no further specs were being written against the interface this plan deletes. Commit `1574eab` (2026-10-16) landed anyway, adding the three OIDC `api` specs and all four `ui` companions. The freeze did not hold, and nothing about pausing it has been decided since, so this section now describes the suite as it stands rather than as it was frozen.
 
-**Current state** (verified 2026-09-02 by listing `test/e2e/specs/` and grepping its `E2E-*` IDs, not re-derived from the status doc): harness phases 0 to 2 complete. **24 spec files cover 40 of the 78 indexed test IDs**, up from 17 files and 34 IDs: `AUTH-01, -04, -07, -08, -11 to -16, RBAC-01/02, CSRF-01/05, CERT-01 to -04 and -09, PROV-01/02, HIST-01 to -03, SEC-01/02, ADM-01 to -05, BAK-01, HLTH-01 to -06, STATIC-01, CFG-01`. Pass/skip counts were **not re-measured**: the suite needs the full docker compose stack (postgres, step-ca, secrets with the uid-specific `chmod`) that `plans/e2e-implementation-status.md`'s "Local run" section describes, which is out of scope for this docs-only pass. Treat the ID and file counts above as current and the last known pass level (138 passing, 8 skipped, recorded against 34 IDs) as stale.
+**Current state** (verified 2026-11-06 by listing `test/e2e/specs/` with `git ls-files -o -c --exclude-standard` and grepping its `E2E-*` test titles, not re-derived from the status doc): harness phases 0 to 2 complete. **26 `api` and `ui` spec files cover 45 of the 83 indexed test IDs**, up from 17 files and 34 IDs, and 5 further `infra` spec files under `specs/boot/` (`fb6490f`, 2026-11-03) cover 8 of the 9 bootstrap IDs. The 45 are `AUTH-01, -04, -07, -08, -11 to -16, RBAC-01/02, CSRF-01/05, CERT-01 to -04 and -09, PROV-01/02, HIST-01 to -03, SEC-01/02, ADM-01 to -05, BAK-01, HLTH-01 to -06, STATIC-01, CFG-01`, plus the five that Phase 3c added: `SPA-01, -02, -03, CSP-01` in `spa/spa-shell.ui.spec.ts` and `ORIGIN-01` in `origin/origin-01.api.spec.ts`. The last measured pass level is Phase 3c's: the `api` project passed 141 and skipped 15 with 0 failed, run through nginx on a real stack. The older 138 passing, 8 skipped was recorded against 34 IDs and is superseded.
 
-**Deviation from this section's own resumption order.** Step 4 below says `ui` specs are written last, after Phase 8, once the markup is stable. They were not: all four (`cert-01.ui`, `auth-04.ui`, `auth-11.ui`, `cfg-01.ui`, covering test IDs CERT-01, AUTH-04, AUTH-07, AUTH-11 and CFG-01) were written in `c7a96d6` against the server-rendered markup this plan's Phase 9 deletes. **Consequence:** those four spec files must be rewritten, or retired, when Phases 4 to 8 replace the pages they assert against. Until then they guard the legacy UI only, not the SPA this plan is building toward.
+**Deviation from this section's own resumption order.** Step 4 below says `ui` specs are written last, after Phase 8, once the markup is stable. They were not: all four (`cert-01.ui`, `auth-04.ui`, `auth-11.ui`, `cfg-01.ui`, covering test IDs CERT-01, AUTH-04, AUTH-07, AUTH-11 and CFG-01) were written in `1574eab` against the server-rendered markup this plan's Phase 9 deletes. **Consequence:** those four spec files must be rewritten, or retired, when Phases 4 to 8 replace the pages they assert against. Until then they guard the legacy UI only, not the SPA this plan is building toward.
 
 **What survives**
 
 | Suite | Fate |
 |---|---|
-| `infra` project (E2E-BOOT-01 to -09) | **Untouched.** Bootstrap, `UI_TLS_MODE`, root provisioning, deliberate fatals and the renewal goroutine are below the HTTP layer. Not yet written |
-| Health (E2E-HLTH-01 to -06) | **Untouched.** `/health` and `/ready` keep their paths and payloads. Already written. They live in the `api` project despite testing infrastructure |
+| `infra` project (E2E-BOOT-01 to -09) | **The assertions are untouched** and the override files needed no edit: bootstrap, `UI_TLS_MODE`, root provisioning, deliberate fatals and the renewal goroutine are below the HTTP layer. The five spec files did change, four to dial the backend's network address instead of a published port, and `boot-fatals` to drop that probe and to split E2E-BOOT-07 (d). Written for all but E2E-BOOT-08, with E2E-BOOT-07 marked `test.fixme` |
+| Health (E2E-HLTH-01 to -06) | **Untouched by the contract rewrite.** `/health` and `/ready` keep their paths, and `/ready` gained the four certificate keys that E2E-HLTH-02 now asserts. Already written. They live in the `api` project despite testing infrastructure. E2E-HLTH-02 dials `BACKEND_URL` because it asserts the backend's own `/ready` body, and the others go through the origin |
 | `api` project, the other 30 written IDs | **Rework.** Path, method, encoding, status code and assertion shape all change. Intent survives, body does not. Includes the `api` half of CERT-01 and AUTH-11, which also carry a `ui` spec |
-| `ui` project (4 spec files, 5 IDs: CERT-01, AUTH-04, AUTH-07, AUTH-11, CFG-01) | **Already written, against the interface this plan deletes.** See the deviation note above: rewrite or retire per page, in the phase that replaces that page |
-| Helpers | `compose.ts` (which also provides `psql` and `psqlRows` at `:75,81`), `env.ts`, `openssl.ts`, `poll.ts`, `qr.ts`, `totp.ts`, `envfile.ts` survive. `flash.ts` is deleted. `session.ts`, `routes.ts` and `certs.ts` are rewritten, `certs.ts` because it builds issuance payloads against the form contract |
+| `ui` project, legacy (4 spec files, 5 IDs: CERT-01, AUTH-04, AUTH-07, AUTH-11, CFG-01) | **Already written, against the interface this plan deletes.** See the deviation note above: rewrite or retire per page, in the phase that replaces that page. Two of them fail today for reasons unrelated to the topology (`auth-04.ui`, `auth-11.ui`) |
+| `ui` project, SPA (1 spec file, 4 IDs: SPA-01, -02, -03, CSP-01) | **Written in Phase 3c against the SPA**, and the only `ui` specs CI runs. They survive Phase 9, with `SPA_BASE` flipping to the empty string |
+| `api` project, origin (E2E-ORIGIN-01) | **Written in Phase 3c** to prove the passthrough carries every template route and `/static/*` through nginx. Retired in Phase 9 with the routes it covers |
+| Helpers | `compose.ts` (which also provides `psql` and `psqlRows`), `env.ts`, `openssl.ts`, `poll.ts`, `qr.ts`, `totp.ts`, `envfile.ts` survive. `flash.ts` is deleted. `session.ts`, `routes.ts` and `certs.ts` are rewritten, `certs.ts` because it builds issuance payloads against the form contract |
 
-6 of the 40 written IDs survive untouched (HLTH-01 to -06), 1 (STATIC-01) is retired in Phase 9, and 30 have an `api`-side body that needs rewriting. 5 of those 40 (CERT-01, AUTH-04, AUTH-07, AUTH-11, CFG-01) are the `ui`-shaped IDs above, of which 2 (CERT-01, AUTH-11) are also in the 30 needing an `api`-side rewrite, since both a body rewrite and a UI-shaped rewrite apply to different halves of the same ID. The largest untouched block, the 9 `infra` IDs, is not written yet. The rewrite is a body rewrite, not a re-derivation: `plans/e2e-tests.md` already states what each test asserts.
+6 of the 45 written IDs survive untouched by the contract rewrite (HLTH-01 to -06), 4 more (SPA-01, -02, -03, CSP-01) were written against the SPA and survive Phase 9, 2 (STATIC-01 and ORIGIN-01) are retired in Phase 9, and 30 have an `api`-side body that needs rewriting. 5 of the 40 older IDs (CERT-01, AUTH-04, AUTH-07, AUTH-11, CFG-01) are the `ui`-shaped IDs above, of which 2 (CERT-01, AUTH-11) are also in the 30 needing an `api`-side rewrite, since both a body rewrite and a UI-shaped rewrite apply to different halves of the same ID. The other 3 (AUTH-04, AUTH-07, CFG-01) have no `api` spec. The largest untouched block, the 9 `infra` IDs, is written for 8 of them. The rewrite is a body rewrite, not a re-derivation: `plans/e2e-tests.md` already states what each test asserts.
 
-**What the two-container topology breaks in the harness, beyond the contract rewrite.** This is a separate axis from the contract-bound specs and it lands in Phase 3c, not per domain.
+**What the two-container topology breaks in the harness, beyond the contract rewrite.** This is a separate axis from the contract-bound specs and it landed in Phase 3c, not per domain. The rows record what each site was and, where the build disagreed, what is true.
 
 | Site | Breaks because |
 |---|---|
@@ -1481,7 +1543,7 @@ ci-gate:
 | `helpers/session.ts:21-33,36-54,75-79` | scrapes `csrf_token` from HTML, posts form-encoded to `/login`, expects `302`, scrapes `/dashboard`. All four assumptions go |
 | `helpers/session.ts:82` | `SESSION_COOKIE_NAME = "step-webui"` becomes `__Host-step-webui` under `SESSION_SECURE`, which is the compose default |
 | `helpers/flash.ts` | flash text and the plain-text `403 Forbidden` body both disappear |
-| `helpers/routes.ts:17-25` | reads `backend/main.go` by path and regexes `r.Post(...)`. Post-Phase-1 the routes are `huma.Register`, so it derives zero and throws |
+| `helpers/routes.ts` | reads `backend/main.go` by path and regexes `r.Post(...)`. During the migration window the template routes are still registered there, so it derives a non-empty list and passes. At Phase 9 the routes are `huma.Register`, so it derives zero and throws, and the CSRF sweep moves to the route golden file |
 | `helpers/compose.ts:113,116,123,184-195` | log capture and `restartUI` are hardcoded to the `step-webui` service. A backend restart now also disturbs nginx |
 | `collect.sh:61` | the service list omits `step-webui-web`, so nginx logs are never collected on failure |
 | `specs/config/static-01.api.spec.ts` | retired in Phase 9, not repathed. It tests a Go handler that ceases to exist |
@@ -1489,21 +1551,21 @@ ci-gate:
 | `specs/provisioners/prov.api.spec.ts:37,65` | asserts on `services["step-webui"].environment` in the merged compose config, which changes |
 | `specs/auth/auth-sessions.api.spec.ts:48,77,104` | asserts `Set-Cookie` contains `step-webui=` |
 | `compose.e2e-image.yml:7` | pins the prebuilt image on `step-webui` only, with no equivalent for the nginx image |
-| `compose.e2e-fatals.yml:7` | **No edit needed.** `compose.e2e-noweb.yml` gives `step-webui-web` a never-enabled profile and `scenario.sh` composes it into every scenario, so nginx never exists for the `infra` project (Phase 3c step 3) |
-| `compose.e2e-nodeps.yml:7` | **No edit needed.** `compose.e2e-noweb.yml` gives `step-webui-web` a never-enabled profile and `scenario.sh` composes it into every scenario, so nginx never exists for the `infra` project (Phase 3c step 3) |
-| `compose.e2e-fingerprint.yml:13-19` | **No edit needed.** `compose.e2e-noweb.yml` gives `step-webui-web` a never-enabled profile and `scenario.sh` composes it into every scenario, so nginx never exists for the `infra` project (Phase 3c step 3) |
+| `compose.e2e-fatals.yml:7` | **No edit to the override.** `compose.e2e-noweb.yml` gives `step-webui-web` a never-enabled profile and `scenario.sh` composes it into every scenario, so nginx never exists for the `infra` project (Phase 3c step 3). The boot spec files that dialled the published port did need editing, see the `infra` row above |
+| `compose.e2e-nodeps.yml:7` | **No edit to the override.** `compose.e2e-noweb.yml` gives `step-webui-web` a never-enabled profile and `scenario.sh` composes it into every scenario, so nginx never exists for the `infra` project (Phase 3c step 3) |
+| `compose.e2e-fingerprint.yml:13-19` | **No edit to the override.** `compose.e2e-noweb.yml` gives `step-webui-web` a never-enabled profile and `scenario.sh` composes it into every scenario, so nginx never exists for the `infra` project (Phase 3c step 3) |
 
 Not e2e but the same class, and absent from an earlier draft's blast radius: `scripts/test_deploy.sh:119,129,132,135,138`, which curls `/login`, greps for a server-rendered `<form>` and fetches two `/static/*` assets.
 
 **Resumption order**
 
-1. **Resume on work immune to this plan**: the `infra` project, the nightly `renew` leg, the harness scripts. None touches the HTTP contract, and it can run in parallel with Phase 0 **on `main`**, which is why D11's rename lands first, ahead of every other phase. Note the rename breaks `test/e2e/helpers/routes.ts` and `specs/config/static-01.api.spec.ts`, both loudly, and both are fixed in the rename commit.
-2. **New `api` specs stay frozen** for the domains this plan touches until Phase 1 lands. The 28 contract-bound IDs are rewritten in the phase that migrates their domain, not speculatively.
+1. **Resume on work immune to this plan**: the `infra` project, the nightly `renew` leg, the harness scripts. None touches the HTTP contract, and it can run in parallel with the phases of this plan **on `main`**.
+2. **New `api` specs stay frozen** for the domains this plan touches until Phase 1 lands. The 30 contract-bound IDs are rewritten in the phase that migrates their domain, not speculatively.
 3. **After Phase 2 the suite gains a better tool than it has today.** The generated client can be installed into `test/e2e` and used to drive `api` specs, giving compile-time protection against contract drift. Two mechanics to solve when that happens: the harness runs from `/e2e` inside `step-ca-webui-harness:e2e` with baked `node_modules`, so the branch's tarball must reach that image's build context and the `e2e-harness` cache scope must key on it, or the baked client goes stale silently. And that consumer needs *this branch's* client, never a published one, which is a second reason D8 publishes on tags only.
 4. **`ui` specs are written last**, after Phase 8, once the markup is stable.
 5. `plans/e2e-tests.md` gains an **appendix**, not a rewrite, recording which test IDs changed contract and their new shape. Append-only, following this repository's convention, updated by each of Phases 4 to 8 rather than once at the end.
 
-**Pass level, which Section 2's final criterion cites.** Phase 9 does not merge until all of the following hold. The 6 untouched IDs (HLTH-01 to -06) pass unmodified. All 27 contract-bound IDs are rewritten and passing, and STATIC-01 is retired. The 9 `infra` IDs are written and passing. The 4 `ui` browser companions and the CSP smoke spec are written and passing. Skips number 8 or fewer and each carries a linked issue. And the whole run executes against the two images built in the same workflow run.
+**Pass level, which Section 2's final criterion cites.** Phase 9 does not merge until all of the following hold. The 6 untouched IDs (HLTH-01 to -06) pass unmodified. All 30 contract-bound IDs are rewritten and passing, and STATIC-01 is retired. The 9 `infra` IDs are written and passing. The 4 legacy `ui` browser companions are rewritten or retired, and the 4 SPA specs (SPA-01, -02, -03 and the CSP smoke spec CSP-01) pass. Skips number 8 or fewer and each carries a linked issue. And the whole run executes against the two images built in the same workflow run.
 
 ---
 
@@ -1513,11 +1575,11 @@ Each risk names a **trigger** and an **owner phase** unless explicitly parked, a
 
 **Discharged at Phase 0's exit** and not worth re-reading afterwards: R4 and R5 (spec purity and determinism), R6 (the CSRF bootstrap, whose residual is 5.4's concurrency rule and already has a test), R9 (binary downloads, proven against a placeholder resource), R12 (the huma handler signature). **Parked, not live:** R3 (no tag is planned), R20 (withdrawn by removing the branch), R24 (a statement of scope, not a risk). **The thirteen that are the register**, and that a reader short of time should read instead of all of it: R13, R15, R16, R17, R18, R22, R25, R27, R30, R31, R32, R33, R34.
 
-**R1. Collision with the e2e work.** Stopped with 34 of 78 IDs written across 17 files, not the six an earlier count claimed. Six survive untouched, 28 need rewriting, and Phases 4 to 8 each now carry an explicit rewrite step, which revision 1 left assigned to nobody. *Trigger:* any new file under `test/e2e/specs/` outside `infra/` before Phase 1 lands. *Owner:* Phases 4 to 8.
+**R1. Collision with the e2e work.** 45 of 83 IDs are written across 26 files, not the six an earlier count claimed. Six survive untouched, four were written against the SPA, 30 need an `api`-side rewrite, 2 are retired, 3 exist only as legacy `ui` specs, and Phases 4 to 8 each now carry an explicit rewrite step, which revision 1 left assigned to nobody. *Trigger:* any new file under `test/e2e/specs/` outside `infra/` before Phase 1 lands. *Owner:* Phases 4 to 8.
 
 **R2. `@hey-api/openapi-ts` is pre-1.0, and its escape hatch expires.** Pin exactly, never a range. Generator bumps arrive as their own pull request with the generated diff reviewed. The `openapi-typescript` plus `openapi-fetch` fallback is cheap only until Phase 4, because it removes the generated query layer and every call site built on it. **After Phase 4 the fallback is a frontend rewrite, and the real response to a broken generator is to pin, patch and fix forward.** *Trigger:* a dependabot bump whose generated diff is not reviewable in one sitting. *Owner:* Phase 2.
 
-**R3. GitHub Packages token trap.** A package first created with a personal access token permanently denies `GITHUB_TOKEN`. Mitigated by tag-only publication from CI. *Trigger:* the first `v*` tag. **Not on this project's critical path**, since no tag is planned in Phases 0 to 9 and Q1 has yet to surface an external consumer.
+**R3. GitHub Packages token trap.** A package first created with a personal access token permanently denies `GITHUB_TOKEN`. Mitigated by tag-only publication from CI. *Trigger:* the first `v*` tag, `v0.1.0`. **Not on this project's critical path**, since Q1 has yet to surface an external consumer.
 
 **R4. Spec determinism. Marshalling discharged, configuration not.** Huma's maps are key-sorted by `encoding/json`, so the canonicalising-re-marshal contingency stays withdrawn, and anonymous-schema suffixing is fixed by explicit sequential registration. **The live half is D3 rule 1, which in revision 1 was a sentence with no enforcement.** A provisioner list that becomes an `enum`, a duration bound that becomes a `maximum`, a template list that becomes a `default`, and the spec is environment-dependent and the gate fails per machine. Mitigation is the two-environment double generation, which turns the rule into a test. *Trigger:* the drift gate failing locally and passing in CI, or the reverse. *Owner:* Phase 0 step 7.
 
@@ -1527,13 +1589,13 @@ Each risk names a **trigger** and an **owner phase** unless explicitly parked, a
 
 **R7. `SameSite=Strict` and OIDC.** Handled by the separate `Lax` cookie carrying state, nonce and verifier, and by the SPA rescuing `Strict` on the callback landing. Note 4.4: OIDC does not traverse the Vite proxy, so this is only ever exercised under compose and no e2e ID currently covers it. Reverting to `Lax` on the session cookie is the status quo and costs nothing else. *Trigger:* the first OIDC login attempt after Phase 1. *Owner:* Phase 1 step 4.
 
-**R8. Coverage, and the silent case.** The visible failure is a red gate. **The failure that matters is invisible: coverage falls and the gate stays green because the floor is far below the real number.** Measured at the Phase 0 rename: **22.9% against a 15% floor**, so the gap is already 7.9 points. Mitigation is Section 2's two-sided gate, which fails when measured coverage exceeds the floor by more than 5 points so the floor ratchets without a human deciding to raise it, but **the floor must be raised to 22 in the same commit that switches the gate on**, or it red-lines on day one against pre-existing coverage rather than against a regression. *Trigger:* any phase PR whose coverage step passes with no floor change. *Owner:* every phase.
+**R8. Coverage, and the silent case.** The visible failure is a red gate. **The failure that matters is invisible: coverage falls and the gate stays green because the floor is far below the real number.** Measured at Phase 0's completion: **22.9% against a 15% floor**, a gap of 7.9 points at that point. Mitigation is Section 2's two-sided gate, which fails when measured coverage exceeds the floor by more than 5 points so the floor ratchets without a human deciding to raise it, but **the floor must be raised to 22 in the same commit that switches the gate on**, or it red-lines on day one against pre-existing coverage rather than against a regression. *Trigger:* any phase PR whose coverage step passes with no floor change. *Owner:* every phase.
 
 **R9. Binary downloads through a generated client.** Blob handling, filename derivation and the backup flow are the awkward corner of every generated client. Proven in Phase 0 against a placeholder resource, not discovered in Phase 4. A hand-written download wrapper in `src/api/` is expected, and lives there as one reviewed exception rather than a pattern. *Trigger:* Phase 0 step 6. *Owner:* Phase 0 step 6.
 
 **R10. Bundle size and the CSP.** `style-src 'self'` is a hard functional constraint on any library injecting a `<style>` tag, not merely a size concern. *Trigger:* the CSP smoke spec, which is what converts this from "someone notices a broken page" into a failing check. *Owner:* Phase 3c step 5.
 
-**R11. Docker build context widening.** Without `.dockerignore`, five `node_modules` trees, `backups/`, `secrets/` and `.env` enter the context: the first destroys caching and the last three would bake credentials into an immutable image layer. *Trigger:* a build-context size assertion in CI, so it is not "CI feels slow". *Owner:* Phase 3c step 2.
+**R11. Docker build context widening.** Without `.dockerignore`, four `node_modules` trees, `backups/`, `secrets/` and `.env` enter the context: the first destroys caching and the last three would bake credentials into an immutable image layer. *Trigger:* a build-context size assertion in CI, so it is not "CI feels slow". *Owner:* Phase 3c step 2.
 
 **R12. The huma handler signature versus `gorilla/sessions`.** A handler receives only a `context.Context` while every cookie and session write needs `(r, w)`. All of 5.3 and 5.4 depends on the unwrap middleware. *Trigger:* Phase 0 step 3, before anything is built on it. If it fails, `oapi-codegen` is the better answer and Phase 0's exit criterion allows it. *Owner:* Phase 0.
 
@@ -1553,13 +1615,13 @@ Each risk names a **trigger** and an **owner phase** unless explicitly parked, a
 
 **R20. The branch model. Mitigated by removal.** See Section 8's rejection of a long-lived `feat/spa`. *Trigger:* not applicable while no long-lived branch exists. Reinstate the moment one is proposed.
 
-**R21. The CSS port is a rewrite, and D7 and D12.8 already disagree about it.** D7 says the CSS moves "mostly unchanged". D12.8 says `routes/` does not mirror templates and the shared primitives are *extracted* from `base.html` and `admin_base.html` rather than reproduced. CSS written against a Go template's DOM does not survive a component tree that deliberately differs, and the cost lands not in Phase 3 but in Phases 4 to 8, one page at a time. Mitigation: Phase 3's side-by-side exit criterion, and taking the keep-or-replace decision once. *Trigger:* Phase 3a step 3 producing more selector edits than moved files. *Owner:* Phase 3a.
+**R21. The CSS port is a rewrite, and D7 and D12.8 already disagree about it.** D7 says the CSS moves "mostly unchanged". D12.8 says `routes/` does not mirror templates and the shared primitives are *extracted* from `base.html` and `admin_base.html` rather than reproduced. CSS written against a Go template's DOM does not survive a component tree that deliberately differs, and the cost lands not in Phase 3 but in Phases 4 to 8, one page at a time. Mitigation: Phase 3's side-by-side exit criterion, and taking the keep-or-replace decision once. *Trigger:* Phase 3a step 3 producing more selector edits than moved files. *Owner:* Phase 3a. *Status:* open. Phase 3a measured zero selector edits across seven byte-identical files, and resolved the one cascade collision (the login `body` and `.logo` rules against the app shell) additively in `spa.css`. The side-by-side against the current UI was not done, and scoping the login rules is deferred to Phase 4 onward.
 
 **R22. Two authorisation implementations coexist for six phases.** `mw.RequireRole` on chi groups and the huma role middleware both live until Phase 9. A capability migrated to `/api/v1` while its template route stays registered is a second, older path to the same capability under the older rules, and Section 6's role corrections (revocation and the three CA downloads becoming admin) mean the two paths **deliberately disagree**. Mitigation: the golden table's `templateRouteRetired` column, whose false count the role-matrix test reports on every run, reaching zero as a Phase 9 criterion. *Trigger:* that count rising, or failing to fall across a phase. *Owner:* Phases 4 to 9.
 
 **R23. `handlers/` becoming a service layer is unpriced.** 4.1 says `handlers/` is kept and becomes the service layer, and 5.5 says handlers recover `(r, w)` and call existing methods unchanged. Both are true for session and cookie work. Neither is true for the handlers that render, which is most of them: today's functions compute and write in the same body, so every migrated operation needs its logic separated from its response writing first. That work is invisible in an endpoint map, which counts routes rather than function bodies, and it is concentrated in the largest phases. Mitigation: Phase 4's first-three-operations rule, with the observed cost applied to Phases 5 to 8. *Trigger:* the first handler whose logic cannot be extracted without touching `h.render`'s data map. *Owner:* Phase 4.
 
-**R24. Scope.** 33 templates, 65 routes, 46 handler files, two container images, six workflows plus `dependabot.yml`, and the entire test suite. Listed for honesty rather than as a risk with a mitigation: it is a fact about the work, and the controls for it are R17, R18 and Phase 0's off-ramp.
+**R24. Scope.** 33 templates, 65 routes, 25 non-test handler files, two container images, six workflows plus `dependabot.yml`, and the entire test suite. Listed for honesty rather than as a risk with a mitigation: it is a fact about the work, and the controls for it are R17, R18 and Phase 0's off-ramp.
 
 **R25. The proxy layer is a second place to get identity wrong, and the first attempt at it was wrong.** The CRITICAL finding, stated in full in D5 rule 1 and **reproduced in Phase 0**: when a proxying location loses the forwarding headers to nginx's all-or-nothing inheritance, `clientFromHeaders` exhausts its XFF loop and falls through to `X-Real-IP` and `True-Client-IP` (`middleware/realip.go:12,71-74`), handing an unauthenticated caller the login rate limiter, `auth_log.ip`, `users.last_ip` and the security log. Measured, not theorised: five failed logins with rotating forged values left the counter frozen, and the full header set restored a normal countdown to blocked. Three further silent failures in the same layer: `TrustProxy` off collapses every client to one address, `proxy_set_header` inherits all-or-nothing per level so a legacy block without the include takes raw client headers, and a `location` falling through `try_files` for an API path returns `200 text/html` where the client expects a problem document. *Mitigation:* D5 rules 1 to 4, the shared include, deleting the Go-side fallback, and Section 2's four-header forgery table. *Trigger:* any edit to `nginx.conf` or `realip.go`. *Owner:* Phase 3b steps 1, 2 and 6. *Status:* live.
 
@@ -1585,7 +1647,7 @@ Each risk names a **trigger** and an **owner phase** unless explicitly parked, a
 
 ## 12. Open questions
 
-**All seven questions this plan has carried are answered.** Q1 to Q3 on 2026-08-13, Q4 to Q7 on 2026-08-15. Nothing blocks any phase. They are recorded here with what each answer changed, because every one of them moved a decision.
+**All seven questions this plan has carried are answered.** Q1 to Q3 on 2026-09-23, Q4 to Q7 on 2026-10-12. Nothing blocks any phase. They are recorded here with what each answer changed, because every one of them moved a decision.
 
 **Q1, answered: what did "not very scalable" mean, and is a second API consumer in scope?** No second consumer for now, **but the API is to be versioned anyway**. That is the right call and it is not the same as "no consumer, so no version": versioning now costs a path segment and a policy, while retrofitting one after a consumer exists costs a migration. 5.1 turns the segment from a hedge into a policy with an enforcement mechanism (`oasdiff` in the `client` job) and states what would have to be built if `v2` ever ships. 1.3's non-goal about a public API surface stands for now, and is the one most likely to be revisited.
 
@@ -1593,13 +1655,13 @@ Each risk names a **trigger** and an **owner phase** unless explicitly parked, a
 
 **Q3, answered: appetite and deadline?** None. It is ready when it is ready. That removes schedule pressure and replaces it with the drift risk R18 now describes: with nothing forcing a finish, the coexistence state can become permanent by default. Section 8 answers that by naming Phase 4 completion an explicit end state rather than a stall, so stopping is a decision and not an outcome.
 
-**Reopened by the two-container answer, and answered 2026-08-15.** Q4 to Q7 did not exist before the split, and Q7 was a contradiction the plan created about itself.
+**Reopened by the two-container answer, and answered 2026-10-12.** Q4 to Q7 did not exist before the split, and Q7 was a contradiction the plan created about itself.
 
 **Q4, answered: compose on one host is the only supported topology, but D5 stops short of mechanisms that cannot be undone.** The concern was real: `depends_on: service_healthy`, static addresses on a pinned subnet, `TRUSTED_PROXY_CIDRS` as a single `/32`, `resolver 127.0.0.11`, a shared read-write volume carrying a certificate between two containers and an entrypoint polling for a file another container writes are all compose-specific, and not one of them survives a move to Kubernetes, ECS or Nomad. The answer is neither "compose forever, design for it" nor "build for an orchestrator now". It is that compose is the only topology this repository supports and tests, while the three decisions that would be **expensive to reverse** are made in their portable form today, because each costs nothing extra now.
 
 Three changes follow, and they are the whole of the answer.
 
-1. **The trusted proxy address is resolved, not pinned.** D5 rule 3 is rewritten: `TRUSTED_PROXY_CIDRS` is a list, empty by default, and when empty the backend resolves `WEB_UPSTREAM_HOST` at startup and trusts that `/32`. An explicitly set list is used verbatim, which is exactly what a deployment behind an ingress needs. No service gets a static address, and `ipam.config.subnet` survives only as a collision escape hatch for Q6's operator.
+1. **The trusted proxy address is resolved, not pinned.** D5 rule 3 is rewritten: `TRUSTED_PROXY_CIDRS` is a list, empty by default, and when empty the backend resolves `WEB_UPSTREAM_HOST`, re-resolving it every five seconds and trusting nothing until the first lookup succeeds, because a startup-only resolution that is fatal on failure deadlocks against `depends_on: service_healthy`. An explicitly set list is used verbatim, which is exactly what a deployment behind an ingress needs. No service gets a static address, and `ipam.config.subnet` survives only as a collision escape hatch for Q6's operator.
 2. **`WEB_TLS_MODE=provided` is a first-class mode**, in Phase 3b step 4 rather than as a later addition. An operator mounts a leaf from outside, the certificate wait and the renewer are skipped, and the cross-container read-write volume becomes the convenience default rather than the only path. That is the single mechanism a secret store would have to replace, and now it does not have to replace anything.
 3. **`README.md`'s existing ECS and Kubernetes claims stay true.** They already exist in three places (`CA_ROOT_CERT_PEM`, `DATABASE_URL`, the PostgreSQL wait), and the two changes above are what keeps the split from silently contradicting them.
 
@@ -1617,9 +1679,9 @@ What is deliberately **not** done: `depends_on: service_healthy` stays, `resolve
 
 **That makes D5's rules justified rather than over-built**, which is the opposite of the reading the question offered. Every rule in D5 is a default a stranger inherits without reading it.
 
-**It also creates one deliverable that no phase produced.** Phase 3b gains step 8: each key the split introduces ships with a safe default, a stated failure mode and a `README.md` configuration-table row, with a CI grep asserting the rows exist. The keys are `WEB_TLS_MODE`, `WEB_HOSTNAME`, `WEB_UPSTREAM_HOST`, `TRUST_PROXY`, `TRUSTED_PROXY_CIDRS`, `STEP_NET_SUBNET`, `WEB_HSTS_MAX_AGE`, `PUBLIC_BASE_URL` and `IMAGE_TAG`. It lands in Phase 3b, not Phase 9, because those keys go live the moment nginx takes the published port and a half-migrated tree is still something someone can install.
+**It also creates one deliverable that no phase produced.** Phase 3b gains step 8: each key the split introduces ships with a safe default, a stated failure mode, a `docs/configuration.md` row and an `.env.example` line, with a CI grep asserting both exist. The keys are `WEB_TLS_MODE`, `WEB_HOSTNAME`, `WEB_UPSTREAM_HOST`, `TRUST_PROXY`, `TRUSTED_PROXY_CIDRS`, `STEP_NET_SUBNET`, `WEB_HSTS_MAX_AGE`, `PUBLIC_BASE_URL` and `IMAGE_TAG`. It lands in Phase 3b, not Phase 9, because those keys go live the moment nginx takes the published port and a half-migrated tree is still something someone can install.
 
-**Two defaults are decided by this answer rather than left to the phase.** `WEB_HSTS_MAX_AGE` is unset by default, because a two-year policy on a name chaining to a private root is a trap with no downgrade path and a stranger will not know that. And `STEP_NET_SUBNET` defaults outside `172.16/12`, because that is where corporate VPNs live and a collision presents as an unrelated network failure.
+**Two defaults are decided by this answer rather than left to the phase.** `WEB_HSTS_MAX_AGE` is unset by default, because a two-year policy on a name chaining to a private root is a trap with no downgrade path and a stranger will not know that. And `STEP_NET_SUBNET` defaults outside `172.16/12`, to `10.213.0.0/24`, because `172.16/12` is where corporate VPNs live and a collision presents as an unrelated network failure.
 
 **Q7, answered in Section 8.** The clean stop is after Phase 2, not after Phase 4. What remains open is only whether to take it, which is a question about appetite rather than about the plan, and it can be answered at Phase 2's exit with the contract already in hand.
 
@@ -1630,4 +1692,4 @@ What is deliberately **not** done: `depends_on: service_healthy` stays, `resolve
 - **Duration encoding.** Integer seconds (5.8). `UI_CERT_DURATION` is a Go duration string in config and becomes an integer in `GET /api/v1/certificates/options`.
 - **`/admin/integrity` cost.** A Phase 6 task with a decision rule, because it is answerable by measurement rather than by asking someone to read the same code.
 - **Visual scope.** A non-goal (1.3), with one live sub-question deferred to Phase 3a's exit with an evidence rule: if the CSS port needs restructured selectors rather than renamed ones, decide then whether a utility layer is in scope (R21).
-- **`plans/step-cli-to-ca-lib-swap.md`.** Removed 2026-09-02. The swap it described had already landed: `backend/stepca/` (`client.go`, `bootstrap.go`, `issue.go`, `revoke.go`) wraps `github.com/smallstep/certificates/ca`, `handlers/stepcli.go` is gone, no `exec.Command("step", ...)` remains under `backend/`, and the Dockerfile no longer installs the `step` binary.
+- **`plans/step-cli-to-ca-lib-swap.md`.** Removed 2026-10-21. The swap it described had already landed: `backend/stepca/` (`client.go`, `bootstrap.go`, `issue.go`, `revoke.go`) wraps `github.com/smallstep/certificates/ca`, `handlers/stepcli.go` is gone, no `exec.Command("step", ...)` remains under `backend/`, and the Dockerfile no longer installs the `step` binary.
