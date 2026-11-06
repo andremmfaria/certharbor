@@ -165,6 +165,10 @@ cover: ## Run coverage gate
 	cd $(GO_DIR) && go test -coverprofile=coverage.out ./... >/dev/null
 	cd $(GO_DIR) && COVERPROFILE=coverage.out THRESHOLD=15 bash scripts/coverage-gate.sh
 
+.PHONY: version
+version: ## Write the VERSION file into every file that carries a version
+	./scripts/sync-version.sh
+
 .PHONY: openapi
 openapi: ## Regenerate backend/openapi/openapi.json from the huma-registered operations
 	cd $(GO_DIR) && go run ./cmd/openapi -out openapi/openapi.json

@@ -98,3 +98,13 @@ jobs:
       - name: eslint (e2e harness)
         run: npx eslint .
         working-directory: test/e2e
+
+  version:
+    name: Versions follow VERSION
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Every version matches the VERSION file
+        run: ./scripts/sync-version.sh --check

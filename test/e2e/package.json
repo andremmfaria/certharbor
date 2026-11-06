@@ -1,6 +1,6 @@
 {
   "name": "step-ca-webui-e2e",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "End-to-end suite for step-ca-webui (plans/e2e-tests.md). Deliberately its own Node project, outside the Go module and the repo-root frontend tooling.",
   "license": "SEE LICENSE IN ../../LICENSE",

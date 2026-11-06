@@ -452,7 +452,7 @@ See D12 for the eight architecture decisions this stack does not make on its own
 
 **Decision, in three parts.**
 
-**Version.** `0.<MINOR>.<PATCH>-sha.<short-sha>`, where MINOR lives in `openapi/package-version.txt` as a human signal of contract era, and **PATCH is derived**, not hand-edited: `git rev-list --count origin/main`, which is monotonic by construction and unique per commit. That command needs the full history, so **the `client` job must set `fetch-depth: 0`**. With the default depth of 1 there is no `origin/main` ref at all and the command fails outright rather than returning a wrong number. `ci.yml`'s two existing jobs already set it. The new job must too. The in-image pack cannot run it at all and stamps `0.<MINOR>.0-dev` instead (D5). A hand-edited version number earns its keep only when a resolver consumes the human's compatibility judgement, and here the sole consumer resolves by path. Two pull requests bumping a hand-edited file to the same value **merge without conflict**, hiding the collision until `npm publish` rejects the duplicate and reddens `main` on a clean merge with nobody at fault. Deriving PATCH removes that failure mode entirely. **Q5's answer removes the last gate from MINOR.** It stays in `openapi/package-version.txt` as a free-running marker of contract era, bumped by a human when they judge an era has ended, and nothing in CI asserts it. The enforced breaking-change signal lives in `docs/contract-changes.md` instead (7.2), which is greppable, diffable and outlives this document.
+**Version.** `<VERSION>-sha.<short-sha>`, where `VERSION` is the file at the repository root, the single source of the project version (`scripts/sync-version.sh` writes it into every file that carries one and `lint-meta.yml` checks them). The short commit SHA is appended by `scripts/client-version.sh`, so two builds of the same version stay distinguishable and a consumer can prove which commit the client came from.
 
 **Consumption.** The client is **not** a declared dependency of `frontend` and does not appear in its lockfile. Every consumer runs `npm ci` first, then `npm install --no-save ../clients/ts/dist/client.tgz`, **in that order and never the reverse**, because `npm ci` deletes `node_modules` wholesale and would discard an earlier install. CI then asserts provenance before any other frontend step:
 
@@ -554,7 +554,6 @@ step-ca-webui/
 │   ├── cmd/openapi/main.go          deterministic spec dump. No DB, no CA, no env.
 │   ├── openapi/
 │   │   ├── openapi.json             generated, committed, gated
-│   │   └── package-version.txt      MINOR only. PATCH is derived (D8).
 │   ├── handlers/                    KEPT. becomes the service layer api/ calls.
 │   ├── templates/                   DELETED in Phase 9
 │   └── static/                      DELETED in Phase 9 (css is copied, not moved, in Phase 3a)
@@ -1610,7 +1609,7 @@ What is deliberately **not** done: `depends_on: service_healthy` stays, `resolve
 
 **The remedy becomes a row.** `docs/contract-changes.md` is append-only, each row is `| operationId | what changed | why |`, and the gate asserts a row exists for every operation `oasdiff` reports as broken. That makes the remedy a sentence a reviewer reads rather than a number nobody reads, it accumulates into a readable history of every contract break, and it costs one file. It lands in Phase 1 step 9 with the standalone gate and moves into the `client` job with it in Phase 2.
 
-**MINOR stops being gated.** It stays in `openapi/package-version.txt` as a free-running marker of contract era that a human bumps when they judge an era has ended, and nothing asserts it. Section 2's criterion and 7.2's gate are both rewritten off it.
+**The version is not gated on the contract.** It comes from the `VERSION` file and nothing ties a bump to a contract change. Section 2's criterion and 7.2's gate are both rewritten off it.
 
 **The `version` column is dropped.** Its stated purpose was letting a `v1` operation and its `v2` successor carry different roles. No `v2` can exist without the deferred work 5.1 already prices, and until then the column holds one constant value in every row, which is noise a reviewer learns to skip past in a table whose entire job is being read carefully. The table keys on `(method, path)`, and restoring the column is the first line of the v2 work rather than a surprise inside it.
 

@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# Version scheme is D8 of plans/frontend-backend-split.md. PATCH is derived,
-# never hand-edited, so two pull requests cannot collide on the same number.
+# The client version is the project version from VERSION plus the commit it was
+# generated from, so a consumer can prove which commit a client came from.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-MINOR=$(tr -d '[:space:]' < backend/openapi/package-version.txt)
+VERSION=$(tr -d '[:space:]' < VERSION)
 
-if PATCH=$(git rev-list --count origin/main 2>/dev/null) && [[ -n "$PATCH" ]]; then
-  SHA=$(git rev-parse --short HEAD)
-  echo "0.${MINOR}.${PATCH}-sha.${SHA}"
+if SHA=$(git rev-parse --short HEAD 2>/dev/null) && [[ -n "$SHA" ]]; then
+  echo "${VERSION}-sha.${SHA}"
 else
-  echo "0.${MINOR}.0-dev"
+  echo "${VERSION}-dev"
 fi
