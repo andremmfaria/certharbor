@@ -43,9 +43,12 @@ RUN npm install --no-save ../clients/ts/dist/client.tgz \
 # /etc/step-webui/ssl is deliberately absent from the image: an empty named
 # volume takes its ownership from the first image that has the mount path, and
 # that must be the backend's uid 10001 directory, never a root-owned one here.
+# apk upgrade pulls the security fixes the published nginx tag has not rebuilt
+# with yet, so the image does not depend on the base's rebuild cadence.
 FROM nginx:1.29-alpine AS runtime-base
 # hadolint ignore=DL3018
-RUN apk add --no-cache curl openssl \
+RUN apk upgrade --no-cache \
+ && apk add --no-cache curl openssl \
  && rm -f /etc/nginx/conf.d/default.conf \
  && rm -rf /usr/share/nginx/html/* \
  && mkdir -p /etc/step-webui/ephemeral
