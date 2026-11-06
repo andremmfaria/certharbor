@@ -35,12 +35,13 @@ Both produce a SHA-256-checksummed manifest, through two separate implementation
 
 ```bash
 docker compose exec postgres psql -U stepwebui -d stepwebui -c \
-  "UPDATE users SET password_hash = encode(sha256('newpass'::bytea), 'hex'), \
+  "CREATE EXTENSION IF NOT EXISTS pgcrypto; \
+   UPDATE users SET password_hash = crypt('newpass', gen_salt('bf', 10)), \
      totp_enabled = false, totp_secret = '', is_active = true \
    WHERE username='admin';"
 ```
 
-Log in with `admin` / `newpass` and change it from the UI. `backend/security/security.go`'s `VerifyPassword` still recognizes a 64-hex-character SHA-256 value as a legacy hash and accepts it, then transparently rehashes it to bcrypt after a successful login.
+Log in with `admin` / `newpass` and change it from the UI. The `crypt` call writes a bcrypt hash at the application's default cost, which `VerifyPassword` accepts as is.
 
 The `totp_enabled`/`totp_secret` reset and `is_active = true` matter even if you only meant to reset the password: login checks `is_active` before the password at all (`backend/handlers/auth.go:102`), and a stale `totp_enabled=true` sends a successful password check straight to the 2FA step (`backend/handlers/auth.go:114`) which you may no longer be able to complete.
 </details>

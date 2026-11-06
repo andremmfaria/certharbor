@@ -25,7 +25,7 @@ Application-level controls, then the supply-chain tooling that gates changes to 
 - **Let's Encrypt secret fields render blank.** The Cloudflare/Route53 credential inputs on `/admin/le` never echo a stored value back into the form (`backend/templates/le_settings.html:52,88`), a page source view can't leak them.
 - **GitHub secret scanning and push protection** are enabled on the repository, on top of the `gitleaks` CI job below.
 
-**`SECRET_KEY` is mandatory.** The app refuses to start if it is the built-in placeholder or shorter than 32 characters. It signs session cookies and CSRF tokens, leaking it lets an attacker forge any session.
+**`SECRET_KEY` is mandatory.** The app refuses to start if it is the built-in placeholder or shorter than 32 characters. It signs session cookies and CSRF tokens, leaking it lets an attacker forge any session. The cookie keys are derived from it with HKDF-SHA256, and upgrading from a release that used plain SHA-256 signs every user out once.
 
 ```bash
 openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | head -c 48
