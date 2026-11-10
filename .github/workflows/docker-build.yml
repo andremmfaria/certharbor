@@ -61,6 +61,36 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # ci.yml's `client` job is the one publish mechanism for
+      # @andremmfaria/certharbor-client, on the same v* tag push but in a
+      # separate workflow with no cross-workflow `needs:`. These two steps
+      # (frontend leg, tag pushes only) compute the exact version that job
+      # will have published and poll the registry for it before the Docker
+      # build runs, so this build never races that publish.
+      - name: Compute the client version
+        id: client-version
+        if: matrix.name == 'frontend' && startsWith(github.ref, 'refs/tags/v')
+        run: echo "version=$(./scripts/client-version.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for the published client package
+        if: matrix.name == 'frontend' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          CLIENT_VERSION: ${{ steps.client-version.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "//npm.pkg.github.com/:_authToken=${GH_TOKEN}" > ~/.npmrc
+          for i in $(seq 1 30); do
+            if npm view "@andremmfaria/certharbor-client@${CLIENT_VERSION}" version \
+                 --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+              echo "found @andremmfaria/certharbor-client@${CLIENT_VERSION} after $(( (i - 1) * 10 ))s"
+              exit 0
+            fi
+            echo "not yet published (attempt $i/30), waiting 10s..."
+            sleep 10
+          done
+          echo "::error::@andremmfaria/certharbor-client@${CLIENT_VERSION} did not appear on the registry within 5 minutes"
+          exit 1
+
       - name: Build and push
         uses: docker/build-push-action@v7.4.0
         with:
@@ -70,3 +100,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.scope }}
+          build-args: |
+            CLIENT_SOURCE=${{ (matrix.name == 'frontend' && startsWith(github.ref, 'refs/tags/v')) && 'registry' || 'local' }}
+            CLIENT_VERSION=${{ (matrix.name == 'frontend' && startsWith(github.ref, 'refs/tags/v')) && steps.client-version.outputs.version || '' }}
+          secrets: |
+            npm_token=${{ (matrix.name == 'frontend' && startsWith(github.ref, 'refs/tags/v')) && secrets.GITHUB_TOKEN || '' }}
