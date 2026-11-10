@@ -1,4 +1,4 @@
-import { client } from '@andremmfaria/step-ca-webui-client/client'
+import { client } from '@andremmfaria/certharbor-client/client'
 import { isAuthEndpoint } from './authEndpoints'
 import { readCsrf } from './csrf'
 import { recordSessionExpiry, SESSION_EXPIRES_HEADER } from './sessionExpiry'

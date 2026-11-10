@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"time"
 
-	"step-webui/handlers"
-	appmw "step-webui/middleware"
-	"step-webui/security"
+	"certharbor/handlers"
+	appmw "certharbor/middleware"
+	"certharbor/security"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/gorilla/sessions"
@@ -94,7 +94,7 @@ func sessionMiddleware(h *handlers.Handler, loadUser appmw.UserLoader) func(huma
 		setSessionExpires(w, res.Session)
 		// The user rides on middleware's own context key, so roleMiddleware and
 		// every handler read it with middleware.UserFrom exactly as the template
-		// chain does, and this package never names step-webui/models.
+		// chain does, and this package never names certharbor/models.
 		next(huma.WithContext(ctx, appmw.WithUser(ctx.Context(), res.User)))
 	}
 }

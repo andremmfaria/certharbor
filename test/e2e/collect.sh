@@ -35,7 +35,7 @@ secrets=()
 for f in secrets/ca_password secrets/secret_key secrets/postgres_password; do
   [[ -s "$f" ]] && secrets+=("$(tr -d '\r\n' < "$f")")
 done
-if admin_pw="$(sed -n 's/^STEPWEBUI_ADMIN_PASSWORD=//p' "${E2E_ENV_FILE:-.env}" 2>/dev/null | head -1 | tr -d '"'"'"'\r')"; then
+if admin_pw="$(sed -n 's/^CERTHARBOR_ADMIN_PASSWORD=//p' "${E2E_ENV_FILE:-.env}" 2>/dev/null | head -1 | tr -d '"'"'"'\r')"; then
   [[ -n "$admin_pw" ]] && secrets+=("$admin_pw")
 fi
 
@@ -50,15 +50,15 @@ redact() {
 
 echo "collecting into $dest"
 
-# step-webui's log comes from the cumulative capture: a mid-run recreate truncates
+# certharbor-control's log comes from the cumulative capture: a mid-run recreate truncates
 # the live view to the current container alone (Section 2.6).
-cumulative="${E2E_CUMULATIVE_LOG:-test/e2e/artifacts/step-webui-cumulative.log}"
+cumulative="${E2E_CUMULATIVE_LOG:-test/e2e/artifacts/certharbor-cumulative.log}"
 {
   [[ -s "$cumulative" ]] && cat "$cumulative"
-  dc logs --no-color --timestamps step-webui 2>&1
-} | redact > "$dest/logs-step-webui.log"
+  dc logs --no-color --timestamps certharbor-control 2>&1
+} | redact > "$dest/logs-certharbor.log"
 
-for svc in step-webui-web postgres step-ca mock-oidc mailpit pebble; do
+for svc in certharbor-console postgres step-ca mock-oidc mailpit pebble; do
   out="$(dc logs --no-color --timestamps "$svc" 2>&1)"
   [[ -n "$out" ]] && printf '%s\n' "$out" | redact > "$dest/logs-$svc.log"
 done
@@ -73,7 +73,7 @@ done
 dc config 2>&1 | redact > "$dest/compose-config.yml"
 
 for table in certificates cert_history auth_log users; do
-  dc exec -T postgres psql -U stepwebui -d stepwebui -c "\\copy (SELECT * FROM $table) TO STDOUT WITH CSV HEADER" \
+  dc exec -T postgres psql -U certharbor -d certharbor -c "\\copy (SELECT * FROM $table) TO STDOUT WITH CSV HEADER" \
     2>/dev/null | redact > "$dest/db-$table.csv"
 done
 
@@ -82,7 +82,7 @@ done
 dc exec -T step-ca cat /home/step/config/ca.json 2>/dev/null | redact > "$dest/ca.json"
 
 # The rendered config, not the template: what nginx actually loaded.
-dc exec -T step-webui-web nginx -T 2>/dev/null | redact > "$dest/nginx-T.txt"
+dc exec -T certharbor-console nginx -T 2>/dev/null | redact > "$dest/nginx-T.txt"
 
 # nginx is the published origin and refuses any SNI but WEB_HOSTNAME. The last
 # value wins, as it does for compose reading the same file.
@@ -93,7 +93,7 @@ sni="${sni:-localhost}"
 openssl s_client -connect "localhost:${port}" -servername "$sni" -showcerts </dev/null 2>/dev/null > "$dest/s_client.txt" || true
 openssl s_client -connect "localhost:${port}" -servername "$sni" </dev/null 2>/dev/null \
   | openssl x509 -outform pem > "$dest/served-leaf.pem" 2>/dev/null || true
-backend_ip="$(docker inspect --format '{{with index .NetworkSettings.Networks "step-network"}}{{.IPAddress}}{{end}}' "$(dc ps -q step-webui 2>/dev/null | head -1)" 2>/dev/null || true)"
+backend_ip="$(docker inspect --format '{{with index .NetworkSettings.Networks "step-network"}}{{.IPAddress}}{{end}}' "$(dc ps -q certharbor-control 2>/dev/null | head -1)" 2>/dev/null || true)"
 if [[ -n "$backend_ip" ]]; then
   openssl s_client -connect "${backend_ip}:8443" </dev/null 2>/dev/null \
     | openssl x509 -outform pem > "$dest/served-backend-leaf.pem" 2>/dev/null || true

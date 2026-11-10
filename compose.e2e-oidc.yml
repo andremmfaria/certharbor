@@ -1,10 +1,10 @@
-# Mock IdP plus the OIDC defaults that point step-webui at it. Applied by the
+# Mock IdP plus the OIDC defaults that point certharbor at it. Applied by the
 # scenario driver only when E2E_OIDC_ENABLED=1.
 #
 # The issuer URL must resolve identically for the app, the browser and the
 # discovery document, so it is the compose service name and every party runs on
 # step-network. h.initOIDC() calls gooidc.NewProvider at Handler construction
-# and log.Fatalf's on discovery failure, so step-webui waits for the IdP to be
+# and log.Fatalf's on discovery failure, so certharbor waits for the IdP to be
 # healthy; the upstream image ships no HEALTHCHECK, hence the one below.
 services:
 
@@ -40,9 +40,9 @@ services:
 
   # The readiness probe cannot live on mock-oidc itself: that image is
   # distroless, with no shell, no wget and no curl, so the healthcheck this
-  # file used to carry could never pass and step-webui waited on it forever. The
+  # file used to carry could never pass and certharbor waited on it forever. The
   # wait moves to a throwaway container that exits 0 once discovery answers,
-  # and step-webui depends on its completion instead.
+  # and certharbor depends on its completion instead.
   mock-oidc-ready:
     image: curlimages/curl:8.11.1
     container_name: mock-oidc-ready
@@ -61,14 +61,14 @@ services:
     networks:
       - step-net
 
-  step-webui:
+  certharbor-control:
     environment:
       OIDC_ENABLED:       "${OIDC_ENABLED:-true}"
       OIDC_ISSUER_URL:    "${OIDC_ISSUER_URL:-http://mock-oidc:8080/default}"
-      OIDC_CLIENT_ID:     "${OIDC_CLIENT_ID:-step-webui-e2e}"
-      OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-step-webui-e2e-secret}"
+      OIDC_CLIENT_ID:     "${OIDC_CLIENT_ID:-certharbor-e2e}"
+      OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-certharbor-e2e-secret}"
       # The published origin, which the browser reaches the callback through.
-      OIDC_REDIRECT_URL:  "${OIDC_REDIRECT_URL:-https://step-webui-web:8443/auth/oidc/callback}"
+      OIDC_REDIRECT_URL:  "${OIDC_REDIRECT_URL:-https://certharbor-console:8443/auth/oidc/callback}"
       OIDC_GROUP_CLAIM:   "${OIDC_GROUP_CLAIM:-groups}"
       OIDC_GROUP_ADMIN:   "${OIDC_GROUP_ADMIN:-e2e-admins}"
       OIDC_GROUP_MANAGER: "${OIDC_GROUP_MANAGER:-e2e-managers}"

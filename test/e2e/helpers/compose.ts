@@ -71,9 +71,9 @@ export async function exec(service: string, ...cmd: string[]): Promise<RunResult
   return compose("exec", "-T", service, ...cmd);
 }
 
-/** Runs a query as the stepwebui role and returns rows as unaligned, tuple-only text. */
+/** Runs a query as the certharbor role and returns rows as unaligned, tuple-only text. */
 export async function psql(sql: string): Promise<string> {
-  const res = await compose("exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-U", "stepwebui", "-d", "stepwebui", "-At", "-c", sql);
+  const res = await compose("exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-U", "certharbor", "-d", "certharbor", "-At", "-c", sql);
   if (res.code !== 0) throw new Error(`psql failed: ${res.stderr || res.stdout}\nSQL: ${sql}`);
   return res.stdout.trim();
 }
@@ -105,22 +105,22 @@ export async function logs(service: string, opts: LogOptions = {}): Promise<stri
 
 /**
  * A docker compose recreate replaces the container and `logs` only ever shows
- * the current one, so any test that recreates step-webui appends the outgoing
+ * the current one, so any test that recreates certharbor-control appends the outgoing
  * container's log here first. E2E-SEC-03's full-log sweep and collect.sh read
  * this file rather than calling `logs` directly (Section 2.6).
  */
 export function cumulativeLogPath(): string {
-  return process.env.E2E_CUMULATIVE_LOG ?? path.join(REPO_ROOT, "test", "e2e", "artifacts", "step-webui-cumulative.log");
+  return process.env.E2E_CUMULATIVE_LOG ?? path.join(REPO_ROOT, "test", "e2e", "artifacts", "certharbor-cumulative.log");
 }
 
-export async function captureBeforeRecreate(service = "step-webui"): Promise<void> {
+export async function captureBeforeRecreate(service = "certharbor-control"): Promise<void> {
   const current = await logs(service);
   const target = cumulativeLogPath();
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.appendFileSync(target, current);
 }
 
-export async function cumulativeLog(service = "step-webui"): Promise<string> {
+export async function cumulativeLog(service = "certharbor-control"): Promise<string> {
   const target = cumulativeLogPath();
   const previous = fs.existsSync(target) ? fs.readFileSync(target, "utf8") : "";
   return previous + (await logs(service));
@@ -180,8 +180,8 @@ export async function waitHealthy(service: string, timeoutMs = 180_000): Promise
   );
 }
 
-export const BACKEND_SERVICE = "step-webui";
-export const WEB_SERVICE = "step-webui-web";
+export const BACKEND_SERVICE = "certharbor-control";
+export const WEB_SERVICE = "certharbor-console";
 
 /**
  * Waits for nginx as well, where the stack has it: it starts only once the
@@ -279,12 +279,12 @@ export function projectName(): string {
   return process.env.COMPOSE_PROJECT_NAME ?? path.basename(REPO_ROOT);
 }
 
-const STEP_WEBUI_VOLUMES = ["step-webui-certs", "step-webui-ssl", "step-webui-web-ssl", "step-webui-data", "step-webui-uploads"];
+const CERTHARBOR_VOLUMES = ["certharbor-control-certs", "certharbor-control-ssl", "certharbor-console-ssl", "certharbor-control-data", "certharbor-control-uploads"];
 
-/** Drops step-webui's own volumes while leaving step-ca-data, and the CA identity a fingerprint was computed from, intact. Call after `compose("down")` (no `-v`). */
-export async function resetStepWebUIVolumes(): Promise<void> {
+/** Drops certharbor-control's own volumes while leaving step-ca-data, and the CA identity a fingerprint was computed from, intact. Call after `compose("down")` (no `-v`). */
+export async function resetCertharborVolumes(): Promise<void> {
   const proj = projectName();
-  for (const vol of STEP_WEBUI_VOLUMES) {
+  for (const vol of CERTHARBOR_VOLUMES) {
     await run(["docker", "volume", "rm", `${proj}_${vol}`]);
   }
 }

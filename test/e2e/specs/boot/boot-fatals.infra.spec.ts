@@ -10,7 +10,7 @@ const ADMIN_PW = "Boot07-e2e-Pass1!";
 
 /**
  * Cases (a), (d) and (e) fail before the DB connect, so compose.e2e-nodeps.yml
- * (already applied for this whole scenario) lets step-webui start without step-ca
+ * (already applied for this whole scenario) lets certharbor-control start without step-ca
  * at all, but postgres still needs to be up and reachable, or entrypoint.sh's
  * own 60x1s wait-for-postgres loop (which every case runs through first) hangs
  * on DNS resolution for a service with no running container, adding far more
@@ -22,14 +22,14 @@ async function freshPostgres(): Promise<void> {
 }
 
 async function expectFatal(logContains: string | string[]): Promise<void> {
-  await upStack("step-webui");
+  await upStack("certharbor-control");
   // The scenario's own compose.e2e-fatals.yml sets restart:"no" for every
   // case in this file, not only (c), against the stock restart policy a
   // fatal exit restarts into the same fatal, and reading ExitCode mid-loop
   // races the next restart.
-  const state = await waitExited("step-webui", 90_000);
+  const state = await waitExited("certharbor-control", 90_000);
   expect(state.ExitCode, "a deliberate fatal must exit non-zero").not.toBe(0);
-  const log = await logs("step-webui");
+  const log = await logs("certharbor-control");
   for (const needle of Array.isArray(logContains) ? logContains : [logContains]) {
     expect(log, `missing expected fatal message: ${needle}`).toContain(needle);
   }
@@ -50,7 +50,7 @@ test.describe.serial("bootstrap: fatals scenario", () => {
     const original = await fs.readFile(SECRET_KEY_PATH);
     try {
       await freshPostgres();
-      setEnvKeys({ STEPWEBUI_ADMIN_PASSWORD: ADMIN_PW });
+      setEnvKeys({ CERTHARBOR_ADMIN_PASSWORD: ADMIN_PW });
 
       await fs.writeFile(SECRET_KEY_PATH, "change-me-in-production-32chars!");
       await expectFatal("FATAL: SECRET_KEY is the default or shorter than 32 chars");
@@ -66,15 +66,15 @@ test.describe.serial("bootstrap: fatals scenario", () => {
   test("E2E-BOOT-07 (b): empty users table with no admin password", async () => {
     test.setTimeout(3 * 60_000);
     await freshPostgres();
-    setEnvKeys({ STEPWEBUI_ADMIN_PASSWORD: undefined });
-    await expectFatal("No admin user exists and STEPWEBUI_ADMIN_PASSWORD is not set");
+    setEnvKeys({ CERTHARBOR_ADMIN_PASSWORD: undefined });
+    await expectFatal("No admin user exists and CERTHARBOR_ADMIN_PASSWORD is not set");
   });
 
   test("E2E-BOOT-07 (c): database unreachable", async () => {
     test.setTimeout(3 * 60_000);
     await freshPostgres();
     await composeOrThrow("stop", "postgres");
-    setEnvKeys({ STEPWEBUI_ADMIN_PASSWORD: ADMIN_PW });
+    setEnvKeys({ CERTHARBOR_ADMIN_PASSWORD: ADMIN_PW });
     await expectFatal(["PostgreSQL not reachable", "Cannot connect to database:"]);
   });
 
@@ -86,14 +86,14 @@ test.describe.serial("bootstrap: fatals scenario", () => {
   test("E2E-BOOT-07 (d): TRUST_PROXY=true with no usable CIDR list", async () => {
     test.setTimeout(4 * 60_000);
     await freshPostgres();
-    setEnvKeys({ STEPWEBUI_ADMIN_PASSWORD: ADMIN_PW, TRUST_PROXY: "true", TRUSTED_PROXY_CIDRS: "not-a-cidr" });
+    setEnvKeys({ CERTHARBOR_ADMIN_PASSWORD: ADMIN_PW, TRUST_PROXY: "true", TRUSTED_PROXY_CIDRS: "not-a-cidr" });
     await expectFatal("FATAL: TRUST_PROXY=true requires a usable TRUSTED_PROXY_CIDRS");
 
     await freshPostgres();
     setEnvKeys({ TRUSTED_PROXY_CIDRS: undefined });
-    await upStack("step-webui");
-    await waitForLogLine("step-webui", "trusted proxy name does not resolve yet: forwarding headers are ignored until it does", { timeoutMs: 90_000 });
-    const state = await inspectState("step-webui");
+    await upStack("certharbor-control");
+    await waitForLogLine("certharbor-control", "trusted proxy name does not resolve yet: forwarding headers are ignored until it does", { timeoutMs: 90_000 });
+    const state = await inspectState("certharbor-control");
     expect(state.Status, "an empty list with a name to resolve is not a startup fatal").toBe("running");
   });
 
@@ -101,7 +101,7 @@ test.describe.serial("bootstrap: fatals scenario", () => {
     test.setTimeout(3 * 60_000);
     await freshPostgres();
     setEnvKeys({
-      STEPWEBUI_ADMIN_PASSWORD: ADMIN_PW,
+      CERTHARBOR_ADMIN_PASSWORD: ADMIN_PW,
       TRUST_PROXY: undefined,
       TRUSTED_PROXY_CIDRS: undefined,
       OIDC_ENABLED: "true",
@@ -112,18 +112,18 @@ test.describe.serial("bootstrap: fatals scenario", () => {
 
   test("E2E-BOOT-07 positive control: none of the five conditions injected", async () => {
     test.setTimeout(3 * 60_000);
-    // Without this, an override that simply prevented step-webui from starting
+    // Without this, an override that simply prevented certharbor-control from starting
     // at all would pass every case above.
     await composeOrThrow("down", "-v");
     setEnvKeys({
-      STEPWEBUI_ADMIN_PASSWORD: ADMIN_PW,
+      CERTHARBOR_ADMIN_PASSWORD: ADMIN_PW,
       TRUST_PROXY: undefined,
       TRUSTED_PROXY_CIDRS: undefined,
       OIDC_ENABLED: undefined,
       OIDC_DEFAULT_ROLE: undefined,
     });
     await upStack();
-    await waitHealthy("step-webui", 180_000);
+    await waitHealthy("certharbor-control", 180_000);
   });
 
   test.afterAll(async () => {

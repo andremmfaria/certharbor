@@ -7,7 +7,7 @@ import (
 
 	"github.com/smallstep/certificates/ca"
 
-	"step-webui/config"
+	"certharbor/config"
 )
 
 // timeout bounds every CA library call, replacing stepcli.go's

@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"step-webui/config"
-	"step-webui/stepca"
+	"certharbor/config"
+	"certharbor/stepca"
 )
 
 // countingFakeCA wraps FakeCA to record whether IssueCertificate was

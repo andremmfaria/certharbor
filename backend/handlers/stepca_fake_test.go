@@ -3,7 +3,7 @@ package handlers
 import (
 	"context"
 
-	"step-webui/stepca"
+	"certharbor/stepca"
 )
 
 // FakeCA is a test double for stepca.CA, the direct replacement for the

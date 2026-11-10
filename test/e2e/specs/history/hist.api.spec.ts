@@ -29,9 +29,9 @@ test("E2E-HIST-01: history pagination", async ({ admin }) => {
     "-v",
     "ON_ERROR_STOP=1",
     "-U",
-    "stepwebui",
+    "certharbor",
     "-d",
-    "stepwebui",
+    "certharbor",
     "-c",
     `INSERT INTO cert_history (action, cert_name, domain, details, username, role)
      SELECT 'issue', 'e2e-seed-${tag}-' || g, 'seed' || g || '.e2e.invalid', 'synthetic', 'e2e-seed', 'admin'

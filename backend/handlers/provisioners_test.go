@@ -3,7 +3,7 @@ package handlers
 import (
 	"testing"
 
-	"step-webui/stepca"
+	"certharbor/stepca"
 )
 
 // TestProvisionerMaps_Shape confirms a FakeCA-returned provisioner list maps

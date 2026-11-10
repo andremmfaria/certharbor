@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Generates the ACME server's own TLS material for the Let's Encrypt leg:
-# a root (minica.pem) that step-webui trusts through LEGO_CA_CERTIFICATES, and a
-# leaf whose SAN is the compose service name step-webui dials. Pebble's shipped
+# a root (minica.pem) that certharbor-control trusts through LEGO_CA_CERTIFICATES, and a
+# leaf whose SAN is the compose service name certharbor-control dials. Pebble's shipped
 # certificate carries only localhost/127.0.0.1, so it cannot be reused.
 #
 # Idempotent: regenerates only when the leaf is missing or FORCE=1.
@@ -16,7 +16,7 @@ if [[ -s "$cert_dir/pebble.crt" && "${FORCE:-}" != "1" ]]; then
 fi
 
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 365 \
-  -subj "/CN=step-ca-webui e2e pebble root" \
+  -subj "/CN=certharbor-control e2e pebble root" \
   -addext "basicConstraints=critical,CA:TRUE" \
   -addext "keyUsage=critical,keyCertSign,cRLSign" \
   -keyout "$cert_dir/minica.key" -out "$cert_dir/minica.pem" 2>/dev/null

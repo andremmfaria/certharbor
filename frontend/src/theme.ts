@@ -3,7 +3,7 @@ export type ThemePreference = (typeof THEME_PREFERENCES)[number]
 export type ResolvedTheme = 'dark' | 'light' | 'blue'
 
 // The same key the inline script in index.html reads before first paint.
-export const THEME_STORAGE_KEY = 'step-webui-theme'
+export const THEME_STORAGE_KEY = 'certharbor-theme'
 
 export function isThemePreference(value: unknown): value is ThemePreference {
   return typeof value === 'string' && (THEME_PREFERENCES as readonly string[]).includes(value)

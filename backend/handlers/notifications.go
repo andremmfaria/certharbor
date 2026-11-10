@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"step-webui/models"
+	"certharbor/models"
 
-	appdb "step-webui/db"
+	appdb "certharbor/db"
 )
 
 type notificationPayload struct {
@@ -174,7 +174,7 @@ func (h *Handler) AdminNotificationsTest(w http.ResponseWriter, r *http.Request)
 		http.Redirect(w, r, "/admin/notifications", http.StatusSeeOther)
 		return
 	}
-	err = h.sendNotification(r.Context(), "", "system.test", "info", "Step-CA WebUI test notification", "Test webhook dispatch from admin panel", map[string]string{
+	err = h.sendNotification(r.Context(), "", "system.test", "info", "Certharbor test notification", "Test webhook dispatch from admin panel", map[string]string{
 		"remote_addr": clientIP(r),
 	})
 	if err != nil {
@@ -221,7 +221,7 @@ func (h *Handler) sendNotification(ctx context.Context, eventKey, eventType, sev
 		Title:     title,
 		Message:   message,
 		Timestamp: time.Now(),
-		Source:    "step-ca-webui",
+		Source:    "certharbor",
 		Version:   Version,
 		Meta:      meta,
 	}
@@ -235,7 +235,7 @@ func (h *Handler) sendNotification(ctx context.Context, eventKey, eventType, sev
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "step-ca-webui/"+Version)
+	req.Header.Set("User-Agent", "certharbor/"+Version)
 
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)

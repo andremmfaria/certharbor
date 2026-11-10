@@ -11,7 +11,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 lint_dir="$repo_root/frontend/nginx-lint"
-image="step-webui-web:nginx-lint"
+image="certharbor-console:nginx-lint"
 stub_image="nginx:1.29-alpine"
 run_id="nginx-lint-$$"
 net="$run_id"
@@ -57,8 +57,8 @@ gen_root "$pki/root" "nginx-lint root"
 gen_root "$pki/evil" "nginx-lint untrusted root"
 gen_leaf "$pki/web" "$pki/root" "$host"
 gen_leaf "$pki/web2" "$pki/root" "$host"
-gen_leaf "$pki/upstream" "$pki/root" "step-webui"
-gen_leaf "$pki/evil-upstream" "$pki/evil" "step-webui"
+gen_leaf "$pki/upstream" "$pki/root" "certharbor-control"
+gen_leaf "$pki/evil-upstream" "$pki/evil" "certharbor-control"
 cp "$pki/web.crt" "$work/web/web.crt"
 cp "$pki/web.key" "$work/web/web.key"
 cp "$pki/root.crt" "$work/web/root_ca.crt"
@@ -112,7 +112,7 @@ docker network create "$net" >/dev/null
 
 start_stub() { # cert-dir
   containers+=("$run_id-stub")
-  docker run -d --name "$run_id-stub" --network "$net" --network-alias step-webui \
+  docker run -d --name "$run_id-stub" --network "$net" --network-alias certharbor-control \
     -v "$1:/stub:ro" -v "$lint_dir/stub-upstream.conf:/etc/nginx/nginx.conf:ro" \
     "$stub_image" >/dev/null
 }
@@ -122,7 +122,7 @@ start_web() { # name cert-dir extra-docker-args...
   shift 2
   containers+=("$name")
   docker run -d --name "$name" --network "$net" -p 127.0.0.1::8443 \
-    -e WEB_HOSTNAME="$host" -v "$dir:/etc/step-webui/ssl" "$@" "$image" >/dev/null
+    -e WEB_HOSTNAME="$host" -v "$dir:/etc/certharbor/ssl" "$@" "$image" >/dev/null
 }
 
 port_of() { docker port "$1" 8443/tcp | head -n1 | sed 's/.*://'; }
@@ -184,8 +184,8 @@ locations_ok() {
     END { if (proxied != 2) { print "want 2 proxying locations, found " proxied; bad = 1 } exit bad }'
 }
 check "every proxy_pass location includes conf.d/proxy-headers.conf and verifies the upstream" locations_ok
-for directive in "proxy_ssl_verify on;" "proxy_ssl_verify_depth 2;" "proxy_ssl_name step-webui;" \
-  "proxy_ssl_trusted_certificate /etc/step-webui/ssl/root_ca.crt;" "server_tokens off;" \
+for directive in "proxy_ssl_verify on;" "proxy_ssl_verify_depth 2;" "proxy_ssl_name certharbor-control;" \
+  "proxy_ssl_trusted_certificate /etc/certharbor/ssl/root_ca.crt;" "server_tokens off;" \
   "proxy_read_timeout 180s;" "ssl_reject_handshake on;"; do
   check "nginx -T contains '$directive'" grep -qF "$directive" <<<"$directives"
 done
@@ -207,7 +207,7 @@ for path in "${probe_paths[@]}"; do
   req "${forged[@]}" -D "$work/hdrs" -o "$work/body" "$path"
   body=$(<"$work/body")
   hdrs=$(tr -d '\r' <"$work/hdrs")
-  check "$path is proxied to the backend" grep -q '"stub":"step-webui"' <<<"$body"
+  check "$path is proxied to the backend" grep -q '"stub":"certharbor-control"' <<<"$body"
   IFS=$'\t' read -r xff xri tci fwd rid fhost < <(jq -r '[.xff, .xri, .tci, .fwd, .rid, .host] | map(if . == "" then "-" else . end) | @tsv' <<<"$body")
   check "$path: X-Forwarded-For replaced with the peer ($xff)" bash -c '[[ "$1" =~ ^[0-9.]+$ && "$1" != 1.2.3.4 ]]' _ "$xff"
   check "$path: X-Real-IP set to the same peer" test "$xri" = "$xff"
@@ -230,7 +230,7 @@ done
 for path in /docs /docs/x /openapi.yaml /schemas/Thing /app/assets/missing-0000.js; do
   check "$path is 404 with no SPA fallback" test "$(status_of "$path")" = 404
 done
-check "the bundle is not served outside /app/" grep -q '"stub":"step-webui"' <<<"$(req /assets/index-a1b2c3d4.js)"
+check "the bundle is not served outside /app/" grep -q '"stub":"certharbor-control"' <<<"$(req /assets/index-a1b2c3d4.js)"
 app_redirect=$(headers_of /app)
 check "/app redirects to /app/ with a relative Location" bash -c '[[ "$1" == *" 301"* && "$2" == /app/ ]]' _ "$(head -n1 <<<"$app_redirect")" "$(header Location "$app_redirect")"
 check "/nginx-health is 200" test "$(status_of /nginx-health)" = 200
@@ -305,15 +305,15 @@ mkdir -p "$work/empty"
 t0=$(date +%s)
 set +e
 provided_out=$(timeout 20 docker run --rm -e WEB_HOSTNAME="$host" -e WEB_TLS_MODE=provided \
-  -v "$work/empty:/etc/step-webui/ssl:ro" "$image" 2>&1)
+  -v "$work/empty:/etc/certharbor/ssl:ro" "$image" 2>&1)
 provided_rc=$?
 set -e
 t1=$(date +%s)
 check "provided mode with no files exits non-zero" test "$provided_rc" -ne 0
 check "within five seconds ($((t1 - t0))s)" test $((t1 - t0)) -le 5
-check "naming both missing paths" bash -c '[[ "$1" == */etc/step-webui/ssl/web.crt* && "$1" == */etc/step-webui/ssl/web.key* ]]' _ "$provided_out"
+check "naming both missing paths" bash -c '[[ "$1" == */etc/certharbor/ssl/web.crt* && "$1" == */etc/certharbor/ssl/web.key* ]]' _ "$provided_out"
 set +e
-nohost_out=$(timeout 20 docker run --rm -e WEB_TLS_MODE=provided -v "$work/web:/etc/step-webui/ssl:ro" "$image" 2>&1)
+nohost_out=$(timeout 20 docker run --rm -e WEB_TLS_MODE=provided -v "$work/web:/etc/certharbor/ssl:ro" "$image" 2>&1)
 nohost_rc=$?
 set -e
 check "an empty WEB_HOSTNAME is a non-zero exit naming it" bash -c '[[ $1 -ne 0 && "$2" == *WEB_HOSTNAME* ]]' _ "$nohost_rc" "$nohost_out"
@@ -325,7 +325,7 @@ chmod 0777 "$work/late"
 start_web "$run_id-late" "$work/late" -e WEB_TLS_MODE=stepca -e WEB_CERT_WAIT_SECONDS=1 -e WEB_RELOAD_INTERVAL=1
 late_port=$(port_of "$run_id-late")
 late() { curl -sk --max-time 3 --resolve "$host:$late_port:127.0.0.1" "$@"; }
-waiting_ok() { [[ "$(late "https://$host:$late_port/api/v1/x")" == *"waiting for /etc/step-webui/ssl/web.crt"* ]]; }
+waiting_ok() { [[ "$(late "https://$host:$late_port/api/v1/x")" == *"waiting for /etc/certharbor/ssl/web.crt"* ]]; }
 for _ in $(seq 1 20); do waiting_ok && break; sleep 0.3; done
 check "stepca mode serves a 503 naming the missing web.crt" waiting_ok
 check "and /nginx-health is not 200 while waiting" bash -c '[[ "$1" != 200 ]]' _ "$(late -o /dev/null -w '%{http_code}' "https://$host:$late_port/nginx-health")"

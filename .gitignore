@@ -25,11 +25,11 @@ clients/ts/dist/
 # Generated ACME-server material for the Let's Encrypt leg (make e2e-le-certs)
 test/e2e/fixtures/pebble/certs/
 
-# Playwright output: reports, traces, junit, the cumulative step-webui log
+# Playwright output: reports, traces, junit, the cumulative certharbor log
 test/e2e/artifacts/
 
 # Go binaries
-backend/step-webui
+backend/certharbor
 backend/*.exe
 
 # Coverage profiles (unit + merged integration)

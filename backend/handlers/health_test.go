@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"step-webui/config"
+	"certharbor/config"
 
 	"github.com/gorilla/sessions"
 )

@@ -1,4 +1,4 @@
-// Package models defines the data types used across the Step-CA WebUI application.
+// Package models defines the data types used across the Certharbor application.
 package models
 
 import (
