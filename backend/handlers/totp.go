@@ -13,8 +13,8 @@ import (
 
 	"certharbor/security"
 
-	"github.com/pquerna/otp/totp"
 	appdb "certharbor/db"
+	"github.com/pquerna/otp/totp"
 )
 
 const (
