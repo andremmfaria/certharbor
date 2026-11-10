@@ -2079,7 +2079,7 @@ Behind `E2E_LE_ENABLED`, skipped with an explicit reason when it is not set, on 
 
 ### 3.16 The SPA and the origin
 
-These five tests exist because of the split in `plans/frontend-backend-split.md`, and they land with its Phase 3c. They drive the four-container stack through the published origin, `BASE_URL`, which names `certharbor-web`, with `SESSION_SECURE=true` so the `__Host-` cookie names apply. The SPA is mounted under `SPA_BASE` (`/app`), a single constant in `helpers/env.ts` that becomes the empty string when Phase 9 flips the base path. E2E-SPA-01 to E2E-SPA-03 and E2E-CSP-01 are the `ui` project, in `test/e2e/specs/spa/spa-shell.ui.spec.ts`, one serial `describe`. E2E-ORIGIN-01 is the `api` project, in `test/e2e/specs/origin/origin-01.api.spec.ts`.
+These five tests exist because of the split in `plans/frontend-backend-split.md`, and they land with its Phase 3c. They drive the four-container stack through the published origin, `BASE_URL`, which names `certharbor-console`, with `SESSION_SECURE=true` so the `__Host-` cookie names apply. The SPA is mounted under `SPA_BASE` (`/app`), a single constant in `helpers/env.ts` that becomes the empty string when Phase 9 flips the base path. E2E-SPA-01 to E2E-SPA-03 and E2E-CSP-01 are the `ui` project, in `test/e2e/specs/spa/spa-shell.ui.spec.ts`, one serial `describe`. E2E-ORIGIN-01 is the `api` project, in `test/e2e/specs/origin/origin-01.api.spec.ts`.
 
 #### E2E-SPA-01: log in at `/app/`, navigate, hard-refresh a deep link, log out
 

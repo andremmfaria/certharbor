@@ -3,5 +3,5 @@
 # >= v2.24); a plain `depends_on:` would merge. Where the pinned compose
 # predates !reset, the scenario driver falls back to `up --no-deps certharbor`.
 services:
-  certharbor:
+  certharbor-control:
     depends_on: !reset null

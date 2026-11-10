@@ -1,5 +1,5 @@
 #!/bin/sh
-# Entrypoint for certharbor-web. It replaces the stock nginx entrypoint instead
+# Entrypoint for certharbor-console. It replaces the stock nginx entrypoint instead
 # of adding a /docker-entrypoint.d script because it must stay running as the
 # parent of nginx: it forwards the stop signal so nginx drains rather than
 # dies, and it runs the certificate reload watcher beside it. The stock
@@ -26,7 +26,7 @@ STATE=serving
 APPLIED=
 
 log() {
-	printf 'certharbor-web: %s\n' "$*" >&2
+	printf 'certharbor-console: %s\n' "$*" >&2
 }
 
 # missing prints the space-separated subset of its arguments that are absent
@@ -171,7 +171,7 @@ wait_for_certs() {
 	# Made here, never at build time: a key baked into the image is the same key
 	# in every deployment.
 	openssl req -x509 -nodes -newkey ec -pkeyopt ec_paramgen_curve:P-256 -days 30 \
-		-subj "/CN=certharbor-web waiting for its certificate" \
+		-subj "/CN=certharbor-console waiting for its certificate" \
 		-keyout /etc/certharbor/ephemeral/waiting.key -out /etc/certharbor/ephemeral/waiting.crt 2>/dev/null
 	render "$WAITING_TEMPLATE" "$NGINX_CONF"
 	STATE=waiting

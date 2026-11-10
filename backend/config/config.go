@@ -74,7 +74,7 @@ type Config struct {
 	UICertDuration time.Duration
 
 	// nginx's own leaf (D5 rule 5): "stepca" issues it here and writes it to
-	// the certharbor-web-ssl volume, "provided" leaves the operator to mount
+	// the certharbor-console-ssl volume, "provided" leaves the operator to mount
 	// it. WebHostname has no fallback: a container id as the only SAN would
 	// survive on the volume and be served to browsers that reject it.
 	WebTLSMode  string
@@ -112,7 +112,7 @@ func Load() *Config {
 		TrustProxy:    getEnvBool("TRUST_PROXY", false),
 
 		TrustedProxyCIDRs:     getEnv("TRUSTED_PROXY_CIDRS", ""),
-		WebUpstreamHost:       strings.TrimSpace(getEnv("WEB_UPSTREAM_HOST", "certharbor-web")),
+		WebUpstreamHost:       strings.TrimSpace(getEnv("WEB_UPSTREAM_HOST", "certharbor-console")),
 		AllowedDomainSuffixes: getEnvList("ALLOWED_DOMAIN_SUFFIXES"),
 
 		PublicBaseURL: strings.TrimRight(strings.TrimSpace(getEnv("PUBLIC_BASE_URL", "")), "/"),

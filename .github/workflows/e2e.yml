@@ -33,7 +33,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          tags: certharbor-backend:e2e
+          tags: certharbor-control:e2e
           push: false
           load: true
           cache-from: type=gha,scope=e2e-backend
@@ -44,7 +44,7 @@ jobs:
         with:
           context: .
           file: ./frontend/Dockerfile
-          tags: certharbor-web:e2e
+          tags: certharbor-console:e2e
           push: false
           load: true
           cache-from: type=gha,scope=e2e-frontend
@@ -52,12 +52,12 @@ jobs:
 
       - name: Neither runtime image contains Node
         run: |
-          for img in certharbor-backend:e2e certharbor-web:e2e; do
+          for img in certharbor-control:e2e certharbor-console:e2e; do
             docker run --rm --entrypoint sh "$img" -c '! command -v node && ! command -v npm'
           done
 
       - name: Save both application images into one archive
-        run: docker save certharbor-backend:e2e certharbor-web:e2e | gzip -1 > e2e-images.tar.gz
+        run: docker save certharbor-control:e2e certharbor-console:e2e | gzip -1 > e2e-images.tar.gz
 
       - name: Upload the application images
         uses: actions/upload-artifact@v4.6.2
@@ -122,8 +122,8 @@ jobs:
           cp .env.example .env
           {
             echo "CERTHARBOR_ADMIN_PASSWORD=${ADMIN_PW}"
-            echo "WEB_HOSTNAME=certharbor-web"
-            echo "PUBLIC_BASE_URL=https://certharbor-web:8443"
+            echo "WEB_HOSTNAME=certharbor-console"
+            echo "PUBLIC_BASE_URL=https://certharbor-console:8443"
             echo "SESSION_SECURE=true"
           } >> .env
           chmod 644 secrets/*
@@ -140,7 +140,7 @@ jobs:
             --network step-network \
             -v "$PWD:/repo" -v /var/run/docker.sock:/var/run/docker.sock \
             -w /e2e \
-            -e BASE_URL=https://certharbor-web:8443 \
+            -e BASE_URL=https://certharbor-console:8443 \
             -e BACKEND_URL=https://certharbor:8443 \
             -e E2E_REPO_ROOT=/repo \
             -e E2E_ARTIFACT_DIR=/repo/test/e2e/artifacts \
@@ -155,7 +155,7 @@ jobs:
             --network step-network \
             -v "$PWD:/repo" -v /var/run/docker.sock:/var/run/docker.sock \
             -w /e2e \
-            -e BASE_URL=https://certharbor-web:8443 \
+            -e BASE_URL=https://certharbor-console:8443 \
             -e BACKEND_URL=https://certharbor:8443 \
             -e E2E_REPO_ROOT=/repo \
             -e E2E_ARTIFACT_DIR=/repo/test/e2e/artifacts/ui \

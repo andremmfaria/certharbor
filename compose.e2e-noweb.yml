@@ -1,7 +1,7 @@
 # Composed into every infra scenario by test/e2e/scenario.sh. The bootstrap
 # tests exercise the backend below the HTTP layer and dial it directly, so
-# certharbor-web is given a profile nothing enables and never exists for them.
+# certharbor-console is given a profile nothing enables and never exists for them.
 # That keeps the other scenario overrides free of nginx edits.
 services:
-  certharbor-web:
+  certharbor-console:
     profiles: ["e2e-noweb-never"]

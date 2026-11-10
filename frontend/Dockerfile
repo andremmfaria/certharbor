@@ -54,12 +54,12 @@ RUN apk upgrade --no-cache \
  && mkdir -p /etc/certharbor/ephemeral
 COPY frontend/nginx.conf.template frontend/nginx.waiting.conf.template frontend/conf.d/doc-headers.conf.template /etc/certharbor/
 COPY frontend/conf.d/proxy-headers.conf /etc/nginx/conf.d/
-COPY --chmod=0755 frontend/entrypoint.sh /usr/local/bin/certharbor-web-entrypoint
+COPY --chmod=0755 frontend/entrypoint.sh /usr/local/bin/certharbor-console-entrypoint
 EXPOSE 8443
 # The SNI must be WEB_HOSTNAME: any other name is refused at the handshake.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
   CMD curl -fsk --max-time 2 --resolve "${WEB_HOSTNAME}:8443:127.0.0.1" "https://${WEB_HOSTNAME}:8443/nginx-health" || exit 1
-ENTRYPOINT ["/usr/local/bin/certharbor-web-entrypoint"]
+ENTRYPOINT ["/usr/local/bin/certharbor-console-entrypoint"]
 
 # ── make nginx-lint's fixture: the real config over a placeholder bundle ─────
 # PHASE9-DELETE: both bundles go to /usr/share/nginx/html/ once the SPA owns

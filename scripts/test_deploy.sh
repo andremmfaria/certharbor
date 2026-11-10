@@ -115,11 +115,11 @@ check "containers running"            \
       "docker compose ps --format '{{.Service}} {{.State}}' | grep -c running" \
       0  # any non-error exit; we just check the command runs
 
-check "certharbor container is healthy"  \
-      "docker compose ps --format '{{.Service}}|{{.Status}}' | grep '^certharbor|' | grep -q healthy"
+check "certharbor-control container is healthy"  \
+      "docker compose ps --format '{{.Service}}|{{.Status}}' | grep '^certharbor-control|' | grep -q healthy"
 
-check "certharbor-web container is healthy"  \
-      "docker compose ps --format '{{.Service}}|{{.Status}}' | grep '^certharbor-web|' | grep -q healthy"
+check "certharbor-console container is healthy"  \
+      "docker compose ps --format '{{.Service}}|{{.Status}}' | grep '^certharbor-console|' | grep -q healthy"
 
 check "postgres container is healthy" \
       "docker compose ps --format '{{.Service}}|{{.Status}}' | grep '^postgres|' | grep -q healthy"
@@ -127,8 +127,8 @@ check "postgres container is healthy" \
 check "step-ca container is healthy"  \
       "docker compose ps --format '{{.Service}}|{{.Status}}' | grep '^step-ca|' | grep -q healthy"
 
-check "certharbor publishes no host port" \
-      "test -z \"\$(docker compose port certharbor 8443 2>/dev/null)\""
+check "certharbor-control publishes no host port" \
+      "test -z \"\$(docker compose port certharbor-control 8443 2>/dev/null)\""
 
 check "HTTPS responds through nginx (any 2xx/3xx)"  \
       "curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://localhost/login | grep -qE '^(200|302|303)$'"
@@ -157,8 +157,8 @@ check "credentials.txt has chmod 600" \
 check ".env has chmod 600"            \
       "stat -c '%a' .env | grep -q '^600$'"
 
-check "no errors in certharbor logs (last 50 lines)" \
-      "! docker compose logs --tail 50 certharbor 2>&1 | grep -iE 'panic|fatal|err.*template|cannot'"
+check "no errors in certharbor-control logs (last 50 lines)" \
+      "! docker compose logs --tail 50 certharbor-control 2>&1 | grep -iE 'panic|fatal|err.*template|cannot'"
 
 # ── 5. summary ────────────────────────────────────────────────────────────────
 echo

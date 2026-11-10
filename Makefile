@@ -36,7 +36,7 @@ setup: ## Bootstrap a fresh install: copy .env.example and generate secrets/
 	@# Secret files are 644, not 600: plain (non-Swarm) `docker compose`
 	@# bind-mounts file-based secrets preserving the host file's own
 	@# owner/mode, it does not remap them to root:root/0444 the way Swarm
-	@# secrets do. certharbor's container runs as a non-root uid (10001), so a
+	@# secrets do. certharbor-control's container runs as a non-root uid (10001), so a
 	@# 600 file owned by the host user is unreadable inside the container;
 	@# host-level protection against *other host users* still comes from
 	@# $(SECRETS_DIR) itself being 700.
@@ -113,7 +113,7 @@ backup: ## Dump the database and named volumes into backups/<timestamp>/
 		pg_dump -U certharbor certharbor > $$DIR/postgres-certharbor.sql || true; \
 	\
 	echo "  archiving named volumes …"; \
-	for VOL in postgres-data step-ca-data certharbor-certs certharbor-ssl certharbor-web-ssl certharbor-data certharbor-uploads; do \
+	for VOL in postgres-data step-ca-data certharbor-control-certs certharbor-control-ssl certharbor-console-ssl certharbor-control-data certharbor-control-uploads; do \
 		MOUNT=$$(docker volume inspect certharbor_$$VOL \
 			--format '{{.Mountpoint}}' 2>/dev/null || true); \
 		if [ -n "$$MOUNT" ] && [ -d "$$MOUNT" ]; then \
@@ -245,16 +245,16 @@ e2e-bootstrap: ## Run one bootstrap scenario: make e2e-bootstrap SCENARIO=finger
 # Both rate limiters are process-local maps, so a restart clears them, turning
 # a multi-minute real-time wait into ~20-30s back to healthy.
 .PHONY: e2e-restart-ui
-e2e-restart-ui: ## Restart certharbor, clearing both process-local rate limiters
-	$(COMPOSE) restart certharbor
-	$(COMPOSE) up -d --wait certharbor
+e2e-restart-ui: ## Restart certharbor-control, clearing both process-local rate limiters
+	$(COMPOSE) restart certharbor-control
+	$(COMPOSE) up -d --wait certharbor-control
 
-# nginx mounts certharbor-web-ssl, so it must go before that volume can, and
+# nginx mounts certharbor-console-ssl, so it must go before that volume can, and
 # the final up brings it back once the backend has re-issued both leaves.
 .PHONY: e2e-reset-ssl
 e2e-reset-ssl: ## Remove both leaf volumes (backend and nginx), leaving users and CA state
-	$(COMPOSE) rm -sf certharbor-web certharbor
-	docker volume rm $(E2E_PROJECT)_certharbor-ssl $(E2E_PROJECT)_certharbor-web-ssl
+	$(COMPOSE) rm -sf certharbor-console certharbor-control
+	docker volume rm $(E2E_PROJECT)_certharbor-control-ssl $(E2E_PROJECT)_certharbor-console-ssl
 	$(COMPOSE) up -d --wait
 
 .PHONY: e2e-seed-history
@@ -297,7 +297,7 @@ config-keys-check: ## Assert every web-origin key has a docs/configuration.md ro
 	./scripts/check-config-keys.sh
 
 .PHONY: backend-port-check
-backend-port-check: ## Assert no compose file, base or override, publishes a host port for certharbor
+backend-port-check: ## Assert no compose file, base or override, publishes a host port for certharbor-control
 	./scripts/check-backend-port.sh
 
 .PHONY: preview
@@ -312,30 +312,30 @@ preview: backend-port-check ## Build both images, run all four containers health
 # (Linux, not Docker Desktop). Plain HTTP on localhost, hence SESSION_SECURE
 # off and no __Host- prefix in this mode.
 .PHONY: dev
-dev: ## Start postgres, step-ca and certharbor as already built (--wait, no --build), then Vite with hot reload on the host
-	SESSION_SECURE=$${SESSION_SECURE:-false} $(COMPOSE) up -d --wait postgres step-ca certharbor
-	cd $(WEB_DIR) && DEV_BACKEND_URL="https://$$(docker inspect -f '{{with index .NetworkSettings.Networks "step-network"}}{{.IPAddress}}{{end}}' certharbor):8443" npm run dev
+dev: ## Start postgres, step-ca and certharbor-control as already built (--wait, no --build), then Vite with hot reload on the host
+	SESSION_SECURE=$${SESSION_SECURE:-false} $(COMPOSE) up -d --wait postgres step-ca certharbor-control
+	cd $(WEB_DIR) && DEV_BACKEND_URL="https://$$(docker inspect -f '{{with index .NetworkSettings.Networks "step-network"}}{{.IPAddress}}{{end}}' certharbor-control):8443" npm run dev
 
 .PHONY: up-backend
-up-backend: ## Rebuild and start postgres, step-ca and certharbor only
-	$(COMPOSE) up -d --build --wait postgres step-ca certharbor
+up-backend: ## Rebuild and start postgres, step-ca and certharbor-control only
+	$(COMPOSE) up -d --build --wait postgres step-ca certharbor-control
 
 .PHONY: up-web
-up-web: ## Rebuild and restart certharbor-web alone against the running backend
-	$(COMPOSE) up -d --build --wait --no-deps certharbor-web
+up-web: ## Rebuild and restart certharbor-console alone against the running backend
+	$(COMPOSE) up -d --build --wait --no-deps certharbor-console
 
 .PHONY: logs-ui
-logs-ui: ## Stream certharbor's logs (Ctrl-C to stop)
-	$(COMPOSE) logs -f certharbor
+logs-ui: ## Stream certharbor-control's logs (Ctrl-C to stop)
+	$(COMPOSE) logs -f certharbor-control
 
 .PHONY: logs-web
-logs-web: ## Stream certharbor-web's logs (Ctrl-C to stop)
-	$(COMPOSE) logs -f certharbor-web
+logs-web: ## Stream certharbor-console's logs (Ctrl-C to stop)
+	$(COMPOSE) logs -f certharbor-console
 
 .PHONY: nginx-test
-nginx-test: ## Run nginx -t inside the running certharbor-web
-	$(COMPOSE) exec certharbor-web nginx -t
+nginx-test: ## Run nginx -t inside the running certharbor-console
+	$(COMPOSE) exec certharbor-console nginx -t
 
 .PHONY: web-reload
-web-reload: ## Validate and reload nginx in the running certharbor-web, no restart
-	$(COMPOSE) exec certharbor-web sh -c 'nginx -t && nginx -s reload'
+web-reload: ## Validate and reload nginx in the running certharbor-console, no restart
+	$(COMPOSE) exec certharbor-console sh -c 'nginx -t && nginx -s reload'

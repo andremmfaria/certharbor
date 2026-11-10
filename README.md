@@ -14,7 +14,7 @@
 
 ---
 
-A small-team-friendly web UI on top of `smallstep/step-ca`. No SaaS, no telemetry, no vendor lock-in, runs on your own server in four Docker containers (the nginx origin certharbor-web, the Go backend certharbor, PostgreSQL, step-ca). The UI talks to step-ca through the Go `smallstep/certificates` library, not the `step` CLI.
+A small-team-friendly web UI on top of `smallstep/step-ca`. No SaaS, no telemetry, no vendor lock-in, runs on your own server in four Docker containers (the nginx origin certharbor-console, the Go backend certharbor-control, PostgreSQL, step-ca). The UI talks to step-ca through the Go `smallstep/certificates` library, not the `step` CLI.
 
 ## Features
 

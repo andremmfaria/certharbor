@@ -34,7 +34,7 @@ test("E2E-PROV-01: the provisioner list matches the CA's own configuration", asy
   const parsed = JSON.parse(config.stdout) as {
     services: Record<string, { environment: Record<string, string> }>;
   };
-  const env = parsed.services["certharbor"]!.environment;
+  const env = parsed.services["certharbor-control"]!.environment;
   expect(body, "CAURL renders").toContain(env["CA_URL"]!);
   expect(body, "RootCert renders").toContain(env["ROOT_CERT"]!);
   expect(body, "Provisioner renders").toContain(env["PROVISIONER"]!);
@@ -62,7 +62,7 @@ test("E2E-PROV-02: the page degrades rather than failing when the CA is unreacha
     // its body at all.
     const config = await compose("config", "--format", "json");
     const parsed = JSON.parse(config.stdout) as { services: Record<string, { environment: Record<string, string> }> };
-    const env = parsed.services["certharbor"]!.environment;
+    const env = parsed.services["certharbor-control"]!.environment;
     expect(body, "CAURL still renders").toContain(env["CA_URL"]!);
     expect(body, "RootCert still renders").toContain(env["ROOT_CERT"]!);
     expect(body, "Provisioner still renders").toContain(env["PROVISIONER"]!);

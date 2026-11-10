@@ -11,7 +11,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 lint_dir="$repo_root/frontend/nginx-lint"
-image="certharbor-web:nginx-lint"
+image="certharbor-console:nginx-lint"
 stub_image="nginx:1.29-alpine"
 run_id="nginx-lint-$$"
 net="$run_id"
@@ -57,8 +57,8 @@ gen_root "$pki/root" "nginx-lint root"
 gen_root "$pki/evil" "nginx-lint untrusted root"
 gen_leaf "$pki/web" "$pki/root" "$host"
 gen_leaf "$pki/web2" "$pki/root" "$host"
-gen_leaf "$pki/upstream" "$pki/root" "certharbor"
-gen_leaf "$pki/evil-upstream" "$pki/evil" "certharbor"
+gen_leaf "$pki/upstream" "$pki/root" "certharbor-control"
+gen_leaf "$pki/evil-upstream" "$pki/evil" "certharbor-control"
 cp "$pki/web.crt" "$work/web/web.crt"
 cp "$pki/web.key" "$work/web/web.key"
 cp "$pki/root.crt" "$work/web/root_ca.crt"
@@ -112,7 +112,7 @@ docker network create "$net" >/dev/null
 
 start_stub() { # cert-dir
   containers+=("$run_id-stub")
-  docker run -d --name "$run_id-stub" --network "$net" --network-alias certharbor \
+  docker run -d --name "$run_id-stub" --network "$net" --network-alias certharbor-control \
     -v "$1:/stub:ro" -v "$lint_dir/stub-upstream.conf:/etc/nginx/nginx.conf:ro" \
     "$stub_image" >/dev/null
 }
@@ -184,7 +184,7 @@ locations_ok() {
     END { if (proxied != 2) { print "want 2 proxying locations, found " proxied; bad = 1 } exit bad }'
 }
 check "every proxy_pass location includes conf.d/proxy-headers.conf and verifies the upstream" locations_ok
-for directive in "proxy_ssl_verify on;" "proxy_ssl_verify_depth 2;" "proxy_ssl_name certharbor;" \
+for directive in "proxy_ssl_verify on;" "proxy_ssl_verify_depth 2;" "proxy_ssl_name certharbor-control;" \
   "proxy_ssl_trusted_certificate /etc/certharbor/ssl/root_ca.crt;" "server_tokens off;" \
   "proxy_read_timeout 180s;" "ssl_reject_handshake on;"; do
   check "nginx -T contains '$directive'" grep -qF "$directive" <<<"$directives"
@@ -207,7 +207,7 @@ for path in "${probe_paths[@]}"; do
   req "${forged[@]}" -D "$work/hdrs" -o "$work/body" "$path"
   body=$(<"$work/body")
   hdrs=$(tr -d '\r' <"$work/hdrs")
-  check "$path is proxied to the backend" grep -q '"stub":"certharbor"' <<<"$body"
+  check "$path is proxied to the backend" grep -q '"stub":"certharbor-control"' <<<"$body"
   IFS=$'\t' read -r xff xri tci fwd rid fhost < <(jq -r '[.xff, .xri, .tci, .fwd, .rid, .host] | map(if . == "" then "-" else . end) | @tsv' <<<"$body")
   check "$path: X-Forwarded-For replaced with the peer ($xff)" bash -c '[[ "$1" =~ ^[0-9.]+$ && "$1" != 1.2.3.4 ]]' _ "$xff"
   check "$path: X-Real-IP set to the same peer" test "$xri" = "$xff"
@@ -230,7 +230,7 @@ done
 for path in /docs /docs/x /openapi.yaml /schemas/Thing /app/assets/missing-0000.js; do
   check "$path is 404 with no SPA fallback" test "$(status_of "$path")" = 404
 done
-check "the bundle is not served outside /app/" grep -q '"stub":"certharbor"' <<<"$(req /assets/index-a1b2c3d4.js)"
+check "the bundle is not served outside /app/" grep -q '"stub":"certharbor-control"' <<<"$(req /assets/index-a1b2c3d4.js)"
 app_redirect=$(headers_of /app)
 check "/app redirects to /app/ with a relative Location" bash -c '[[ "$1" == *" 301"* && "$2" == /app/ ]]' _ "$(head -n1 <<<"$app_redirect")" "$(header Location "$app_redirect")"
 check "/nginx-health is 200" test "$(status_of /nginx-health)" = 200

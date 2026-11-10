@@ -105,7 +105,7 @@ export async function logs(service: string, opts: LogOptions = {}): Promise<stri
 
 /**
  * A docker compose recreate replaces the container and `logs` only ever shows
- * the current one, so any test that recreates certharbor appends the outgoing
+ * the current one, so any test that recreates certharbor-control appends the outgoing
  * container's log here first. E2E-SEC-03's full-log sweep and collect.sh read
  * this file rather than calling `logs` directly (Section 2.6).
  */
@@ -113,14 +113,14 @@ export function cumulativeLogPath(): string {
   return process.env.E2E_CUMULATIVE_LOG ?? path.join(REPO_ROOT, "test", "e2e", "artifacts", "certharbor-cumulative.log");
 }
 
-export async function captureBeforeRecreate(service = "certharbor"): Promise<void> {
+export async function captureBeforeRecreate(service = "certharbor-control"): Promise<void> {
   const current = await logs(service);
   const target = cumulativeLogPath();
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.appendFileSync(target, current);
 }
 
-export async function cumulativeLog(service = "certharbor"): Promise<string> {
+export async function cumulativeLog(service = "certharbor-control"): Promise<string> {
   const target = cumulativeLogPath();
   const previous = fs.existsSync(target) ? fs.readFileSync(target, "utf8") : "";
   return previous + (await logs(service));
@@ -180,8 +180,8 @@ export async function waitHealthy(service: string, timeoutMs = 180_000): Promise
   );
 }
 
-export const BACKEND_SERVICE = "certharbor";
-export const WEB_SERVICE = "certharbor-web";
+export const BACKEND_SERVICE = "certharbor-control";
+export const WEB_SERVICE = "certharbor-console";
 
 /**
  * Waits for nginx as well, where the stack has it: it starts only once the
@@ -279,9 +279,9 @@ export function projectName(): string {
   return process.env.COMPOSE_PROJECT_NAME ?? path.basename(REPO_ROOT);
 }
 
-const CERTHARBOR_VOLUMES = ["certharbor-certs", "certharbor-ssl", "certharbor-web-ssl", "certharbor-data", "certharbor-uploads"];
+const CERTHARBOR_VOLUMES = ["certharbor-control-certs", "certharbor-control-ssl", "certharbor-console-ssl", "certharbor-control-data", "certharbor-control-uploads"];
 
-/** Drops certharbor's own volumes while leaving step-ca-data, and the CA identity a fingerprint was computed from, intact. Call after `compose("down")` (no `-v`). */
+/** Drops certharbor-control's own volumes while leaving step-ca-data, and the CA identity a fingerprint was computed from, intact. Call after `compose("down")` (no `-v`). */
 export async function resetCertharborVolumes(): Promise<void> {
   const proj = projectName();
   for (const vol of CERTHARBOR_VOLUMES) {

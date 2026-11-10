@@ -10,7 +10,7 @@ const ADMIN_PW = "Boot07-e2e-Pass1!";
 
 /**
  * Cases (a), (d) and (e) fail before the DB connect, so compose.e2e-nodeps.yml
- * (already applied for this whole scenario) lets certharbor start without step-ca
+ * (already applied for this whole scenario) lets certharbor-control start without step-ca
  * at all, but postgres still needs to be up and reachable, or entrypoint.sh's
  * own 60x1s wait-for-postgres loop (which every case runs through first) hangs
  * on DNS resolution for a service with no running container, adding far more
@@ -22,14 +22,14 @@ async function freshPostgres(): Promise<void> {
 }
 
 async function expectFatal(logContains: string | string[]): Promise<void> {
-  await upStack("certharbor");
+  await upStack("certharbor-control");
   // The scenario's own compose.e2e-fatals.yml sets restart:"no" for every
   // case in this file, not only (c), against the stock restart policy a
   // fatal exit restarts into the same fatal, and reading ExitCode mid-loop
   // races the next restart.
-  const state = await waitExited("certharbor", 90_000);
+  const state = await waitExited("certharbor-control", 90_000);
   expect(state.ExitCode, "a deliberate fatal must exit non-zero").not.toBe(0);
-  const log = await logs("certharbor");
+  const log = await logs("certharbor-control");
   for (const needle of Array.isArray(logContains) ? logContains : [logContains]) {
     expect(log, `missing expected fatal message: ${needle}`).toContain(needle);
   }
@@ -91,9 +91,9 @@ test.describe.serial("bootstrap: fatals scenario", () => {
 
     await freshPostgres();
     setEnvKeys({ TRUSTED_PROXY_CIDRS: undefined });
-    await upStack("certharbor");
-    await waitForLogLine("certharbor", "trusted proxy name does not resolve yet: forwarding headers are ignored until it does", { timeoutMs: 90_000 });
-    const state = await inspectState("certharbor");
+    await upStack("certharbor-control");
+    await waitForLogLine("certharbor-control", "trusted proxy name does not resolve yet: forwarding headers are ignored until it does", { timeoutMs: 90_000 });
+    const state = await inspectState("certharbor-control");
     expect(state.Status, "an empty list with a name to resolve is not a startup fatal").toBe("running");
   });
 
@@ -112,7 +112,7 @@ test.describe.serial("bootstrap: fatals scenario", () => {
 
   test("E2E-BOOT-07 positive control: none of the five conditions injected", async () => {
     test.setTimeout(3 * 60_000);
-    // Without this, an override that simply prevented certharbor from starting
+    // Without this, an override that simply prevented certharbor-control from starting
     // at all would pass every case above.
     await composeOrThrow("down", "-v");
     setEnvKeys({
@@ -123,7 +123,7 @@ test.describe.serial("bootstrap: fatals scenario", () => {
       OIDC_DEFAULT_ROLE: undefined,
     });
     await upStack();
-    await waitHealthy("certharbor", 180_000);
+    await waitHealthy("certharbor-control", 180_000);
   });
 
   test.afterAll(async () => {
