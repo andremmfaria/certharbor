@@ -1,6 +1,47 @@
 {
   "components": {
     "schemas": {
+      "BulkResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/BulkResult"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "type": "object"
+      },
+      "BulkResult": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "error"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "status"
+        ],
+        "type": "object"
+      },
       "CertDurationOptionBody": {
         "additionalProperties": false,
         "properties": {
@@ -449,6 +490,94 @@
         },
         "type": "object"
       },
+      "ImportCandidateBody": {
+        "additionalProperties": false,
+        "properties": {
+          "certFile": {
+            "type": "string"
+          },
+          "keyFile": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "certFile"
+        ],
+        "type": "object"
+      },
+      "ImportPathItem": {
+        "additionalProperties": false,
+        "properties": {
+          "certPath": {
+            "description": "Path to the certificate file, resolved against the managed certificates directory.",
+            "minLength": 1,
+            "type": "string",
+            "writeOnly": true
+          },
+          "domain": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "keyPath": {
+            "description": "Path to the private key file, resolved against the managed certificates directory.",
+            "type": "string",
+            "writeOnly": true
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "domain",
+          "certPath"
+        ],
+        "type": "object"
+      },
+      "IssueCertificateBody": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "description": "Domain or IP address the certificate covers.",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "duration": {
+            "description": "Issuance duration, e.g. 8760h.",
+            "maxLength": 16,
+            "type": "string"
+          },
+          "keyType": {
+            "description": "Key type, e.g. EC:P-256.",
+            "maxLength": 16,
+            "type": "string"
+          },
+          "name": {
+            "description": "Certificate name, used as its managed directory name.",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "template": {
+            "description": "Certificate template id, from GET /api/v1/certificates/options.",
+            "maxLength": 64,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "domain"
+        ],
+        "type": "object"
+      },
       "PageCertificateSummaryBody": {
         "additionalProperties": false,
         "properties": {
@@ -839,6 +968,243 @@
           "certificates"
         ],
         "x-required-role": "viewer"
+      },
+      "post": {
+        "operationId": "createCertificate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueCertificateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateSummaryBody"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "manager"
+            ]
+          }
+        ],
+        "summary": "Issue a new certificate",
+        "tags": [
+          "certificates"
+        ],
+        "x-required-role": "manager"
+      }
+    },
+    "/api/v1/certificates/import-candidates": {
+      "get": {
+        "operationId": "listCertificateImportCandidates",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ImportCandidateBody"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "manager"
+            ]
+          }
+        ],
+        "summary": "List unregistered certificates found on disk",
+        "tags": [
+          "certificates"
+        ],
+        "x-required-role": "manager"
+      }
+    },
+    "/api/v1/certificates/import/paths": {
+      "post": {
+        "operationId": "importCertificatesByPaths",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "$ref": "#/components/schemas/ImportPathItem"
+                },
+                "type": [
+                  "array",
+                  "null"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "manager"
+            ]
+          }
+        ],
+        "summary": "Import certificates by server-side path, with a per-item result",
+        "tags": [
+          "certificates"
+        ],
+        "x-required-role": "manager"
+      }
+    },
+    "/api/v1/certificates/import/upload": {
+      "post": {
+        "operationId": "importCertificateUpload",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "encoding": {
+                "certFile": {
+                  "contentType": "application/octet-stream"
+                },
+                "domain": {
+                  "contentType": "text/plain"
+                },
+                "keyFile": {
+                  "contentType": "application/octet-stream"
+                },
+                "name": {
+                  "contentType": "text/plain"
+                }
+              },
+              "schema": {
+                "properties": {
+                  "certFile": {
+                    "contentEncoding": "binary",
+                    "contentMediaType": "application/octet-stream",
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "domain": {
+                    "maxLength": 255,
+                    "type": "string"
+                  },
+                  "keyFile": {
+                    "contentEncoding": "binary",
+                    "contentMediaType": "application/octet-stream",
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 255,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "domain",
+                  "certFile",
+                  "keyFile"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateSummaryBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "manager"
+            ]
+          }
+        ],
+        "summary": "Import a certificate by uploading its files",
+        "tags": [
+          "certificates"
+        ],
+        "x-required-role": "manager"
       }
     },
     "/api/v1/certificates/options": {
@@ -930,6 +1296,110 @@
           "certificates"
         ],
         "x-required-role": "viewer"
+      }
+    },
+    "/api/v1/certificates/{id}/renew": {
+      "post": {
+        "operationId": "renewCertificate",
+        "parameters": [
+          {
+            "description": "Certificate id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Certificate id.",
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateSummaryBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "manager"
+            ]
+          }
+        ],
+        "summary": "Renew a certificate",
+        "tags": [
+          "certificates"
+        ],
+        "x-required-role": "manager"
+      }
+    },
+    "/api/v1/certificates/{id}/revoke": {
+      "post": {
+        "operationId": "revokeCertificate",
+        "parameters": [
+          {
+            "description": "Certificate id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Certificate id.",
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateSummaryBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Revoke a certificate",
+        "tags": [
+          "certificates"
+        ],
+        "x-required-role": "admin"
       }
     },
     "/api/v1/config": {
