@@ -213,7 +213,7 @@ func (f *fakeLookup) set(err error, addrs ...string) {
 
 func TestResolvedProxies_TrustsNothingUntilResolved(t *testing.T) {
 	f := &fakeLookup{err: errors.New("no such host")}
-	p := NewResolvedProxies("step-webui-web", f.lookup)
+	p := NewResolvedProxies("certharbor-console", f.lookup)
 	if err := p.Refresh(context.Background()); err == nil {
 		t.Fatal("expected the failed lookup to surface")
 	}
@@ -228,7 +228,7 @@ func TestResolvedProxies_TrustsNothingUntilResolved(t *testing.T) {
 
 func TestResolvedProxies_TrustsExactAddressOnly(t *testing.T) {
 	f := &fakeLookup{addrs: []string{"172.30.0.5"}}
-	p := NewResolvedProxies("step-webui-web", f.lookup)
+	p := NewResolvedProxies("certharbor-console", f.lookup)
 	if err := p.Refresh(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +245,7 @@ func TestResolvedProxies_TrustsExactAddressOnly(t *testing.T) {
 // resolved once: a recreated proxy container comes back on a new address.
 func TestResolvedProxies_FollowsRecreate(t *testing.T) {
 	f := &fakeLookup{addrs: []string{"172.30.0.5"}}
-	p := NewResolvedProxies("step-webui-web", f.lookup)
+	p := NewResolvedProxies("certharbor-console", f.lookup)
 	if err := p.Refresh(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -265,7 +265,7 @@ func TestResolvedProxies_FollowsRecreate(t *testing.T) {
 
 func TestResolvedProxies_RunRefreshesUntilCancelled(t *testing.T) {
 	f := &fakeLookup{err: errors.New("no such host")}
-	p := NewResolvedProxies("step-webui-web", f.lookup)
+	p := NewResolvedProxies("certharbor-console", f.lookup)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { p.Run(ctx, time.Millisecond); close(done) }()

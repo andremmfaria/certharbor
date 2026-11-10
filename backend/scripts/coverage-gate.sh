@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# coverage-gate.sh, ratcheted coverage gate for step-ca-webui.
+# coverage-gate.sh, ratcheted coverage gate for certharbor.
 #
 # Usage:
 #   ./scripts/coverage-gate.sh [THRESHOLD]
@@ -9,7 +9,7 @@
 # interface for le/, tracked as a follow-up refactor wave.
 #
 # Exemptions (kept thin so the number reflects logic, not bootstrap):
-#   - None. The root package (step-webui) is NOT excluded and DOES contribute
+#   - None. The root package (certharbor) is NOT excluded and DOES contribute
 #     real statements to the profile, tlsreload.go's certReloader and
 #     tlsbootstrap.go's TLS-bootstrap helpers (writeInlineRootCert,
 #     ensureRootCert, generateSelfSignedCert, ensureUICert, renewUICertOnce)

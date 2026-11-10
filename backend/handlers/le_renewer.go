@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"time"
 
-	"step-webui/le"
+	"certharbor/le"
 
-	appdb "step-webui/db"
+	appdb "certharbor/db"
 )
 
 // StartRenewer starts the LE auto-renewal loop as a panic-safe background

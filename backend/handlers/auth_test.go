@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"step-webui/security"
+	"certharbor/security"
 )
 
 func TestClientIPStripsPort(t *testing.T) {

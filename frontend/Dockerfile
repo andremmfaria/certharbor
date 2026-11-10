@@ -25,7 +25,7 @@ WORKDIR /src/clients/ts
 RUN npm run generate && npm run build \
  && npm version "$(tr -d '[:space:]' < ../../VERSION)-dev" --no-git-tag-version --allow-same-version \
  && npm pack --pack-destination dist \
- && mv dist/andremmfaria-step-ca-webui-client-*.tgz dist/client.tgz
+ && mv dist/andremmfaria-certharbor-client-*.tgz dist/client.tgz
 
 COPY frontend/ /src/frontend/
 WORKDIR /src/frontend
@@ -40,7 +40,7 @@ RUN npm install --no-save ../clients/ts/dist/client.tgz \
 # Pinned to a minor. The master process must run as root: it reads web.key,
 # which the backend writes 0600 as uid 10001, before dropping to the worker
 # user. nginx-unprivileged or a USER line breaks TLS startup.
-# /etc/step-webui/ssl is deliberately absent from the image: an empty named
+# /etc/certharbor/ssl is deliberately absent from the image: an empty named
 # volume takes its ownership from the first image that has the mount path, and
 # that must be the backend's uid 10001 directory, never a root-owned one here.
 # apk upgrade pulls the security fixes the published nginx tag has not rebuilt
@@ -51,15 +51,15 @@ RUN apk upgrade --no-cache \
  && apk add --no-cache curl openssl \
  && rm -f /etc/nginx/conf.d/default.conf \
  && rm -rf /usr/share/nginx/html/* \
- && mkdir -p /etc/step-webui/ephemeral
-COPY frontend/nginx.conf.template frontend/nginx.waiting.conf.template frontend/conf.d/doc-headers.conf.template /etc/step-webui/
+ && mkdir -p /etc/certharbor/ephemeral
+COPY frontend/nginx.conf.template frontend/nginx.waiting.conf.template frontend/conf.d/doc-headers.conf.template /etc/certharbor/
 COPY frontend/conf.d/proxy-headers.conf /etc/nginx/conf.d/
-COPY --chmod=0755 frontend/entrypoint.sh /usr/local/bin/step-webui-web-entrypoint
+COPY --chmod=0755 frontend/entrypoint.sh /usr/local/bin/certharbor-console-entrypoint
 EXPOSE 8443
 # The SNI must be WEB_HOSTNAME: any other name is refused at the handshake.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
   CMD curl -fsk --max-time 2 --resolve "${WEB_HOSTNAME}:8443:127.0.0.1" "https://${WEB_HOSTNAME}:8443/nginx-health" || exit 1
-ENTRYPOINT ["/usr/local/bin/step-webui-web-entrypoint"]
+ENTRYPOINT ["/usr/local/bin/certharbor-console-entrypoint"]
 
 # ── make nginx-lint's fixture: the real config over a placeholder bundle ─────
 # PHASE9-DELETE: both bundles go to /usr/share/nginx/html/ once the SPA owns

@@ -25,7 +25,7 @@ async function ready(ctx: APIRequestContext): Promise<{ status: number; body: Re
 test.describe.configure({ mode: "serial" });
 
 /**
- * A container reporting healthy is not the same as step-webui's own pool having
+ * A container reporting healthy is not the same as certharbor-control's own pool having
  * recovered: /ready dials the database on every call, and the first call after
  * a restart can still see a stale connection. Each test that needs a fully
  * ready stack waits for it rather than inheriting the previous test's recovery.
@@ -60,7 +60,7 @@ test("E2E-HLTH-01: /health is unconditional", async () => {
     await composeOrThrow("start", "step-ca");
     await waitHealthy("postgres");
     await waitHealthy("step-ca");
-    await waitHealthy("step-webui");
+    await waitHealthy("certharbor-control");
     await waitFullyReady(anon);
     await anon.dispose();
   }
@@ -173,7 +173,7 @@ test("E2E-HLTH-05: /ready reports the database down", async ({ admin }) => {
   } finally {
     await composeOrThrow("start", "postgres");
     await waitHealthy("postgres");
-    await waitHealthy("step-webui");
+    await waitHealthy("certharbor-control");
     await waitFullyReady(anon);
     await anon.dispose();
   }

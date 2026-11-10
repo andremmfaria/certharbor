@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"step-webui/config"
-	"step-webui/middleware"
+	"certharbor/config"
+	"certharbor/middleware"
 
 	gojose "github.com/go-jose/go-jose/v4"
 	josejwt "github.com/go-jose/go-jose/v4/jwt"

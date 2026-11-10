@@ -45,7 +45,7 @@ test("E2E-AUTH-12: logout revokes a cookie captured before it", async ({ admin }
     // the store's normal Max-Age rather than deleting it. The observable is that
     // the value was overwritten, not that the cookie is gone.
     const reissued = after.headers()["set-cookie"] ?? "";
-    expect(reissued, "the response overwrites the session cookie").toContain("step-webui=");
+    expect(reissued, "the response overwrites the session cookie").toContain("certharbor=");
     expect(reissued.includes(captured.split("=").slice(1).join("=")), "with a different value").toBe(false);
     await replay.dispose();
   } finally {
@@ -74,7 +74,7 @@ test("E2E-AUTH-14: deactivation, demotion and deletion take effect on the next r
         const res = await jarA.get("/issue");
         expect(res.status(), "deactivate ends the session").toBe(302);
         expect(res.headers()["location"]).toBe("/login");
-        expect(res.headers()["set-cookie"] ?? "", "the session cookie is overwritten").toContain("step-webui=");
+        expect(res.headers()["set-cookie"] ?? "", "the session cookie is overwritten").toContain("certharbor=");
       }
 
       if (round === "demote") {
@@ -101,7 +101,7 @@ test("E2E-AUTH-14: deactivation, demotion and deletion take effect on the next r
         // before the epoch comparison. A 500 here would be the regression.
         expect(res.status(), "delete ends the session without a 500").toBe(302);
         expect(res.headers()["location"]).toBe("/login");
-        expect(res.headers()["set-cookie"] ?? "", "the session cookie is overwritten").toContain("step-webui=");
+        expect(res.headers()["set-cookie"] ?? "", "the session cookie is overwritten").toContain("certharbor=");
       }
     } finally {
       await jarA.dispose();

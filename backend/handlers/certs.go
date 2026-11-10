@@ -12,9 +12,9 @@ import (
 	"strconv"
 	"time"
 
-	"step-webui/models"
+	"certharbor/models"
 
-	appdb "step-webui/db"
+	appdb "certharbor/db"
 )
 
 // Home renders the application home/landing page.

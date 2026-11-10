@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"step-webui/models"
+	"certharbor/models"
 
 	"github.com/gorilla/sessions"
 )
@@ -17,9 +17,9 @@ const (
 	// SessionCookieBase is exported because the OpenAPI document names the
 	// cookie, and the document is generated with no store to resolve the
 	// prefix from.
-	SessionCookieBase = "step-webui"
-	csrfCookieBase    = "step-webui-csrf"
-	oidcCookieBase    = "step-webui-oidc"
+	SessionCookieBase = "certharbor"
+	csrfCookieBase    = "certharbor-csrf"
+	oidcCookieBase    = "certharbor-oidc"
 )
 
 // HostPrefix is what binds a cookie to this exact host. Cookies are not
@@ -181,7 +181,7 @@ func RoleAllows(have, want string) bool {
 }
 
 // RoleFrom returns the role of the user WithUser stored. It exists so that
-// api/ can enforce a role without naming step-webui/models, which Section 2's
+// api/ can enforce a role without naming certharbor/models, which Section 2's
 // depguard allowlist forbids it from importing.
 func RoleFrom(ctx context.Context) (string, bool) {
 	user, ok := UserFrom(ctx)

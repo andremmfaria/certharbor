@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"step-webui/handlers"
+	"certharbor/handlers"
 )
 
 // TestNginxReadTimeoutExceedsBackendOperations: nginx gives up on a proxied

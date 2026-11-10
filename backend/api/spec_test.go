@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	humaapi "step-webui/api"
+	humaapi "certharbor/api"
 )
 
 func marshalSpec(t *testing.T) []byte {

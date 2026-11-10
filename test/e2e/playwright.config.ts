@@ -36,7 +36,7 @@ export default defineConfig({
     baseURL: BASE_URL,
     // Both leaves chain to the stack's own private root, which the harness does
     // not trust: nginx's web.crt for WEB_HOSTNAME, and the backend's for
-    // step-webui, which the BACKEND_URL tests and the infra tier dial directly,
+    // certharbor, which the BACKEND_URL tests and the infra tier dial directly,
     // the latter by IP address, which no SAN covers.
     ignoreHTTPSErrors: true,
     trace: "retain-on-failure",

@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"step-webui/handlers"
-	appmw "step-webui/middleware"
-	"step-webui/security"
+	"certharbor/handlers"
+	appmw "certharbor/middleware"
+	"certharbor/security"
 
 	"github.com/gorilla/sessions"
 )

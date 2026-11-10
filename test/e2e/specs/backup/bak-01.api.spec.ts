@@ -33,7 +33,7 @@ test("E2E-BAK-01: the bundle is valid, complete and self-verifying", async ({ ad
     expect(res.status()).toBe(200);
     expect(res.headers()["content-type"]).toBe("application/gzip");
     expect(res.headers()["content-disposition"]).toMatch(
-      /^attachment; filename="step-ca-webui-backup-[0-9A-Za-z_-]+\.tgz"$/,
+      /^attachment; filename="certharbor-backup-[0-9A-Za-z_-]+\.tgz"$/,
     );
 
     const bundle = path.join(dir, "backup.tgz");
@@ -44,11 +44,11 @@ test("E2E-BAK-01: the bundle is valid, complete and self-verifying", async ({ ad
     const entries = listed.stdout.split("\n").map((l) => l.trim()).filter(Boolean);
     for (const expected of [
       "manifest.json",
-      "postgres-stepwebui.sql",
+      "postgres-certharbor.sql",
       "step-ca-data.tgz",
-      "step-webui-data.tgz",
-      "step-webui-certs.tgz",
-      "step-webui-uploads.tgz",
+      "certharbor-data.tgz",
+      "certharbor-certs.tgz",
+      "certharbor-uploads.tgz",
     ]) {
       expect(entries, `${expected} is in the bundle`).toContain(expected);
     }
@@ -59,12 +59,12 @@ test("E2E-BAK-01: the bundle is valid, complete and self-verifying", async ({ ad
     expect(untar.code, `tar xzf: ${untar.stderr}`).toBe(0);
 
     const manifest = JSON.parse(await fs.readFile(path.join(extracted, "manifest.json"), "utf8")) as Manifest;
-    expect(manifest.format).toBe("step-ca-webui-backup-v1");
+    expect(manifest.format).toBe("certharbor-backup-v1");
 
-    // /home/step is mounted read-only and step-webui runs as uid 10001, so the
+    // /home/step is mounted read-only and certharbor runs as uid 10001, so the
     // step-ca-data walk aborts on EACCES and never becomes a component.
     expect(manifest.components.map((c) => c.name).sort()).toEqual(
-      ["postgres", "step-webui-certs", "step-webui-data", "step-webui-uploads"].sort(),
+      ["postgres", "certharbor-certs", "certharbor-data", "certharbor-uploads"].sort(),
     );
     expect(manifest.warnings ?? []).toEqual(["step-ca-data failed: open /home/step/config: permission denied"]);
 
@@ -91,7 +91,7 @@ test("E2E-BAK-01: the bundle is valid, complete and self-verifying", async ({ ad
     expect(inner.filter((e) => /^\.?\/?config\/.+/.test(e)), "config/ carries no contents").toEqual([]);
     expect(inner.filter((e) => /^\.?\/?secrets\//.test(e)), "secrets/ was never reached").toEqual([]);
 
-    const dump = await fs.readFile(path.join(extracted, "postgres-stepwebui.sql"), "utf8");
+    const dump = await fs.readFile(path.join(extracted, "postgres-certharbor.sql"), "utf8");
     for (const table of ["certificates", "users", "cert_history"]) {
       expect(
         new RegExp(`(COPY|INSERT INTO) (public\\.)?${table}\\b`).test(dump),

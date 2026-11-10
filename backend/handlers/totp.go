@@ -11,14 +11,14 @@ import (
 	"strings"
 	"time"
 
-	"step-webui/security"
+	"certharbor/security"
 
 	"github.com/pquerna/otp/totp"
-	appdb "step-webui/db"
+	appdb "certharbor/db"
 )
 
 const (
-	totpIssuer     = "Step-CA WebUI"
+	totpIssuer     = "Certharbor"
 	totpPendingTTL = 5 * time.Minute
 )
 

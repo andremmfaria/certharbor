@@ -16,8 +16,8 @@ import (
 	"sync"
 	"time"
 
-	appdb "step-webui/db"
-	"step-webui/security"
+	appdb "certharbor/db"
+	"certharbor/security"
 )
 
 const (
@@ -301,9 +301,9 @@ func sendPasswordResetMail(
 	}
 	from, to = fromAddr.Address, toAddr.Address
 
-	subject := "Step-CA WebUI, Password Reset"
+	subject := "Certharbor, Password Reset"
 	body := fmt.Sprintf(
-		"A password reset was requested for your Step-CA WebUI account.\r\n\r\n"+
+		"A password reset was requested for your Certharbor account.\r\n\r\n"+
 			"Open this link within 30 minutes to set a new password:\r\n%s\r\n\r\n"+
 			"If you did not request this, you can safely ignore this email.\r\n",
 		link,

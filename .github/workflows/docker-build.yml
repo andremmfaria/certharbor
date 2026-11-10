@@ -26,12 +26,12 @@ jobs:
           - name: backend
             context: ./backend
             file: ./backend/Dockerfile
-            image: ghcr.io/andremmfaria/step-ca-webui
+            image: ghcr.io/andremmfaria/certharbor-control
             scope: e2e-backend
           - name: frontend
             context: .
             file: ./frontend/Dockerfile
-            image: ghcr.io/andremmfaria/step-ca-webui-web
+            image: ghcr.io/andremmfaria/certharbor-console
             scope: e2e-frontend
 
     steps:
@@ -55,7 +55,7 @@ jobs:
 
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v4.7.0
+        uses: docker/login-action@v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

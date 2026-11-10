@@ -1,4 +1,4 @@
-title = "gitleaks config for step-ca-webui"
+title = "gitleaks config for certharbor"
 
 [extend]
 useDefault = true

@@ -212,7 +212,7 @@ func TestDeleteSession_ExpiresBothCookies(t *testing.T) {
 		t.Fatalf("status = %d, want 204", resp.StatusCode)
 	}
 
-	for _, name := range []string{"step-webui", "step-webui-csrf"} {
+	for _, name := range []string{"certharbor", "certharbor-csrf"} {
 		var found bool
 		for _, c := range resp.Cookies() {
 			if c.Name == name {

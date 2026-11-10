@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	appdb "step-webui/db"
+	appdb "certharbor/db"
 )
 
 const auditPrefix = "Audit: "
