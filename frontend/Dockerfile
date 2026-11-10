@@ -48,7 +48,7 @@ RUN --mount=type=secret,id=npm_token \
     REGISTRY_HOST="${NPM_REGISTRY_URL#https://}" && \
     printf '@andremmfaria:registry=%s\n//%s/:_authToken=%s\n' \
       "$NPM_REGISTRY_URL" "$REGISTRY_HOST" "$(cat /run/secrets/npm_token)" > .npmrc && \
-    npm install --save-exact "@andremmfaria/certharbor-client@${CLIENT_VERSION}" --registry="$NPM_REGISTRY_URL" && \
+    npm install --save-exact "@andremmfaria/certharbor-client@${CLIENT_VERSION}" && \
     rm -f .npmrc
 
 # ── Client source selection ───────────────────────────────────────────────────
