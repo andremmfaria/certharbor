@@ -1,19 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <defs>
-    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#4a90e2"/>
-      <stop offset="100%" stop-color="#2563eb"/>
-    </linearGradient>
-  </defs>
-  <!-- Shield -->
-  <path fill="url(#shieldGrad)" stroke="#1e40af" stroke-width="0.5"
-        d="M16 2 L27 5.5 V14 C27 22 21 27 16 30 C11 27 5 22 5 14 V5.5 L16 2 Z"/>
-  <!-- Lock body -->
-  <rect x="11" y="14" width="10" height="8" rx="1" fill="#fff" opacity="0.95"/>
-  <!-- Lock shackle -->
-  <path fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"
-        d="M13 14 V11 a3 3 0 0 1 6 0 V14"/>
-  <!-- Keyhole -->
-  <circle cx="16" cy="17.5" r="1.3" fill="#1e40af"/>
-  <rect x="15.4" y="17.5" width="1.2" height="2.5" fill="#1e40af"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Certharbor favicon">
+  <title>Certharbor</title>
+  <desc>Simplified anchor-and-certificate-seal mark for small sizes.</desc>
+
+  <!-- Anchor: shaft, crossbar, classic U-fluke sweep -->
+  <g fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M16,15 L16,26"/>
+    <path d="M11,17 L21,17"/>
+    <path d="M8,21 A8,8 0 0 0 24,21"/>
+  </g>
+
+  <!-- Certificate seal doubling as the anchor's ring, with a check -->
+  <circle cx="16" cy="7" r="5.5" fill="#dc4b40"/>
+  <path d="M13,7.3 L15.2,9.4 L19.3,4.8" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
