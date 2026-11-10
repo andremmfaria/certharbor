@@ -10,8 +10,8 @@ import (
 
 	"certharbor/security"
 
-	"github.com/go-chi/chi/v5"
 	appdb "certharbor/db"
+	"github.com/go-chi/chi/v5"
 )
 
 // invalidRoleMsg names the valid roles, because a rejected role is otherwise
