@@ -21,8 +21,8 @@ import (
 
 	"certharbor/models"
 
-	"github.com/go-chi/chi/v5"
 	appdb "certharbor/db"
+	"github.com/go-chi/chi/v5"
 )
 
 // CertDetail holds parsed certificate metadata for the detail view.
