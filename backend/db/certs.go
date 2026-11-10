@@ -73,6 +73,19 @@ func UpdateCertStatus(d *sql.DB, id int, status string) error {
 	return err
 }
 
+// GetCertByName returns the most recently issued certificate with the given
+// name, or (nil, nil) when not found. Used by certharbor-delivery's
+// reconciler to resolve a delivery_bindings.certificate_name against
+// certharbor-control's existing inventory.
+func GetCertByName(d *sql.DB, name string) (*models.Certificate, error) {
+	row := d.QueryRow(`SELECT `+certSelectCols+` FROM certificates WHERE name=$1 ORDER BY created_at DESC LIMIT 1`, name) //nolint:noctx // pre-existing signature
+	c, err := scanCert(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return c, err
+}
+
 // GetCertBySerial returns the certificate with the given serial, or (nil, nil) when not found.
 func GetCertBySerial(d *sql.DB, serial string) (*models.Certificate, error) {
 	row := d.QueryRow(`SELECT `+certSelectCols+` FROM certificates WHERE serial=$1`, serial) //nolint:noctx // pre-existing signature

@@ -162,6 +162,23 @@ lint: ## Run golangci-lint and check formatting
 	cd $(GO_DIR) && golangci-lint run
 	cd $(GO_DIR) && gofumpt -l .
 
+.PHONY: delivery-build
+delivery-build: ## Build the certharbor-delivery binary
+	cd $(GO_DIR) && go build ./cmd/certharbor-delivery
+
+.PHONY: delivery-run
+delivery-run: ## Run certharbor-delivery's reconciler loop locally (needs DATABASE_URL/POSTGRES_* and AWS creds in env)
+	cd $(GO_DIR) && go run ./cmd/certharbor-delivery run
+
+.PHONY: delivery-export
+delivery-export: ## Export the delivery registry to YAML: make delivery-export OUT=registry.yaml
+	cd $(GO_DIR) && go run ./cmd/certharbor-delivery export -out ../$(if $(OUT),$(OUT),registry.yaml)
+
+.PHONY: delivery-import
+delivery-import: ## Import a delivery registry YAML: make delivery-import FILE=registry.yaml
+	@test -n "$(FILE)" || { echo "usage: make delivery-import FILE=<path>"; exit 2; }
+	cd $(GO_DIR) && go run ./cmd/certharbor-delivery import ../$(FILE)
+
 .PHONY: cover
 cover: ## Run coverage gate
 	cd $(GO_DIR) && go test -coverprofile=coverage.out ./... >/dev/null
