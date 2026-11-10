@@ -64,7 +64,14 @@ export function parseAllowlist(/** @type {string} */ text) {
  * @param {{ operationIds: string[], imported: Set<string>, allowlist: string[] }} input
  */
 export function checkSurface({ operationIds, imported, allowlist }) {
-  const isUsed = (/** @type {string} */ id) => DERIVED_SUFFIXES.some((suffix) => imported.has(id + suffix))
+  // hey-api's camelCase transform collapses a trailing run of capitals (e.g.
+  // the "CA" in operationId "getCA") into a single title-cased word, so the
+  // generated export is `getCa`, not `getCA`. Spec operationIds are compared
+  // case-insensitively against imports for this reason: it is a casing
+  // normalization, not a weakening of what "used" means.
+  const importedLower = new Set([...imported].map((name) => name.toLowerCase()))
+  const isUsed = (/** @type {string} */ id) =>
+    DERIVED_SUFFIXES.some((suffix) => importedLower.has((id + suffix).toLowerCase()))
   const allowed = new Set(allowlist)
   const known = new Set(operationIds)
   return {
