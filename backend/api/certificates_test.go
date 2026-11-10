@@ -266,3 +266,128 @@ func TestGetCertificateOptions_ManagerSucceeds(t *testing.T) {
 		t.Fatalf("defaultTemplate = %v, want server", result.body["defaultTemplate"])
 	}
 }
+
+// ─── Phase 4, third batch: downloads and GET /api/v1/ca ────────────────────
+//
+// The session- and role-denial cases below mirror the pattern every prior
+// Phase 4 operation test uses: the session and role middleware answer
+// before the operation handler (and therefore the database or CA client)
+// is ever reached, so none of these need a real database. The success
+// paths (actual byte content, correct headers) are integration-only,
+// certificates_integration_test.go, because they need a real certificate
+// file or a real root CA certificate on disk.
+
+func TestGetCertificateCertificate_RequiresSession(t *testing.T) {
+	srv := newTestServer(t)
+	client := newClient(t)
+
+	resp := doRequest(t, client, http.MethodGet, srv.URL+"/api/v1/certificates/1/certificate", nil, nil) //nolint:bodyclose // closed via t.Cleanup inside doRequest
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", resp.StatusCode)
+	}
+}
+
+// TestGetCertificateCertificate_ViewerDenied is this batch's elevated-role
+// case: both downloads are manager, same as every other certificate
+// mutation except revoke, so a viewer session (which satisfies list,
+// detail and GET /api/v1/ca) must still get 403 here.
+func TestGetCertificateCertificate_ViewerDenied(t *testing.T) {
+	srv := newTestServer(t)
+	client := newClient(t)
+	login(t, client, srv)
+
+	original := testUser.Role
+	testUser.Role = "viewer"
+	t.Cleanup(func() { testUser.Role = original })
+
+	resp := doRequest(t, client, http.MethodGet, srv.URL+"/api/v1/certificates/1/certificate", nil, nil) //nolint:bodyclose // closed via t.Cleanup inside doRequest
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", resp.StatusCode)
+	}
+}
+
+func TestGetCertificateKey_RequiresSession(t *testing.T) {
+	srv := newTestServer(t)
+	client := newClient(t)
+
+	resp := doRequest(t, client, http.MethodGet, srv.URL+"/api/v1/certificates/1/key", nil, nil) //nolint:bodyclose // closed via t.Cleanup inside doRequest
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", resp.StatusCode)
+	}
+}
+
+func TestGetCertificateKey_ViewerDenied(t *testing.T) {
+	srv := newTestServer(t)
+	client := newClient(t)
+	login(t, client, srv)
+
+	original := testUser.Role
+	testUser.Role = "viewer"
+	t.Cleanup(func() { testUser.Role = original })
+
+	resp := doRequest(t, client, http.MethodGet, srv.URL+"/api/v1/certificates/1/key", nil, nil) //nolint:bodyclose // closed via t.Cleanup inside doRequest
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", resp.StatusCode)
+	}
+}
+
+func TestGetCA_RequiresSession(t *testing.T) {
+	srv := newTestServer(t)
+	client := newClient(t)
+
+	resp := doRequest(t, client, http.MethodGet, srv.URL+"/api/v1/ca", nil, nil) //nolint:bodyclose // closed via t.Cleanup inside doRequest
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", resp.StatusCode)
+	}
+}
+
+// TestGetCARoot_RequiresSession and its two siblings below assert all three
+// CA chain downloads require a session, same shape as every other
+// RequiresSession test; the role-denial case for all three is
+// TestGetCARoot_ManagerDenied, since Section 6 makes every one admin.
+func TestGetCARoot_RequiresSession(t *testing.T) {
+	srv := newTestServer(t)
+	client := newClient(t)
+
+	resp := doRequest(t, client, http.MethodGet, srv.URL+"/api/v1/ca/root", nil, nil) //nolint:bodyclose // closed via t.Cleanup inside doRequest
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", resp.StatusCode)
+	}
+}
+
+func TestGetCAIntermediate_RequiresSession(t *testing.T) {
+	srv := newTestServer(t)
+	client := newClient(t)
+
+	resp := doRequest(t, client, http.MethodGet, srv.URL+"/api/v1/ca/intermediate", nil, nil) //nolint:bodyclose // closed via t.Cleanup inside doRequest
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", resp.StatusCode)
+	}
+}
+
+func TestGetCAChain_RequiresSession(t *testing.T) {
+	srv := newTestServer(t)
+	client := newClient(t)
+
+	resp := doRequest(t, client, http.MethodGet, srv.URL+"/api/v1/ca/chain", nil, nil) //nolint:bodyclose // closed via t.Cleanup inside doRequest
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", resp.StatusCode)
+	}
+}
+
+// TestGetCARoot_ManagerDenied is the role-denial case Section 6 calls out
+// for the CA chain downloads: they are admin, unlike every certificate
+// download above (manager), so a manager session (testUser.Role's default)
+// must get 403 on all three.
+func TestGetCARoot_ManagerDenied(t *testing.T) {
+	srv := newTestServer(t)
+	client := newClient(t)
+	login(t, client, srv) // testUser.Role defaults to "manager"
+
+	for _, path := range []string{"/api/v1/ca/root", "/api/v1/ca/intermediate", "/api/v1/ca/chain"} {
+		resp := doRequest(t, client, http.MethodGet, srv.URL+path, nil, nil) //nolint:bodyclose // closed via t.Cleanup inside doRequest
+		if resp.StatusCode != http.StatusForbidden {
+			t.Fatalf("%s: status = %d, want 403", path, resp.StatusCode)
+		}
+	}
+}

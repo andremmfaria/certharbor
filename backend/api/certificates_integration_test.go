@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"encoding/pem"
+	"io"
 	"math/big"
 	"mime/multipart"
 	"net/http"
@@ -696,4 +697,304 @@ func containsStr(list []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// ─── Phase 4, third batch: downloads and GET /api/v1/ca ────────────────────
+//
+// R23's observed-cost record, final entry: every success path below needed
+// only a real file on disk (the certificate/key cases) or a real root/
+// intermediate CA pair (the CA cases), both of which this file's existing
+// helpers already produce for the issue/renew tests above. No new fixture
+// machinery, which is most of why this batch priced out cheap rather than
+// expensive despite being five operations: the download mechanic itself
+// (binaryFileOutput, newBinaryFileOutput) is the one genuinely new piece,
+// and it is shared by all five, so its cost is paid once, not five times.
+
+// TestGetCertificateCertificate_Success proves the certificate download's
+// headers and body against a real file, the same filename convention
+// DownloadCert already used (handlers/certs.go).
+func TestGetCertificateCertificate_Success(t *testing.T) {
+	db := openCertTestDB(t)
+	certsDir := t.TempDir()
+	certDir := filepath.Join(certsDir, "dl-cert")
+	if err := os.MkdirAll(certDir, 0o750); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	certPath := filepath.Join(certDir, "certificate.crt")
+	certPEM, _ := genSelfSignedPEM(t, "dl.example.com", time.Now().Add(365*24*time.Hour))
+	if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
+		t.Fatalf("WriteFile(cert): %v", err)
+	}
+	if err := appdb.InsertCert(db, &models.Certificate{
+		Name: "dl-cert", Domain: "dl.example.com", CertPath: certPath, KeyPath: filepath.Join(certDir, "private.key"),
+		Serial: "dl-cert-serial", KeyType: "EC:P-256", IssueDuration: "8760h",
+	}); err != nil {
+		t.Fatalf("InsertCert: %v", err)
+	}
+	row, err := appdb.GetCertByName(db, "dl-cert")
+	if err != nil || row == nil {
+		t.Fatalf("GetCertByName: %v", err)
+	}
+
+	srv := newCertTestServerWithCA(t, db, &config.Config{CertsDir: certsDir}, nil)
+	client := newClient(t)
+	login(t, client, srv) // testUser.Role defaults to "manager"
+
+	resp := doRequest(t, client, http.MethodGet, srv.URL+"/api/v1/certificates/"+strconv.Itoa(row.ID)+"/certificate", nil, nil) //nolint:bodyclose // closed via t.Cleanup inside doRequest
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "application/x-pem-file" {
+		t.Fatalf("Content-Type = %q, want application/x-pem-file", ct)
+	}
+	if cd := resp.Header.Get("Content-Disposition"); cd != "attachment; filename=dl-cert.crt" {
+		t.Fatalf("Content-Disposition = %q, want attachment; filename=dl-cert.crt", cd)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if !bytes.Equal(body, certPEM) {
+		t.Fatalf("body does not match the certificate file on disk")
+	}
+}
+
+func TestGetCertificateCertificate_UnknownIDIs404(t *testing.T) {
+	db := openCertTestDB(t)
+	srv := newCertTestServerWithCA(t, db, &config.Config{CertsDir: t.TempDir()}, nil)
+	client := newClient(t)
+	login(t, client, srv)
+
+	resp := doRequest(t, client, http.MethodGet, srv.URL+"/api/v1/certificates/999999/certificate", nil, nil) //nolint:bodyclose // closed via t.Cleanup inside doRequest
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "application/problem+json" {
+		t.Fatalf("Content-Type = %q, want application/problem+json", ct)
+	}
+}
+
+// TestGetCertificateKey_Success proves the key download's headers and
+// body, plus DownloadKey's audit side effect (every key download is
+// logged, regardless of which route served it): a security-log row must
+// exist afterward naming this certificate.
+func TestGetCertificateKey_Success(t *testing.T) {
+	db := openCertTestDB(t)
+	certsDir := t.TempDir()
+	certDir := filepath.Join(certsDir, "dl-key-cert")
+	if err := os.MkdirAll(certDir, 0o750); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	keyPath := filepath.Join(certDir, "private.key")
+	_, keyPEM := genSelfSignedPEM(t, "dlkey.example.com", time.Now().Add(365*24*time.Hour))
+	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+		t.Fatalf("WriteFile(key): %v", err)
+	}
+	if err := appdb.InsertCert(db, &models.Certificate{
+		Name: "dl-key-cert", Domain: "dlkey.example.com", CertPath: filepath.Join(certDir, "certificate.crt"), KeyPath: keyPath,
+		Serial: "dl-key-cert-serial", KeyType: "EC:P-256", IssueDuration: "8760h",
+	}); err != nil {
+		t.Fatalf("InsertCert: %v", err)
+	}
+	row, err := appdb.GetCertByName(db, "dl-key-cert")
+	if err != nil || row == nil {
+		t.Fatalf("GetCertByName: %v", err)
+	}
+
+	srv := newCertTestServerWithCA(t, db, &config.Config{CertsDir: certsDir}, nil)
+	client := newClient(t)
+	login(t, client, srv)
+
+	resp := doRequest(t, client, http.MethodGet, srv.URL+"/api/v1/certificates/"+strconv.Itoa(row.ID)+"/key", nil, nil) //nolint:bodyclose // closed via t.Cleanup inside doRequest
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if cd := resp.Header.Get("Content-Disposition"); cd != "attachment; filename=dl-key-cert.key" {
+		t.Fatalf("Content-Disposition = %q, want attachment; filename=dl-key-cert.key", cd)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if !bytes.Equal(body, keyPEM) {
+		t.Fatalf("body does not match the key file on disk")
+	}
+
+	var count int
+	if err := db.QueryRow( //nolint:noctx // test assertion
+		`SELECT count(*) FROM auth_log WHERE reason LIKE 'Audit: certificate.key_download%dl-key-cert%'`,
+	).Scan(&count); err != nil {
+		t.Fatalf("query auth_log: %v", err)
+	}
+	if count == 0 {
+		t.Fatal("no security-log row for the key download, want DownloadKey's audit side effect preserved")
+	}
+}
+
+// TestGetCA_Success proves GET /api/v1/ca's data against the real root CA
+// certificate stepca-bootstrap-style fixtures provide via
+// handlers.NewWithFS's RootCert config, matching readPEMCert's own
+// expectations (health.go). Since no CA client is configured, Reachable
+// must be false rather than the operation failing outright.
+func TestGetCA_Success(t *testing.T) {
+	db := openCertTestDB(t)
+	rootDir := t.TempDir()
+	rootPath := filepath.Join(rootDir, "root_ca.crt")
+	rootPEM, _ := genSelfSignedPEM(t, "Test Root CA", time.Now().Add(10*365*24*time.Hour))
+	if err := os.WriteFile(rootPath, rootPEM, 0o600); err != nil {
+		t.Fatalf("WriteFile(root): %v", err)
+	}
+
+	srv := newCertTestServerWithCA(t, db, &config.Config{RootCert: rootPath}, nil)
+	client := newClient(t)
+	login(t, client, srv) // testUser.Role defaults to "manager", GET /api/v1/ca is viewer
+
+	result := doGet(t, client, srv.URL+"/api/v1/ca")
+	if result.status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", result.status)
+	}
+	if result.body["subject"] != "CN=Test Root CA" {
+		t.Fatalf("subject = %v, want CN=Test Root CA", result.body["subject"])
+	}
+	if fp, _ := result.body["fingerprintSha256"].(string); fp == "" {
+		t.Fatal("fingerprintSha256 is empty")
+	}
+	if result.body["reachable"] != false {
+		t.Fatalf("reachable = %v, want false (no CA client configured in this test)", result.body["reachable"])
+	}
+	for _, key := range []string{"notBefore", "notAfter"} {
+		if _, ok := result.body[key]; !ok {
+			t.Errorf("response missing %q", key)
+		}
+	}
+}
+
+func TestGetCA_MissingRootCertIsError(t *testing.T) {
+	db := openCertTestDB(t)
+	srv := newCertTestServerWithCA(t, db, &config.Config{RootCert: filepath.Join(t.TempDir(), "absent.crt")}, nil)
+	client := newClient(t)
+	login(t, client, srv)
+
+	resp := doRequest(t, client, http.MethodGet, srv.URL+"/api/v1/ca", nil, nil) //nolint:bodyclose // closed via t.Cleanup inside doRequest
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500 (a missing root cert is an installation error, not merely unreachable)", resp.StatusCode)
+	}
+}
+
+// TestGetCARoot_Success, TestGetCAIntermediate_Success and
+// TestGetCAChain_Success are the admin-only CA chain downloads' success
+// paths, each against a fabricated root/intermediate pair under one
+// t.TempDir(), mirroring intermediateCertPath()'s convention
+// (filepath.Dir(RootCert)/intermediate_ca.crt).
+func TestGetCARoot_Success(t *testing.T) {
+	db := openCertTestDB(t)
+	rootDir := t.TempDir()
+	rootPath := filepath.Join(rootDir, "root_ca.crt")
+	rootPEM, _ := genSelfSignedPEM(t, "Test Root CA", time.Now().Add(10*365*24*time.Hour))
+	if err := os.WriteFile(rootPath, rootPEM, 0o600); err != nil {
+		t.Fatalf("WriteFile(root): %v", err)
+	}
+
+	srv := newCertTestServerWithCA(t, db, &config.Config{RootCert: rootPath}, nil)
+	client := newClient(t)
+	login(t, client, srv)
+	original := testUser.Role
+	testUser.Role = "admin"
+	t.Cleanup(func() { testUser.Role = original })
+
+	resp := doRequest(t, client, http.MethodGet, srv.URL+"/api/v1/ca/root", nil, nil) //nolint:bodyclose // closed via t.Cleanup inside doRequest
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if cd := resp.Header.Get("Content-Disposition"); cd != "attachment; filename=home-ca-root.crt" {
+		t.Fatalf("Content-Disposition = %q, want attachment; filename=home-ca-root.crt", cd)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if !bytes.Equal(body, rootPEM) {
+		t.Fatal("body does not match the root CA file on disk")
+	}
+}
+
+func TestGetCAIntermediate_Success(t *testing.T) {
+	db := openCertTestDB(t)
+	rootDir := t.TempDir()
+	rootPath := filepath.Join(rootDir, "root_ca.crt")
+	rootPEM, _ := genSelfSignedPEM(t, "Test Root CA", time.Now().Add(10*365*24*time.Hour))
+	if err := os.WriteFile(rootPath, rootPEM, 0o600); err != nil {
+		t.Fatalf("WriteFile(root): %v", err)
+	}
+	intermediatePEM, _ := genSelfSignedPEM(t, "Test Intermediate CA", time.Now().Add(5*365*24*time.Hour))
+	if err := os.WriteFile(filepath.Join(rootDir, "intermediate_ca.crt"), intermediatePEM, 0o600); err != nil {
+		t.Fatalf("WriteFile(intermediate): %v", err)
+	}
+
+	srv := newCertTestServerWithCA(t, db, &config.Config{RootCert: rootPath}, nil)
+	client := newClient(t)
+	login(t, client, srv)
+	original := testUser.Role
+	testUser.Role = "admin"
+	t.Cleanup(func() { testUser.Role = original })
+
+	resp := doRequest(t, client, http.MethodGet, srv.URL+"/api/v1/ca/intermediate", nil, nil) //nolint:bodyclose // closed via t.Cleanup inside doRequest
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if cd := resp.Header.Get("Content-Disposition"); cd != "attachment; filename=home-ca-intermediate.crt" {
+		t.Fatalf("Content-Disposition = %q, want attachment; filename=home-ca-intermediate.crt", cd)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if !bytes.Equal(body, intermediatePEM) {
+		t.Fatal("body does not match the intermediate CA file on disk")
+	}
+}
+
+// TestGetCAChain_Success asserts the assembled chain is the intermediate
+// followed by the root with nothing else, the same ordering
+// DownloadFullChain already produced (handlers/certs.go).
+func TestGetCAChain_Success(t *testing.T) {
+	db := openCertTestDB(t)
+	rootDir := t.TempDir()
+	rootPath := filepath.Join(rootDir, "root_ca.crt")
+	rootPEM, _ := genSelfSignedPEM(t, "Test Root CA", time.Now().Add(10*365*24*time.Hour))
+	if err := os.WriteFile(rootPath, rootPEM, 0o600); err != nil {
+		t.Fatalf("WriteFile(root): %v", err)
+	}
+	intermediatePEM, _ := genSelfSignedPEM(t, "Test Intermediate CA", time.Now().Add(5*365*24*time.Hour))
+	if err := os.WriteFile(filepath.Join(rootDir, "intermediate_ca.crt"), intermediatePEM, 0o600); err != nil {
+		t.Fatalf("WriteFile(intermediate): %v", err)
+	}
+
+	srv := newCertTestServerWithCA(t, db, &config.Config{RootCert: rootPath}, nil)
+	client := newClient(t)
+	login(t, client, srv)
+	original := testUser.Role
+	testUser.Role = "admin"
+	t.Cleanup(func() { testUser.Role = original })
+
+	resp := doRequest(t, client, http.MethodGet, srv.URL+"/api/v1/ca/chain", nil, nil) //nolint:bodyclose // closed via t.Cleanup inside doRequest
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if cd := resp.Header.Get("Content-Disposition"); cd != "attachment; filename=home-ca-full-chain.crt" {
+		t.Fatalf("Content-Disposition = %q, want attachment; filename=home-ca-full-chain.crt", cd)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	wantIdx := 0
+	gotIdx := bytes.Index(body, intermediatePEM)
+	if gotIdx != wantIdx {
+		t.Fatalf("intermediate does not come first in the chain (index %d)", gotIdx)
+	}
+	rootIdx := bytes.Index(body, rootPEM)
+	if rootIdx <= gotIdx {
+		t.Fatalf("root does not follow the intermediate in the chain")
+	}
 }
