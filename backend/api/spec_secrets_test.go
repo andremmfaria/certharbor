@@ -132,7 +132,7 @@ func TestEveryOperationIsWellFormed(t *testing.T) {
 	validTags := map[string]bool{
 		"session": true, "certificates": true, "acme": true, "provisioners": true,
 		"security": true, "admin": true, "users": true, "profile": true,
-		"system": true, "dashboard": true,
+		"system": true, "dashboard": true, "ca": true,
 	}
 	camelCase := regexp.MustCompile(`^[a-z][A-Za-z0-9]*$`)
 

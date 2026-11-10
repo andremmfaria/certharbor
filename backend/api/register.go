@@ -169,4 +169,63 @@ func Register(humaAPI huma.API, h *handlers.Handler) {
 		Tags:        []string{"certificates"},
 		Summary:     "Revoke a certificate",
 	}), revokeCertificate(h))
+
+	// Phase 4, third and final batch: the two certificate downloads, the
+	// new GET /api/v1/ca resource, and the three CA chain downloads. All
+	// five downloads reuse Phase 0's binaryResponses mechanic; the role
+	// split matches Section 6 exactly (manager for the certificate's own
+	// files, admin for everything naming the CA itself, viewer for the
+	// CA's read-only status).
+	huma.Register(humaAPI, roleOp("manager", huma.Operation{
+		OperationID: "getCertificateCertificate",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/certificates/{id}/certificate",
+		Tags:        []string{"certificates"},
+		Summary:     "Download a certificate's certificate file",
+		Responses:   binaryResponses("The certificate's PEM-encoded certificate file."),
+	}), getCertificateCertificate(h))
+
+	huma.Register(humaAPI, roleOp("manager", huma.Operation{
+		OperationID: "getCertificateKey",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/certificates/{id}/key",
+		Tags:        []string{"certificates"},
+		Summary:     "Download a certificate's private key file",
+		Responses:   binaryResponses("The certificate's PEM-encoded private key file."),
+	}), getCertificateKey(h))
+
+	huma.Register(humaAPI, roleOp("viewer", huma.Operation{
+		OperationID: "getCA",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/ca",
+		Tags:        []string{"ca"},
+		Summary:     "Get the certificate authority's subject, fingerprint, validity and reachability",
+	}), getCAInfo(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID: "getCARoot",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/ca/root",
+		Tags:        []string{"ca"},
+		Summary:     "Download the root CA certificate",
+		Responses:   binaryResponses("The root CA's PEM-encoded certificate."),
+	}), getCARoot(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID: "getCAIntermediate",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/ca/intermediate",
+		Tags:        []string{"ca"},
+		Summary:     "Download the intermediate CA certificate",
+		Responses:   binaryResponses("The intermediate CA's PEM-encoded certificate."),
+	}), getCAIntermediate(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID: "getCAChain",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/ca/chain",
+		Tags:        []string{"ca"},
+		Summary:     "Download the full certificate chain (intermediate followed by root)",
+		Responses:   binaryResponses("The intermediate certificate followed by the root certificate, PEM-encoded."),
+	}), getCAChain(h))
 }

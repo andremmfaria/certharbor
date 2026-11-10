@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"time"
@@ -472,5 +473,169 @@ func revokeCertificate(h *handlers.Handler) func(context.Context, *getCertificat
 			return nil, newProblem(http.StatusNotFound, "Not Found", "", "no certificate with that id", "")
 		}
 		return &certificateOutput{Body: newCertificateSummaryBody(summary)}, nil
+	}
+}
+
+// ─── Phase 4, third batch: downloads and GET /api/v1/ca ────────────────────
+//
+// R23's observed-cost record for this final batch. Every download here had
+// a direct predecessor that already isolated a stat-then-read (serveCAFile)
+// or a DB-fetch-then-ServeFile (DownloadCert/DownloadKey) from the
+// http.ResponseWriter write: trivial, a pure extraction with the filename
+// convention copied verbatim. GET /api/v1/ca is the one genuinely new
+// operation in Section 6's certificate table (no template route to extract
+// from): cheap rather than trivial, since it only had to compose two
+// existing primitives — readPEMCert (already used by health.go's chain
+// check) and the CA client's Health call (already used by Home's caOnline
+// flag) — neither of which needed new logic, just a new call site.
+
+// binaryResponses builds the hand-written application/octet-stream 200
+// response huma does not derive from a []byte body field on its own
+// (spike.go's spikeBlobResponses, 5.7), parameterised on a doc string so
+// five operations do not each carry a copy-pasted literal.
+func binaryResponses(desc string) map[string]*huma.Response {
+	return map[string]*huma.Response{
+		"200": {
+			Description: desc,
+			Content: map[string]*huma.MediaType{
+				"application/octet-stream": {
+					Schema: &huma.Schema{Type: "string", Format: "binary"},
+				},
+			},
+		},
+	}
+}
+
+type binaryFileOutput struct {
+	ContentType        string `header:"Content-Type"`
+	ContentDisposition string `header:"Content-Disposition"`
+	Body               []byte
+}
+
+func newBinaryFileOutput(filename string, data []byte) *binaryFileOutput {
+	return &binaryFileOutput{
+		ContentType:        "application/x-pem-file",
+		ContentDisposition: fmt.Sprintf(`attachment; filename=%s`, filename),
+		Body:               data,
+	}
+}
+
+var errCertificateFileNotFound = newProblem(http.StatusNotFound, "Not Found", "", "no certificate file for that id", "")
+
+// getCertificateCertificate implements GET /api/v1/certificates/{id}/certificate,
+// replacing GET /download/cert/{id} (Section 6).
+func getCertificateCertificate(h *handlers.Handler) func(context.Context, *getCertificateInput) (*binaryFileOutput, error) {
+	return func(_ context.Context, in *getCertificateInput) (*binaryFileOutput, error) {
+		filename, data, err := h.CertificateCertFile(in.ID)
+		if err != nil {
+			return nil, err
+		}
+		if data == nil {
+			return nil, errCertificateFileNotFound
+		}
+		return newBinaryFileOutput(filename, data), nil
+	}
+}
+
+// getCertificateKey implements GET /api/v1/certificates/{id}/key, replacing
+// GET /download/key/{id} (Section 6). DownloadKey's audit side effect (a
+// key download is always logged) is preserved: it needs the *http.Request
+// httpFrom recovers from the context the unwrap middleware stashed (5.5),
+// the same seam session.go already relies on.
+func getCertificateKey(h *handlers.Handler) func(context.Context, *getCertificateInput) (*binaryFileOutput, error) {
+	return func(ctx context.Context, in *getCertificateInput) (*binaryFileOutput, error) {
+		filename, data, err := h.CertificateKeyFile(in.ID)
+		if err != nil {
+			return nil, err
+		}
+		if data == nil {
+			return nil, errCertificateFileNotFound
+		}
+		if summary, sErr := h.CertificateSummaryForAudit(in.ID); sErr == nil && summary != nil {
+			r, _ := httpFrom(ctx)
+			username, _ := userIdentity(ctx)
+			h.AuditKeyDownload(r, username, summary.ID, summary.Name, summary.Domain)
+		}
+		return newBinaryFileOutput(filename, data), nil
+	}
+}
+
+type caInfoBody struct {
+	Subject           string     `json:"subject"`
+	FingerprintSha256 string     `json:"fingerprintSha256"`
+	NotBefore         *time.Time `json:"notBefore,omitempty"`
+	NotAfter          *time.Time `json:"notAfter,omitempty"`
+	Reachable         bool       `json:"reachable"`
+}
+
+type getCAInfoOutput struct {
+	Body caInfoBody
+}
+
+// getCAInfo implements GET /api/v1/ca (Section 6: "new": subject,
+// fingerprint, validity, reachability). This is the resource the three CA
+// downloads below hang off, and the source the dashboard composes CA status
+// from (D10 rule 1).
+func getCAInfo(h *handlers.Handler) func(context.Context, *struct{}) (*getCAInfoOutput, error) {
+	return func(ctx context.Context, _ *struct{}) (*getCAInfoOutput, error) {
+		info, err := h.FetchCAInfo(ctx)
+		if err != nil {
+			return nil, err
+		}
+		notBefore, notAfter := info.NotBefore, info.NotAfter
+		return &getCAInfoOutput{Body: caInfoBody{
+			Subject:           info.Subject,
+			FingerprintSha256: info.FingerprintSHA256,
+			NotBefore:         &notBefore,
+			NotAfter:          &notAfter,
+			Reachable:         info.Reachable,
+		}}, nil
+	}
+}
+
+var errCAFileNotFound = newProblem(http.StatusNotFound, "Not Found", "", "CA file is not present", "")
+
+// getCARoot implements GET /api/v1/ca/root, replacing GET /download/ca
+// (Section 6, admin).
+func getCARoot(h *handlers.Handler) func(context.Context, *struct{}) (*binaryFileOutput, error) {
+	return func(_ context.Context, _ *struct{}) (*binaryFileOutput, error) {
+		data, err := h.RootCABytes()
+		if err != nil {
+			return nil, err
+		}
+		if data == nil {
+			return nil, errCAFileNotFound
+		}
+		return newBinaryFileOutput("home-ca-root.crt", data), nil
+	}
+}
+
+// getCAIntermediate implements GET /api/v1/ca/intermediate, replacing
+// GET /download/intermediate-ca (Section 6, admin).
+func getCAIntermediate(h *handlers.Handler) func(context.Context, *struct{}) (*binaryFileOutput, error) {
+	return func(_ context.Context, _ *struct{}) (*binaryFileOutput, error) {
+		data, err := h.IntermediateCABytes()
+		if err != nil {
+			return nil, err
+		}
+		if data == nil {
+			return nil, errCAFileNotFound
+		}
+		return newBinaryFileOutput("home-ca-intermediate.crt", data), nil
+	}
+}
+
+// getCAChain implements GET /api/v1/ca/chain, replacing GET /download/full-chain
+// (Section 6, admin).
+func getCAChain(h *handlers.Handler) func(context.Context, *struct{}) (*binaryFileOutput, error) {
+	return func(_ context.Context, _ *struct{}) (*binaryFileOutput, error) {
+		data, err := h.FullChainBytes()
+		if err != nil {
+			return nil, err
+		}
+		if data == nil {
+			return nil, errCAFileNotFound
+		}
+		return newBinaryFileOutput("home-ca-full-chain.crt", data), nil
 	}
 }
