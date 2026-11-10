@@ -141,7 +141,7 @@ jobs:
             -v "$PWD:/repo" -v /var/run/docker.sock:/var/run/docker.sock \
             -w /e2e \
             -e BASE_URL=https://certharbor-console:8443 \
-            -e BACKEND_URL=https://certharbor:8443 \
+            -e BACKEND_URL=https://certharbor-control:8443 \
             -e E2E_REPO_ROOT=/repo \
             -e E2E_ARTIFACT_DIR=/repo/test/e2e/artifacts \
             -e COMPOSE_PROJECT_NAME=certharbor \
@@ -156,7 +156,7 @@ jobs:
             -v "$PWD:/repo" -v /var/run/docker.sock:/var/run/docker.sock \
             -w /e2e \
             -e BASE_URL=https://certharbor-console:8443 \
-            -e BACKEND_URL=https://certharbor:8443 \
+            -e BACKEND_URL=https://certharbor-control:8443 \
             -e E2E_REPO_ROOT=/repo \
             -e E2E_ARTIFACT_DIR=/repo/test/e2e/artifacts/ui \
             -e COMPOSE_PROJECT_NAME=certharbor \
