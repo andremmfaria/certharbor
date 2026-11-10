@@ -117,4 +117,56 @@ func Register(humaAPI huma.API, h *handlers.Handler) {
 		Tags:        []string{"certificates"},
 		Summary:     "Get certificate issuance options",
 	}), getCertificateOptions(h))
+
+	// Phase 4, second batch (R23's observed-cost record on these five):
+	// issue, import (upload and paths), renew and revoke. Every one is
+	// manager except revoke, which Section 6 calls out as admin-only.
+	huma.Register(humaAPI, roleOp("manager", huma.Operation{
+		OperationID:   "createCertificate",
+		Method:        http.MethodPost,
+		Path:          BasePath + "/certificates",
+		Tags:          []string{"certificates"},
+		Summary:       "Issue a new certificate",
+		DefaultStatus: http.StatusCreated,
+	}), createCertificate(h))
+
+	huma.Register(humaAPI, roleOp("manager", huma.Operation{
+		OperationID: "listCertificateImportCandidates",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/certificates/import-candidates",
+		Tags:        []string{"certificates"},
+		Summary:     "List unregistered certificates found on disk",
+	}), listCertificateImportCandidates(h))
+
+	huma.Register(humaAPI, roleOp("manager", huma.Operation{
+		OperationID: "importCertificateUpload",
+		Method:      http.MethodPost,
+		Path:        BasePath + "/certificates/import/upload",
+		Tags:        []string{"certificates"},
+		Summary:     "Import a certificate by uploading its files",
+	}), importCertificateUpload(h))
+
+	huma.Register(humaAPI, roleOp("manager", huma.Operation{
+		OperationID: "importCertificatesByPaths",
+		Method:      http.MethodPost,
+		Path:        BasePath + "/certificates/import/paths",
+		Tags:        []string{"certificates"},
+		Summary:     "Import certificates by server-side path, with a per-item result",
+	}), importCertificatesByPaths(h))
+
+	huma.Register(humaAPI, roleOp("manager", huma.Operation{
+		OperationID: "renewCertificate",
+		Method:      http.MethodPost,
+		Path:        BasePath + "/certificates/{id}/renew",
+		Tags:        []string{"certificates"},
+		Summary:     "Renew a certificate",
+	}), renewCertificate(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID: "revokeCertificate",
+		Method:      http.MethodPost,
+		Path:        BasePath + "/certificates/{id}/revoke",
+		Tags:        []string{"certificates"},
+		Summary:     "Revoke a certificate",
+	}), revokeCertificate(h))
 }
