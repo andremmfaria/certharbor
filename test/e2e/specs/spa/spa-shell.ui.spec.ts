@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { Page } from "@playwright/test";
-import { composeOrThrow, psql, waitOriginHealthy } from "../../helpers/compose";
-import { BASE_URL, REPO_ROOT, SPA_BASE } from "../../helpers/env";
-import { totpNow } from "../../helpers/totp";
-import { adminCredentials, authed, createUser, disposableName, expect, test } from "../../fixtures/test";
+import { composeOrThrow, psql, waitOriginHealthy } from "../../helpers/compose.js";
+import { BASE_URL, REPO_ROOT, SPA_BASE } from "../../helpers/env.js";
+import { totpNow } from "../../helpers/totp.js";
+import { adminCredentials, authed, createUser, disposableName, expect, test } from "../../fixtures/test.js";
 
 // The SPA through the origin the way a browser meets it: HTTPS, so
 // SESSION_SECURE's __Host- cookies, nginx's document headers, and the router

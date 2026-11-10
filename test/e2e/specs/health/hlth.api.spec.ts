@@ -1,8 +1,8 @@
 import { APIRequestContext } from "@playwright/test";
-import { compose, composeOrThrow, exec, waitHealthy } from "../../helpers/compose";
-import { pollUntil, sleep } from "../../helpers/poll";
-import { loginOrThrow, newJar } from "../../helpers/session";
-import { expect, test } from "../../fixtures/test";
+import { compose, composeOrThrow, exec, waitHealthy } from "../../helpers/compose.js";
+import { pollUntil, sleep } from "../../helpers/poll.js";
+import { loginOrThrow, newJar } from "../../helpers/session.js";
+import { expect, test } from "../../fixtures/test.js";
 
 interface ReadyBody {
   status: string;

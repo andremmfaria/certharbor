@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { BASE_URL } from "../../helpers/env";
-import { FIXTURE_USERS } from "../../fixtures/test";
+import { BASE_URL } from "../../helpers/env.js";
+import { FIXTURE_USERS } from "../../fixtures/test.js";
 
 /**
  * The eleven-row issuance matrix lives in `api`. This companion exists for the

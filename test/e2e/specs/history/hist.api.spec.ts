@@ -1,5 +1,5 @@
-import { compose, psql } from "../../helpers/compose";
-import { expect, test } from "../../fixtures/test";
+import { compose, psql } from "../../helpers/compose.js";
+import { expect, test } from "../../fixtures/test.js";
 
 const PAGE_SIZE = 30;
 

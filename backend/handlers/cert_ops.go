@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/rsa"
 	"crypto/x509"
 	"database/sql"
 	"encoding/pem"
@@ -244,7 +246,7 @@ func checkDomainPolicy(domain string, suffixes []string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("domain %q is not covered by ALLOWED_DOMAIN_SUFFIXES (%s)", domain, strings.Join(suffixes, ", "))
+	return NewValidationError(fmt.Sprintf("domain %q is not covered by ALLOWED_DOMAIN_SUFFIXES (%s)", domain, strings.Join(suffixes, ", ")))
 }
 
 func issueCert(ctx context.Context, caClient stepca.CA, domain, certPath, keyPath, duration, keyType string, cfg *config.Config) error {
@@ -344,11 +346,18 @@ func getCertKeyType(certPath string) string {
 	if err != nil {
 		return ""
 	}
-	switch cert.PublicKeyAlgorithm {
-	case x509.ECDSA:
-		return "EC"
-	case x509.RSA:
-		return "RSA"
+	// The "EC:P-256" / "RSA:2048" shape is the KeyType convention used
+	// everywhere else (allowedIssueKeyTypes, Handler.certs.go's fallback,
+	// cert_ops_test.go), so an import must report the same shape rather
+	// than the bare algorithm name: a caller (e.g. Renew) that reuses a
+	// row's KeyType as-is would otherwise feed "EC" into
+	// normalizeIssuePolicy/allowedIssueKeyTypes, which only recognises the
+	// qualified form.
+	switch pub := cert.PublicKey.(type) {
+	case *ecdsa.PublicKey:
+		return "EC:" + pub.Curve.Params().Name
+	case *rsa.PublicKey:
+		return fmt.Sprintf("RSA:%d", pub.N.BitLen())
 	default:
 		return "Unknown"
 	}

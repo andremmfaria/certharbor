@@ -13,9 +13,9 @@ import {
   upStack,
   waitHealthy,
   waitForLogLine,
-} from "../../helpers/compose";
-import { setEnvKeys } from "../../helpers/envfile";
-import { probeTLS } from "../../helpers/openssl";
+} from "../../helpers/compose.js";
+import { setEnvKeys } from "../../helpers/envfile.js";
+import { probeTLS } from "../../helpers/openssl.js";
 
 // Three cases share one CA identity (Section 3.1's teardown table): tearing
 // down step-ca-data between them would recompute the fingerprint and defeat

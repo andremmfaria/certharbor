@@ -26,13 +26,34 @@ RUN apt-get update \
  && apt-get autoremove -y \
  && rm -rf /var/lib/apt/lists/*
 
+# Build the TS client in-image, same approach as frontend/Dockerfile: the
+# harness consumes the generated client through its packed tarball, never a
+# file: dependency on ../../clients/ts (that path doesn't exist inside this
+# image's build context once it's narrowed to test/e2e, and widening the
+# context to the repo root to copy source directly would invalidate this
+# layer on every unrelated backend/frontend change instead of only on an
+# openapi.json or clients/ts change).
+COPY clients/ts/package.json clients/ts/package-lock.json /clients/ts/
+WORKDIR /clients/ts
+RUN npm ci
+COPY VERSION /VERSION
+COPY backend/openapi/openapi.json /backend/openapi/openapi.json
+COPY clients/ts/ /clients/ts/
+# The in-image client is exempt from the commit-sha provenance check and
+# carries the -dev fallback version (D8): there is no git history here.
+RUN npm run generate && npm run build \
+ && npm version "$(tr -d '[:space:]' < /VERSION)-dev" --no-git-tag-version --allow-same-version \
+ && npm pack --pack-destination dist \
+ && mv dist/andremmfaria-certharbor-client-*.tgz dist/client.tgz
+
 WORKDIR /e2e
 
 # node_modules is baked into its own layer, so no job pays a cold npm ci.
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY test/e2e/package.json test/e2e/package-lock.json ./
+RUN npm ci \
+ && npm install --no-save /clients/ts/dist/client.tgz
 
-COPY . .
+COPY test/e2e/ .
 
 # No ENTRYPOINT: each job passes a full command, and an entrypoint would prefix
 # it, turning `npx playwright test --project=api` into a nonsense argv.

@@ -1,9 +1,9 @@
 import { APIResponse } from "@playwright/test";
-import { logs, psql } from "../../helpers/compose";
-import { CSRF_FLASH } from "../../helpers/flash";
-import { postRoutes, withID } from "../../helpers/routes";
-import { csrfTokenFrom, loginOrThrow, newJar } from "../../helpers/session";
-import { AuthedContext, createUser, disposableName, expect, test } from "../../fixtures/test";
+import { logs, psql } from "../../helpers/compose.js";
+import { CSRF_FLASH } from "../../helpers/flash.js";
+import { postRoutes, withID } from "../../helpers/routes.js";
+import { csrfTokenFrom, loginOrThrow, newJar } from "../../helpers/session.js";
+import { AuthedContext, createUser, disposableName, expect, test } from "../../fixtures/test.js";
 
 const INLINE_200 = new Map<string, string>([
   ["/login", CSRF_FLASH],

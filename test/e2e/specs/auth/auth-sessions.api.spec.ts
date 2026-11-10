@@ -1,6 +1,6 @@
-import { psql } from "../../helpers/compose";
-import { csrfTokenFrom, extractCSRF, loginOrThrow, newJar, sessionCookie } from "../../helpers/session";
-import { AuthedContext, createUser, disposableName, expect, test } from "../../fixtures/test";
+import { psql } from "../../helpers/compose.js";
+import { csrfTokenFrom, extractCSRF, loginOrThrow, newJar, sessionCookie } from "../../helpers/session.js";
+import { AuthedContext, createUser, disposableName, expect, test } from "../../fixtures/test.js";
 
 async function userID(username: string): Promise<string> {
   const id = await psql(`SELECT id FROM users WHERE username = '${username}'`);

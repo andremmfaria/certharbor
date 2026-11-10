@@ -2,8 +2,8 @@ import { execFile } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { promisify } from "node:util";
-import { REPO_ROOT } from "./env";
-import { pollUntil } from "./poll";
+import { REPO_ROOT } from "./env.js";
+import { pollUntil } from "./poll.js";
 
 const execFileAsync = promisify(execFile);
 

@@ -2,12 +2,12 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { APIRequestContext, expect, test } from "@playwright/test";
-import { backendAddress, composeArgv, composeOrThrow, containerId, exec, run, upStack, waitForLogLine } from "../../helpers/compose";
-import { setEnvKeys } from "../../helpers/envfile";
-import { pollUntil } from "../../helpers/poll";
-import { adminCredentials } from "../../fixtures/test";
-import { probeTLS } from "../../helpers/openssl";
-import { csrfTokenFrom, loginOrThrow, newJar } from "../../helpers/session";
+import { backendAddress, composeArgv, composeOrThrow, containerId, exec, run, upStack, waitForLogLine } from "../../helpers/compose.js";
+import { setEnvKeys } from "../../helpers/envfile.js";
+import { pollUntil } from "../../helpers/poll.js";
+import { adminCredentials } from "../../fixtures/test.js";
+import { probeTLS } from "../../helpers/openssl.js";
+import { csrfTokenFrom, loginOrThrow, newJar } from "../../helpers/session.js";
 
 function timestampOf(line: string): Date {
   const m = /\|\s*(\S+)/.exec(line);

@@ -70,7 +70,7 @@ jobs:
       - name: Build the harness image (Playwright base plus docker CLI)
         uses: docker/build-push-action@v7.4.0
         with:
-          context: ./test/e2e
+          context: .
           file: ./test/e2e/Dockerfile
           build-args: |
             PLAYWRIGHT_IMAGE=${{ env.PLAYWRIGHT_IMAGE }}
@@ -105,7 +105,7 @@ jobs:
       - name: Materialise the harness image from the layer cache
         uses: docker/build-push-action@v7.4.0
         with:
-          context: ./test/e2e
+          context: .
           file: ./test/e2e/Dockerfile
           build-args: |
             PLAYWRIGHT_IMAGE=${{ env.PLAYWRIGHT_IMAGE }}

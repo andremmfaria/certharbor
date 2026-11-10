@@ -1,5 +1,5 @@
 import { NobleCryptoPlugin, ScureBase32Plugin, TOTP } from "otplib";
-import { sleep } from "./poll";
+import { sleep } from "./poll.js";
 
 const PERIOD_SECONDS = 30;
 

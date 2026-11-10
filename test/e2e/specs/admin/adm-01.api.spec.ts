@@ -1,4 +1,4 @@
-import { expect, test } from "../../fixtures/test";
+import { expect, test } from "../../fixtures/test.js";
 
 test("E2E-ADM-01: app.version pins the certificates library", async ({ admin }) => {
   const page = await admin.send(() => admin.ctx.get("/admin/console"));

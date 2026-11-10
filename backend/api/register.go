@@ -139,11 +139,12 @@ func Register(humaAPI huma.API, h *handlers.Handler) {
 	}), listCertificateImportCandidates(h))
 
 	huma.Register(humaAPI, roleOp("manager", huma.Operation{
-		OperationID: "importCertificateUpload",
-		Method:      http.MethodPost,
-		Path:        BasePath + "/certificates/import/upload",
-		Tags:        []string{"certificates"},
-		Summary:     "Import a certificate by uploading its files",
+		OperationID:   "importCertificateUpload",
+		Method:        http.MethodPost,
+		Path:          BasePath + "/certificates/import/upload",
+		Tags:          []string{"certificates"},
+		Summary:       "Import a certificate by uploading its files",
+		DefaultStatus: http.StatusCreated,
 	}), importCertificateUpload(h))
 
 	huma.Register(humaAPI, roleOp("manager", huma.Operation{

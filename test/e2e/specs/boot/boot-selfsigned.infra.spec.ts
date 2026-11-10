@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
-import { backendAddress, composeOrThrow, countExact, logs, upStack, waitHealthy } from "../../helpers/compose";
-import { getEnvKey, setEnvKeys } from "../../helpers/envfile";
-import { probeTLS, validityMs } from "../../helpers/openssl";
+import { backendAddress, composeOrThrow, countExact, logs, upStack, waitHealthy } from "../../helpers/compose.js";
+import { getEnvKey, setEnvKeys } from "../../helpers/envfile.js";
+import { probeTLS, validityMs } from "../../helpers/openssl.js";
 
 test("E2E-BOOT-04: UI_TLS_MODE=self-signed generates a self-signed leaf", async () => {
   test.setTimeout(3 * 60_000);

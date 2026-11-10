@@ -1,5 +1,5 @@
-import { compose, composeOrThrow, exec, waitHealthy } from "../../helpers/compose";
-import { expect, test } from "../../fixtures/test";
+import { compose, composeOrThrow, exec, waitHealthy } from "../../helpers/compose.js";
+import { expect, test } from "../../fixtures/test.js";
 
 /** One .prov-card per provisioner (templates/provisioners.html:80-84). */
 function provisionerRowCount(html: string): number {

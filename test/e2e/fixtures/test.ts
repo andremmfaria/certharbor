@@ -1,6 +1,6 @@
 import { APIRequestContext, APIResponse, test as base } from "@playwright/test";
-import { ADMIN_USERNAME, adminPassword, FLAGS } from "../helpers/env";
-import { psql } from "../helpers/compose";
+import { ADMIN_USERNAME, adminPassword, FLAGS } from "../helpers/env.js";
+import { psql } from "../helpers/compose.js";
 import {
   Credentials,
   Role,
@@ -8,7 +8,7 @@ import {
   loginOrThrow,
   newJar,
   withLazyReauth,
-} from "../helpers/session";
+} from "../helpers/session.js";
 
 export const FIXTURE_USERS: Record<Exclude<Role, "admin">, Credentials> = {
   viewer: { username: "viewer_user", password: "Viewer-e2e-Pass1!" },

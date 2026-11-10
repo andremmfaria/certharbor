@@ -19,13 +19,13 @@ var validIdentifier = regexp.MustCompile(`^(\*\.)?[A-Za-z0-9]([A-Za-z0-9\-]*[A-Z
 // x509.CertificateRequest fields instead.
 func validateIdentifier(id string) error {
 	if id == "" {
-		return fmt.Errorf("identifier must not be empty")
+		return NewValidationError("identifier must not be empty")
 	}
 	if strings.HasPrefix(id, "-") {
-		return fmt.Errorf("identifier %q starts with '-': possible flag injection", id)
+		return NewValidationError(fmt.Sprintf("identifier %q starts with '-': possible flag injection", id))
 	}
 	if !validIdentifier.MatchString(id) {
-		return fmt.Errorf("identifier %q contains disallowed characters", id)
+		return NewValidationError(fmt.Sprintf("identifier %q contains disallowed characters", id))
 	}
 	return nil
 }

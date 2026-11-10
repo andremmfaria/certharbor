@@ -1,6 +1,6 @@
 import * as tls from "node:tls";
-import { BASE_URL, REPO_ROOT } from "../../helpers/env";
-import { expect, test } from "../../fixtures/test";
+import { BASE_URL, REPO_ROOT } from "../../helpers/env.js";
+import { expect, test } from "../../fixtures/test.js";
 
 // mimeByExt exists because a minimal image's /etc/mime.types maps .css to
 // text/plain (main.go:43-65). A regression there leaves every page at 200 with
