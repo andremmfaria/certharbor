@@ -82,7 +82,7 @@ The `/app/` base is temporary: `base` in `frontend/vite.config.ts` sets it, the 
 
 ### The generated TypeScript client
 
-`clients/ts` (`@andremmfaria/certharbor-client`) is generated from `backend/openapi/openapi.json` by `@hey-api/openapi-ts` in the `client` job of `.github/workflows/ci.yml`, which runs on a push to `main`, a `client-v*` tag push, a pull request, and `workflow_dispatch`. It is published to GitHub Packages only on a `client-v*` tag.
+`clients/ts` (`@certharbor/client`) is generated from `backend/openapi/openapi.json` by `@hey-api/openapi-ts` in the `client` job of `.github/workflows/ci.yml`, which runs on a push to `main`, a `client-v*` tag push, a pull request, and `workflow_dispatch`. It is published to GitHub Packages only on a `client-v*` tag.
 
 The version is never hand-edited. The `VERSION` file at the repository root is the single source of the project version, and `scripts/sync-version.sh` writes it into the backend, the OpenAPI document and the three Node packages (`make version`). The `version` job of `lint-meta.yml` fails if any of them disagrees. `scripts/client-version.sh` derives the client's published version as `<VERSION>-sha.<short-sha>`. The appended short commit SHA tells two builds of the same version apart and lets a consumer prove which commit the client was generated from. The `frontend` CI job asserts the installed client's version string ends in the current commit's short SHA before it will typecheck or build (this is what `docs/contract-proof.md` demonstrates end to end with a deliberately regressed commit).
 

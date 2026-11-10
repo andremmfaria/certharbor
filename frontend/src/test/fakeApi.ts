@@ -1,4 +1,4 @@
-import { client } from '@andremmfaria/certharbor-client/client'
+import { client } from '@certharbor/client/client'
 
 export type FakeSessionState = 'anonymous' | 'pendingMfa' | 'authenticated'
 
