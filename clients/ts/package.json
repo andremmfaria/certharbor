@@ -5,7 +5,7 @@
   "license": "SEE LICENSE IN ../../LICENSE",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/andremmfaria/certharbor.git",
+    "url": "git+https://github.com/certharbor/certharbor.git",
     "directory": "clients/ts"
   },
   "publishConfig": {

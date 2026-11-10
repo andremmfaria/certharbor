@@ -13,7 +13,7 @@ This page intentionally does not give CPU/RAM/disk sizing numbers or a supported
 ## Quick start
 
 ```bash
-git clone https://github.com/andremmfaria/certharbor.git
+git clone https://github.com/certharbor/certharbor.git
 cd certharbor
 make setup   # copies .env.example → .env and generates secrets/
 ```
