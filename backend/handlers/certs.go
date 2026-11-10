@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"certharbor/models"
@@ -150,6 +151,75 @@ func (h *Handler) Certificates(w http.ResponseWriter, r *http.Request) {
 	data := h.base(w, r, "certs")
 	data["Certs"] = certs
 	h.render(w, "certificates", data)
+}
+
+// CertificateSummary is one certificate row, stripped of filesystem paths
+// (CertPath/KeyPath are on Section 2's banned-property-name list, so no DTO
+// built from this may carry them). Phase 4's GET /api/v1/certificates and
+// GET /api/v1/certificates/{id} both build their body from this instead of
+// backend/api converting certharbor/models.Certificate directly, which
+// api/ is not allowed to import (Section 2's depguard rule).
+type CertificateSummary struct {
+	ID        int
+	Name      string
+	Domain    string
+	Status    string
+	KeyType   string
+	Serial    string
+	IssuedAt  *time.Time
+	ExpiresAt *time.Time
+}
+
+func summarizeCert(c *models.Certificate) CertificateSummary {
+	return CertificateSummary{
+		ID: c.ID, Name: c.Name, Domain: c.Domain, Status: c.Status,
+		KeyType: c.KeyType, Serial: c.Serial, IssuedAt: c.IssuedAt, ExpiresAt: c.ExpiresAt,
+	}
+}
+
+// ListCertificateSummaries is the data half of GET /api/v1/certificates: it
+// reuses the same query the template route's Certificates already isolated
+// from its own rendering, so this extraction cost nothing beyond the type
+// conversion (R23's observed-cost record, Phase 4).
+//
+// statusFilter and q are applied the same way appdb.GetCerts and the
+// template page do today: statusFilter at the SQL layer, q as an in-process
+// case-insensitive substring match against name and domain. Moving q to SQL
+// is Phase 5's list-envelope work, not this one.
+func (h *Handler) ListCertificateSummaries(statusFilter, q string) ([]CertificateSummary, error) {
+	certs, err := appdb.GetCerts(h.db, statusFilter)
+	if err != nil {
+		return nil, err
+	}
+	q = strings.ToLower(strings.TrimSpace(q))
+	out := make([]CertificateSummary, 0, len(certs))
+	for _, c := range certs {
+		if q != "" && !strings.Contains(strings.ToLower(c.Name), q) && !strings.Contains(strings.ToLower(c.Domain), q) {
+			continue
+		}
+		out = append(out, summarizeCert(c))
+	}
+	return out, nil
+}
+
+// CertExpiryStatus retires templateFuncs.badgeClass's threshold logic into
+// one server-side computation (Section 6's note on the certificate DTOs):
+// expired when already past NotAfter, warning inside the expiring-soon
+// window, ok otherwise. badgeClass itself now calls this rather than
+// carrying a second copy of the same three thresholds.
+func CertExpiryStatus(t *time.Time) string {
+	if t == nil {
+		return "ok"
+	}
+	d := daysLeftVal(t)
+	switch {
+	case d <= 0:
+		return "expired"
+	case d <= ExpiringSoonDays:
+		return "warning"
+	default:
+		return "ok"
+	}
 }
 
 // IssueGet renders the certificate issuance form.

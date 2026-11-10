@@ -238,18 +238,19 @@ func (h *Handler) templateFuncs() template.FuncMap {
 			}
 			return int(time.Until(*t).Hours() / 24)
 		},
+		// badgeClass maps CertExpiryStatus's three values onto this
+		// template's CSS classes rather than carrying its own copy of the
+		// threshold (Phase 4 retires the duplication; Phase 9 retires the
+		// template function itself once the SPA is the only consumer).
 		"badgeClass": func(t *time.Time) string {
-			if t == nil {
+			switch CertExpiryStatus(t) {
+			case "expired":
+				return "danger"
+			case "warning":
+				return "warn"
+			default:
 				return "ok"
 			}
-			d := int(time.Until(*t).Hours() / 24)
-			if d <= 0 {
-				return "danger"
-			}
-			if d <= 30 {
-				return "warn"
-			}
-			return "ok"
 		},
 		"fmtTime": func(t *time.Time) string {
 			if t == nil {
