@@ -1,6 +1,6 @@
-import { BACKEND_URL } from "../../helpers/env";
-import { newJar } from "../../helpers/session";
-import { expect, test } from "../../fixtures/test";
+import { BACKEND_URL } from "../../helpers/env.js";
+import { newJar } from "../../helpers/session.js";
+import { expect, test } from "../../fixtures/test.js";
 
 // Oracle pair with E2E-HLTH-03: on its own this passes against a /ready that
 // always answers ready, which is why the pair must never be split in triage.

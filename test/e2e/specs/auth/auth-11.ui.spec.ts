@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { BASE_URL } from "../../helpers/env";
-import { adminCredentials } from "../../fixtures/test";
+import { BASE_URL } from "../../helpers/env.js";
+import { adminCredentials } from "../../fixtures/test.js";
 
 /**
  * The `api` steps of E2E-AUTH-11 prove the route contract: a GET logs nobody

@@ -1,8 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// "type": "module" in package.json means this file has no CJS __dirname.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // api/ui run as a container on step-network and dial nginx by its service
 // name; infra runs on the host and reaches the backend by container address.
-import { BASE_URL } from "./helpers/env";
+import { BASE_URL } from "./helpers/env.js";
 
 // Playwright's junit reporter and actions/upload-artifact are configured
 // independently, so both are pinned to this one directory.

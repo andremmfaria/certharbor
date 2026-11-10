@@ -1,8 +1,8 @@
-import { psql } from "../../helpers/compose";
-import { FLAGS } from "../../helpers/env";
-import { mappedGroups, oidcLogin } from "../../helpers/oidc";
-import { loginOrThrow, newJar } from "../../helpers/session";
-import { createUser, disposableName, expect, test } from "../../fixtures/test";
+import { psql } from "../../helpers/compose.js";
+import { FLAGS } from "../../helpers/env.js";
+import { mappedGroups, oidcLogin } from "../../helpers/oidc.js";
+import { loginOrThrow, newJar } from "../../helpers/session.js";
+import { createUser, disposableName, expect, test } from "../../fixtures/test.js";
 
 /**
  * Walks the former V1 escalation chain and asserts it is refused at both of

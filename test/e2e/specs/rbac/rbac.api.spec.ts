@@ -1,9 +1,9 @@
 import { APIRequestContext, APIResponse } from "@playwright/test";
-import { psql } from "../../helpers/compose";
-import { FLAGS } from "../../helpers/env";
-import { FORBIDDEN_BODY } from "../../helpers/flash";
-import { csrfTokenFrom, newJar } from "../../helpers/session";
-import { AuthedContext, disposableName, expect, test } from "../../fixtures/test";
+import { psql } from "../../helpers/compose.js";
+import { FLAGS } from "../../helpers/env.js";
+import { FORBIDDEN_BODY } from "../../helpers/flash.js";
+import { csrfTokenFrom, newJar } from "../../helpers/session.js";
+import { AuthedContext, disposableName, expect, test } from "../../fixtures/test.js";
 
 type RoleName = "viewer" | "manager" | "admin";
 

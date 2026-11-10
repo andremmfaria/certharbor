@@ -1,5 +1,5 @@
 import { APIRequestContext, APIResponse, request } from "@playwright/test";
-import { BASE_URL } from "./env";
+import { BASE_URL } from "./env.js";
 
 export type Role = "viewer" | "manager" | "admin";
 

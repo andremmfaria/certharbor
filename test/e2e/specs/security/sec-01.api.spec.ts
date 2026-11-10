@@ -1,7 +1,7 @@
-import { psql } from "../../helpers/compose";
-import { csrfTokenFrom, loginOrThrow, newJar } from "../../helpers/session";
-import { certificateID } from "../../helpers/certs";
-import { createUser, disposableName, expect, test } from "../../fixtures/test";
+import { psql } from "../../helpers/compose.js";
+import { csrfTokenFrom, loginOrThrow, newJar } from "../../helpers/session.js";
+import { certificateID } from "../../helpers/certs.js";
+import { createUser, disposableName, expect, test } from "../../fixtures/test.js";
 
 const PAGE_SIZE = 30;
 

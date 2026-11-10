@@ -1,4 +1,4 @@
-import { run } from "./compose";
+import { run } from "./compose.js";
 
 export interface ProbedCert {
   issuer: string;

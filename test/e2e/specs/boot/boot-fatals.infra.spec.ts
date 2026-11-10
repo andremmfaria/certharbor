@@ -1,9 +1,9 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { expect, test } from "@playwright/test";
-import { composeOrThrow, inspectState, logs, upStack, waitExited, waitForLogLine, waitHealthy } from "../../helpers/compose";
-import { REPO_ROOT } from "../../helpers/env";
-import { setEnvKeys } from "../../helpers/envfile";
+import { composeOrThrow, inspectState, logs, upStack, waitExited, waitForLogLine, waitHealthy } from "../../helpers/compose.js";
+import { REPO_ROOT } from "../../helpers/env.js";
+import { setEnvKeys } from "../../helpers/envfile.js";
 
 const SECRET_KEY_PATH = path.join(REPO_ROOT, "secrets", "secret_key");
 const ADMIN_PW = "Boot07-e2e-Pass1!";

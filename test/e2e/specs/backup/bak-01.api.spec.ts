@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { psql, run } from "../../helpers/compose";
-import { expect, test } from "../../fixtures/test";
+import { psql, run } from "../../helpers/compose.js";
+import { expect, test } from "../../fixtures/test.js";
 
 interface BackupComponent {
   name: string;

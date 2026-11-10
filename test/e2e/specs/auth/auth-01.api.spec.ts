@@ -1,7 +1,7 @@
-import { psqlRows } from "../../helpers/compose";
-import { CSRF_FLASH } from "../../helpers/flash";
-import { csrfTokenFrom, extractCSRF, newJar } from "../../helpers/session";
-import { createUser, disposableName, expect, test } from "../../fixtures/test";
+import { psqlRows } from "../../helpers/compose.js";
+import { CSRF_FLASH } from "../../helpers/flash.js";
+import { csrfTokenFrom, extractCSRF, newJar } from "../../helpers/session.js";
+import { createUser, disposableName, expect, test } from "../../fixtures/test.js";
 
 test("E2E-AUTH-01: successful local login rotates session content", async ({ admin }) => {
   // POST /logout bumps session_epoch for every session the acted-on user holds,

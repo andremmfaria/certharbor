@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { BASE_URL } from "../../helpers/env";
-import { adminCredentials } from "../../fixtures/test";
+import { BASE_URL } from "../../helpers/env.js";
+import { adminCredentials } from "../../fixtures/test.js";
 
 /**
  * The CSP header is compared exactly in `api`. That proves the policy is the

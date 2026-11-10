@@ -2,9 +2,9 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { expect, test } from "@playwright/test";
-import { backendAddress, composeArgv, composeOrThrow, logs, projectName, run, upFlags, upStack, waitHealthy } from "../../helpers/compose";
-import { setEnvKeys } from "../../helpers/envfile";
-import { parsePEM, probeTLS } from "../../helpers/openssl";
+import { backendAddress, composeArgv, composeOrThrow, logs, projectName, run, upFlags, upStack, waitHealthy } from "../../helpers/compose.js";
+import { setEnvKeys } from "../../helpers/envfile.js";
+import { parsePEM, probeTLS } from "../../helpers/openssl.js";
 
 test("E2E-BOOT-03: UI_TLS_MODE=provided leaves an operator certificate untouched", async () => {
   test.setTimeout(4 * 60_000);

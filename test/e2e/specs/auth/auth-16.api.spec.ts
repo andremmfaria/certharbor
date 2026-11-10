@@ -1,7 +1,7 @@
-import { psql, recreate } from "../../helpers/compose";
-import { FLAGS } from "../../helpers/env";
-import { oidcLogin } from "../../helpers/oidc";
-import { disposableName, expect, test } from "../../fixtures/test";
+import { psql, recreate } from "../../helpers/compose.js";
+import { FLAGS } from "../../helpers/env.js";
+import { oidcLogin } from "../../helpers/oidc.js";
+import { disposableName, expect, test } from "../../fixtures/test.js";
 
 /**
  * mapGroupsToRole returning empty is not automatically a denial: the

@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { REPO_ROOT } from "./env";
+import { REPO_ROOT } from "./env.js";
 
 /**
  * Bootstrap scenarios edit environment keys between cases. They edit a copy

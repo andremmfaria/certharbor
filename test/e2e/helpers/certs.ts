@@ -1,6 +1,6 @@
 import { APIRequestContext } from "@playwright/test";
-import { exec, psql, run } from "./compose";
-import { ProbedCert, parsePEM } from "./openssl";
+import { exec, psql, run } from "./compose.js";
+import { ProbedCert, parsePEM } from "./openssl.js";
 
 export interface IssueRequest {
   name: string;

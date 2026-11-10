@@ -1,13 +1,13 @@
-import { psql } from "../../helpers/compose";
-import { FLAGS } from "../../helpers/env";
+import { psql } from "../../helpers/compose.js";
+import { FLAGS } from "../../helpers/env.js";
 import {
   authenticateAtIdP,
   beginOIDCLogin,
   mappedGroups,
   oidcLogin,
   tamperedStateCallback,
-} from "../../helpers/oidc";
-import { expect, test } from "../../fixtures/test";
+} from "../../helpers/oidc.js";
+import { expect, test } from "../../fixtures/test.js";
 
 // Every test on a flagged override stack skips with an explicit reason rather
 // than passing silently when the stack is absent (Section 2.7.1).

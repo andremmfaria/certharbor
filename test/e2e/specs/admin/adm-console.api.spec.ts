@@ -1,6 +1,6 @@
 import { APIResponse } from "@playwright/test";
-import { composeOrThrow, psql, waitHealthy } from "../../helpers/compose";
-import { AuthedContext, expect, test } from "../../fixtures/test";
+import { composeOrThrow, psql, waitHealthy } from "../../helpers/compose.js";
+import { AuthedContext, expect, test } from "../../fixtures/test.js";
 
 interface ConsoleResult {
   success: boolean;

@@ -1,8 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { BACKEND_URL, REPO_ROOT, SPA_BASE } from "../../helpers/env";
-import { newJar } from "../../helpers/session";
-import { expect, test } from "../../fixtures/test";
+import { BACKEND_URL, REPO_ROOT, SPA_BASE } from "../../helpers/env.js";
+import { newJar } from "../../helpers/session.js";
+import { expect, test } from "../../fixtures/test.js";
 
 // PHASE9-DELETE: the server-rendered pages and /static/ leave the origin with
 // their template routes, and this file goes with them.

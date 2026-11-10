@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { REPO_ROOT } from "./env";
+import { REPO_ROOT } from "./env.js";
 
 export interface PostRoute {
   /** The chi pattern as registered, e.g. "/renew/{id}". */

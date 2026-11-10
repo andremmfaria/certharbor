@@ -1,6 +1,6 @@
 import { APIRequestContext, request } from "@playwright/test";
-import { BASE_URL } from "./env";
-import { newJar } from "./session";
+import { BASE_URL } from "./env.js";
+import { newJar } from "./session.js";
 
 /**
  * Drives the authorization-code + PKCE round trip against

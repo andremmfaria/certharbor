@@ -1,5 +1,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// "type": "module" in package.json means this file has no CJS __dirname.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // The repo root is bind-mounted into the harness container, so the compose
 // file, .env and secrets/* are all reachable from one place.

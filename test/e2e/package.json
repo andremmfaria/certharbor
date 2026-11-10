@@ -4,6 +4,7 @@
   "private": true,
   "description": "End-to-end suite for certharbor (plans/e2e-tests.md). Deliberately its own Node project, outside the Go module and the repo-root frontend tooling.",
   "license": "SEE LICENSE IN ../../LICENSE",
+  "type": "module",
   "scripts": {
     "test": "playwright test",
     "test:api": "playwright test --project=api",

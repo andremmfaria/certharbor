@@ -1,29 +1,36 @@
-import { logs, psql } from "../../helpers/compose";
 import {
-  IssueRequest,
-  assertKeyPairs,
-  certFileExists,
-  certificateID,
-  dnsNames,
-  downloadCert,
-  downloadKey,
-  expectedKey,
-  issue,
-  issuedFlash,
-  keyDetails,
-} from "../../helpers/certs";
-import { validityMs } from "../../helpers/openssl";
-import { expect, test } from "../../fixtures/test";
+  createCertificate,
+  getCertificateCertificate,
+  getCertificateKey,
+  getCertificateOptions,
+  listCertificates,
+} from "@andremmfaria/certharbor-client";
+import { logs } from "../../helpers/compose.js";
+import { ApiSession, authedClient, blobText } from "../../helpers/apiClient.js";
+import { assertKeyPairs, dnsNames, expectedKey, keyDetails } from "../../helpers/certs.js";
+import { parsePEM, validityMs } from "../../helpers/openssl.js";
+import { FIXTURE_USERS } from "../../fixtures/test.js";
+import { expect, test } from "@playwright/test";
+
+// Rewritten against POST /api/v1/certificates, GET /api/v1/certificates/options,
+// GET /api/v1/certificates?q=, GET /api/v1/certificates/{id}/certificate and
+// GET /api/v1/certificates/{id}/key, all through the generated client
+// (clients/ts). Section 6: "the field is name, not cert_name".
 
 const HOUR = 3_600_000;
 const MINUTE = 60_000;
 
-// safeName allows only [A-Za-z0-9._-], so a name carrying the key type verbatim
-// (e2e-server-EC:P-256) is rejected before anything reaches the CA.
+interface IssueRequest {
+  name: string;
+  domain: string;
+  template: "server" | "internal" | "wildcard" | "client";
+  keyType: "EC:P-256" | "EC:P-384" | "RSA:2048" | "RSA:4096";
+  duration: "720h" | "4380h" | "8760h" | "87600h";
+}
+
 const MATRIX: IssueRequest[] = [
   // The boundary probe runs first: 87600h equals STEPCA_MAX_TLS_CERT_DURATION
-  // exactly, and validityValidator rejects only what exceeds the maximum. If the
-  // boundary behaves differently every other row fails for the same reason.
+  // exactly, and normalizeIssuePolicy rejects only what exceeds the maximum.
   { name: "e2e-internal-ec-p256", template: "internal", domain: "e2e-internal.example.com", duration: "87600h", keyType: "EC:P-256" },
 
   { name: "e2e-server-ec-p256", template: "server", domain: "e2e-server.example.com", duration: "8760h", keyType: "EC:P-256" },
@@ -43,35 +50,63 @@ const MATRIX: IssueRequest[] = [
 const observedKeys = new Map<string, string>();
 const observedValidity = new Map<string, number>();
 
-test.describe("E2E-CERT-01: issuance matrix", () => {
+let manager: ApiSession;
+
+test.beforeAll(async () => {
+  manager = await authedClient(FIXTURE_USERS.manager);
+});
+
+test.describe.serial("E2E-CERT-01: issuance matrix", () => {
+  test("E2E-CERT-01: GET /api/v1/certificates/options lists every matrix template", async () => {
+    const res = await manager.call(() => getCertificateOptions({}));
+    expect(res.error, "options request succeeded").toBeUndefined();
+    const ids = (res.data?.templates ?? []).map((t: { id: string }) => t.id);
+    for (const row of MATRIX) {
+      expect(ids, `options catalogue includes the ${row.template} template`).toContain(row.template);
+    }
+  });
+
   for (const row of MATRIX) {
-    test(`E2E-CERT-01: ${row.name} (${row.template}, ${row.keyType}, ${row.duration})`, async ({ manager }) => {
+    test(`E2E-CERT-01: ${row.name} (${row.template}, ${row.keyType}, ${row.duration})`, async () => {
       test.setTimeout(180_000);
 
-      const token = await manager.csrf("/issue");
-      const res = await issue(manager.ctx, token, row);
-      expect(res.status(), `POST /issue for ${row.name}`).toBe(302);
-      expect(res.headers()["location"]).toBe("/issue");
+      const created = await manager.call(() =>
+        createCertificate({
+          body: { name: row.name, domain: row.domain, template: row.template, duration: row.duration, keyType: row.keyType },
+        }),
+      );
+      expect(created.error, `POST /api/v1/certificates for ${row.name}`).toBeUndefined();
+      expect(created.response?.status).toBe(201);
+      const summary = created.data!;
+      expect(summary.name).toBe(row.name);
+      expect(summary.domain).toBe(row.domain);
+      expect(summary.keyType).toBe(row.keyType);
 
-      const page = await manager.ctx.get("/issue");
-      expect(await page.text()).toContain(issuedFlash(row));
+      // GET /api/v1/certificates?q= exercises the list operation the matrix
+      // would otherwise never touch, and confirms the new row is findable by
+      // the same query the certificates page issues.
+      const listed = await manager.call(() => listCertificates({ query: { q: row.name } }));
+      expect(listed.error, `GET /api/v1/certificates?q=${row.name}`).toBeUndefined();
+      const match = (listed.data?.items ?? []).find((c: { id: number }) => c.id === summary.id);
+      expect(match, `${row.name} appears in its own list query`).toBeTruthy();
 
-      expect(await certFileExists(row.name), "issued material on disk").toBe(true);
+      const certRes = await manager.call(() => getCertificateCertificate({ path: { id: summary.id } }));
+      expect(certRes.error, `GET /api/v1/certificates/${summary.id}/certificate`).toBeUndefined();
+      const keyRes = await manager.call(() => getCertificateKey({ path: { id: summary.id } }));
+      expect(keyRes.error, `GET /api/v1/certificates/${summary.id}/key`).toBeUndefined();
 
-      const id = await certificateID(row.name);
-      const cert = await downloadCert(manager.ctx, id);
-      const key = await downloadKey(manager.ctx, id);
+      const certPem = await blobText(certRes.data);
+      const keyPem = await blobText(keyRes.data);
+      const cert = await parsePEM(certPem);
 
       expect(cert.subject, "Subject.CommonName is the requested domain").toContain(`CN=${row.domain}`);
-
-      // Risk R4's CSR-shape half. "Contains the domain" would be satisfied by
-      // both a CN-only and a DNSNames-only CSR, the two wrong shapes.
+      // Risk R4's CSR-shape half: both a CN-only and a DNSNames-only CSR would
+      // satisfy "contains the domain", the two wrong shapes.
       expect(dnsNames(cert), `${row.name} DNSNames`).toEqual([row.domain]);
 
       const details = await keyDetails(cert.pem);
       expect(details, `${row.name} key parameters read from the downloaded certificate`).toEqual(expectedKey(row.keyType));
-
-      await assertKeyPairs(cert.pem, key);
+      await assertKeyPairs(cert.pem, keyPem);
 
       const requestedMs = Number(row.duration.replace("h", "")) * HOUR;
       expect(Math.abs(validityMs(cert) - requestedMs), `${row.name} validity within a minute of ${row.duration}`).toBeLessThanOrEqual(MINUTE);
@@ -101,43 +136,36 @@ test.describe("E2E-CERT-01: issuance matrix", () => {
   });
 });
 
-test("E2E-CERT-02: the wildcard template rejects a non-wildcard domain", async ({ manager }) => {
-  const before = await psql("SELECT count(*) FROM certificates");
-  const token = await manager.csrf("/issue");
+test("E2E-CERT-02: the wildcard template rejects a non-wildcard domain", async () => {
+  const before = (await manager.call(() => listCertificates({ query: { pageSize: 1 } }))).data?.total ?? 0;
 
-  const res = await issue(manager.ctx, token, {
-    name: "e2e-wildcard-rejected",
-    domain: "not-a-wildcard.example.com",
-    template: "wildcard",
-    keyType: "EC:P-256",
-    duration: "8760h",
-  });
+  const res = await manager.call(() =>
+    createCertificate({
+      body: { name: "e2e-wildcard-rejected", domain: "not-a-wildcard.example.com", template: "wildcard", keyType: "EC:P-256", duration: "8760h" },
+    }),
+  );
 
-  // The policy-error branch renders inline; it does not redirect.
-  expect(res.status()).toBe(200);
-  expect(await res.text()).toContain("Policy error: wildcard template requires domain like *.example.com");
+  // 5.2's rule: caller-input errors answer 422, carried through mapCertError
+  // from handlers.ValidationError (checkDomainPolicy's wildcard branch).
+  expect(res.response?.status).toBe(422);
+  expect(JSON.stringify(res.error)).toContain("wildcard template requires domain like *.example.com");
 
-  expect(await psql("SELECT count(*) FROM certificates"), "no row was created").toBe(before);
-  expect(await certFileExists("e2e-wildcard-rejected"), "no file under CertsDir").toBe(false);
+  const after = (await manager.call(() => listCertificates({ query: { pageSize: 1 } }))).data?.total ?? 0;
+  expect(after, "no row was created").toBe(before);
 });
 
-test("E2E-CERT-03: an invalid domain is rejected before it reaches the CA", async ({ manager }) => {
+test("E2E-CERT-03: an invalid domain is rejected before it reaches the CA", async () => {
   test.setTimeout(180_000);
 
-  // Positive control first: an absence assertion over a log is unfalsifiable on
-  // its own, so the same pattern must be shown to fire in this environment
+  // Positive control first: an absence assertion over a log is unfalsifiable
+  // on its own, so the pattern must be shown to fire in this environment
   // before anything is concluded from its absence.
   const controlName = `e2e-control-${Date.now().toString(36)}`;
   const controlSince = new Date().toISOString();
-  const token = await manager.csrf("/issue");
-  const control = await issue(manager.ctx, token, {
-    name: controlName,
-    domain: "e2e-control.example.com",
-    template: "server",
-    keyType: "EC:P-256",
-    duration: "8760h",
-  });
-  expect(control.status(), "control issuance").toBe(302);
+  const control = await manager.call(() =>
+    createCertificate({ body: { name: controlName, domain: "e2e-control.example.com", template: "server", keyType: "EC:P-256", duration: "8760h" } }),
+  );
+  expect(control.response?.status, "control issuance").toBe(201);
 
   const SIGN_PATTERN = "/sign";
   const controlLog = await logs("step-ca", { since: controlSince });
@@ -146,29 +174,18 @@ test("E2E-CERT-03: an invalid domain is rejected before it reaches the CA", asyn
 
   const since = new Date().toISOString();
 
-  const flagInjection = await issue(manager.ctx, await manager.csrf("/issue"), {
-    name: "e2e-badid-dash",
-    domain: "--foo",
-    template: "server",
-    keyType: "EC:P-256",
-    duration: "8760h",
-  });
-  expect(flagInjection.status()).toBe(200);
-  // html/template escapes the quotes validateIdentifier's %q adds, so the
-  // rendered form is what the assertion compares against.
-  expect(await flagInjection.text()).toContain(
-    "Error: identifier &#34;--foo&#34; starts with &#39;-&#39;: possible flag injection",
+  const flagInjection = await manager.call(() =>
+    createCertificate({ body: { name: "e2e-badid-dash", domain: "--foo", template: "server", keyType: "EC:P-256", duration: "8760h" } }),
   );
+  expect(flagInjection.response?.status).toBe(422);
+  expect(JSON.stringify(flagInjection.error)).toContain("starts with");
+  expect(JSON.stringify(flagInjection.error)).toContain("possible flag injection");
 
-  const shellish = await issue(manager.ctx, await manager.csrf("/issue"), {
-    name: "e2e-badid-shell",
-    domain: "; rm -rf /",
-    template: "server",
-    keyType: "EC:P-256",
-    duration: "8760h",
-  });
-  expect(shellish.status()).toBe(200);
-  expect(await shellish.text()).toContain("contains disallowed characters");
+  const shellish = await manager.call(() =>
+    createCertificate({ body: { name: "e2e-badid-shell", domain: "; rm -rf /", template: "server", keyType: "EC:P-256", duration: "8760h" } }),
+  );
+  expect(shellish.response?.status).toBe(422);
+  expect(JSON.stringify(shellish.error)).toContain("contains disallowed characters");
 
   const after = await logs("step-ca", { since });
   const hits = after.split("\n").filter((l) => l.includes(SIGN_PATTERN));

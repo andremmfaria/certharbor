@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { BASE_URL } from "../../helpers/env";
-import { decodeQR, secretFromOtpauth } from "../../helpers/qr";
-import { totpNow } from "../../helpers/totp";
-import { TWOFA_SUBJECT } from "../../fixtures/test";
+import { BASE_URL } from "../../helpers/env.js";
+import { decodeQR, secretFromOtpauth } from "../../helpers/qr.js";
+import { totpNow } from "../../helpers/totp.js";
+import { TWOFA_SUBJECT } from "../../fixtures/test.js";
 
 /**
  * The `api` steps of E2E-AUTH-04 deliberately take the plaintext path, reading
