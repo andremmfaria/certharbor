@@ -6,7 +6,7 @@
 # The tag must match @playwright/test in package.json, or the reporter and the
 # runtime disagree. The digest pins the browser build; an unpinned image changes
 # browser version between runs.
-ARG PLAYWRIGHT_IMAGE=mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f
+ARG PLAYWRIGHT_IMAGE=mcr.microsoft.com/playwright:v1.65.0-noble@sha256:6e3fb709361521eb27161606e6da6d2674e5e89fa16516cb37d6fdd91372273d
 # hadolint ignore=DL3006
 FROM ${PLAYWRIGHT_IMAGE}
 
