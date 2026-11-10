@@ -3,10 +3,22 @@
 package api_test
 
 import (
+	"bytes"
+	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"database/sql"
+	"encoding/json"
+	"encoding/pem"
+	"math/big"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -18,6 +30,7 @@ import (
 	appmw "certharbor/middleware"
 	"certharbor/models"
 	"certharbor/security"
+	"certharbor/stepca"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/sessions"
@@ -63,6 +76,15 @@ func openCertTestDB(t *testing.T) *sql.DB {
 // unaffected by this phase's one new dependency.
 func newCertTestServer(t *testing.T, db *sql.DB) *httptest.Server {
 	t.Helper()
+	return newCertTestServerWithCA(t, db, &config.Config{}, nil)
+}
+
+// newCertTestServerWithCA is newCertTestServer with a caller-supplied cfg
+// (issue/renew/import need a real CertsDir, unlike list/detail) and an
+// optional CA client injected via handlers.SetCAClient, the seam that lets
+// the issue/renew/revoke success paths run without a live step-ca.
+func newCertTestServerWithCA(t *testing.T, db *sql.DB, cfg *config.Config, ca stepca.CA) *httptest.Server {
+	t.Helper()
 	hashKey, blockKey, err := security.DeriveSessionKeys("phase4-cert-test-key-not-for-prod!")
 	if err != nil {
 		t.Fatalf("DeriveSessionKeys: %v", err)
@@ -73,7 +95,10 @@ func newCertTestServer(t *testing.T, db *sql.DB) *httptest.Server {
 		SameSite: http.SameSiteLaxMode, Secure: false, // httptest.NewServer is plain HTTP
 	}
 
-	h := handlers.NewWithFS(db, &config.Config{}, store, nil)
+	h := handlers.NewWithFS(db, cfg, store, nil)
+	if ca != nil {
+		h.SetCAClient(ca)
+	}
 	r := chi.NewRouter()
 	r.Post("/test-login", func(w http.ResponseWriter, req *http.Request) {
 		sess, _ := store.Get(req, h.SessionCookieName())
@@ -251,4 +276,424 @@ func TestGetCertificate_UnknownIDIs404(t *testing.T) {
 	if ct := resp.Header.Get("Content-Type"); ct != "application/problem+json" {
 		t.Fatalf("Content-Type = %q, want application/problem+json", ct)
 	}
+}
+
+// ─── Phase 4, second batch: issue, import, renew, revoke success paths ────
+//
+// These exercise what TestCreateCertificate_ViewerDenied and its siblings in
+// certificates_test.go deliberately stop short of: the actual data path,
+// which needs a real database and (for issue/renew/revoke) a CA client.
+// fakeIssueCA plays that role; it cannot be handlers.FakeCA
+// (stepca_fake_test.go) because that type lives in a _test.go file and is
+// invisible outside package handlers' own test binary.
+
+// fakeIssueCA is a minimal stepca.CA double: IssueCertificate returns a
+// fixed cert/key PEM pair, Revoke always succeeds unless told otherwise.
+type fakeIssueCA struct {
+	certPEM, keyPEM []byte
+	issueErr        error
+	revokeErr       error
+}
+
+var _ stepca.CA = (*fakeIssueCA)(nil)
+
+func (f *fakeIssueCA) Health(context.Context) error { return nil }
+
+func (f *fakeIssueCA) Provisioners(context.Context) ([]stepca.ProvisionerInfo, error) {
+	return nil, nil
+}
+
+func (f *fakeIssueCA) IssueCertificate(context.Context, stepca.IssueRequest) ([]byte, []byte, error) {
+	return f.certPEM, f.keyPEM, f.issueErr
+}
+
+func (f *fakeIssueCA) Revoke(context.Context, string, string) error { return f.revokeErr }
+
+// genSelfSignedPEM builds a throwaway EC P-256 self-signed leaf, matching
+// what parseCertDates/getCertKeyType (cert_ops.go) read: a single PEM
+// CERTIFICATE block. notAfter drives the computed expiryStatus.
+func genSelfSignedPEM(t *testing.T, cn string, notAfter time.Time) (certPEM, keyPEM []byte) {
+	t.Helper()
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 62))
+	if err != nil {
+		t.Fatalf("rand.Int: %v", err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber:          serial,
+		Subject:               pkix.Name{CommonName: cn},
+		DNSNames:              []string{cn},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              notAfter,
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &priv.PublicKey, priv)
+	if err != nil {
+		t.Fatalf("CreateCertificate: %v", err)
+	}
+	certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	keyDER, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		t.Fatalf("MarshalPKCS8PrivateKey: %v", err)
+	}
+	keyPEM = pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+	return certPEM, keyPEM
+}
+
+// decodeJSONBody is doGet's decode half for responses this file's own
+// doRequest calls produce (POST, not GET, so doGet itself does not apply).
+func decodeJSONBody(t *testing.T, resp *http.Response) map[string]any {
+	t.Helper()
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response body: %v", err)
+	}
+	return body
+}
+
+// TestCreateCertificate_Success is the issue operation's success path
+// (handlers.IssueCertificate via createCertificate), proving the CA seam,
+// the 201 status register.go sets for this operation specifically, and
+// that the row lands in the database.
+func TestCreateCertificate_Success(t *testing.T) {
+	db := openCertTestDB(t)
+	certsDir := t.TempDir()
+	certPEM, keyPEM := genSelfSignedPEM(t, "issue.example.com", time.Now().Add(365*24*time.Hour))
+	ca := &fakeIssueCA{certPEM: certPEM, keyPEM: keyPEM}
+	srv := newCertTestServerWithCA(t, db, &config.Config{CertsDir: certsDir}, ca)
+	client := newClient(t)
+	token := login(t, client, srv)
+
+	reqBody := `{"name":"issue-cert","domain":"issue.example.com","template":"server","duration":"8760h","keyType":"EC:P-256"}`
+	resp := doRequest(t, client, http.MethodPost, srv.URL+"/api/v1/certificates", bytes.NewReader([]byte(reqBody)), func(r *http.Request) { //nolint:bodyclose // closed via t.Cleanup inside doRequest
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("X-CSRF-Token", token)
+	})
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", resp.StatusCode)
+	}
+	body := decodeJSONBody(t, resp)
+	if body["name"] != "issue-cert" || body["domain"] != "issue.example.com" {
+		t.Fatalf("body = %v, want name=issue-cert domain=issue.example.com", body)
+	}
+
+	row, err := appdb.GetCertByName(db, "issue-cert")
+	if err != nil || row == nil {
+		t.Fatalf("GetCertByName(issue-cert): %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(certsDir, "issue-cert", "certificate.crt")); statErr != nil {
+		t.Fatalf("certificate file not written: %v", statErr)
+	}
+}
+
+// TestRenewCertificate_Success proves RenewCertificate's success path:
+// the stored issue_duration/key_type are reused, the CA is called again,
+// and the files on disk (already inside certsDir, as a real managed
+// certificate's would be) are overwritten.
+func TestRenewCertificate_Success(t *testing.T) {
+	db := openCertTestDB(t)
+	certsDir := t.TempDir()
+	certDir := filepath.Join(certsDir, "renew-cert")
+	if err := os.MkdirAll(certDir, 0o750); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	certPath := filepath.Join(certDir, "certificate.crt")
+	keyPath := filepath.Join(certDir, "private.key")
+	origCert, origKey := genSelfSignedPEM(t, "renew.example.com", time.Now().Add(30*24*time.Hour))
+	if err := os.WriteFile(certPath, origCert, 0o600); err != nil {
+		t.Fatalf("WriteFile(cert): %v", err)
+	}
+	if err := os.WriteFile(keyPath, origKey, 0o600); err != nil {
+		t.Fatalf("WriteFile(key): %v", err)
+	}
+	if err := appdb.InsertCert(db, &models.Certificate{
+		Name: "renew-cert", Domain: "renew.example.com", CertPath: certPath, KeyPath: keyPath,
+		Serial: "renew-cert-orig-serial", KeyType: "EC:P-256", IssueDuration: "8760h",
+	}); err != nil {
+		t.Fatalf("InsertCert: %v", err)
+	}
+	row, err := appdb.GetCertByName(db, "renew-cert")
+	if err != nil || row == nil {
+		t.Fatalf("GetCertByName: %v", err)
+	}
+
+	newCert, newKey := genSelfSignedPEM(t, "renew.example.com", time.Now().Add(365*24*time.Hour))
+	ca := &fakeIssueCA{certPEM: newCert, keyPEM: newKey}
+	srv := newCertTestServerWithCA(t, db, &config.Config{CertsDir: certsDir}, ca)
+	client := newClient(t)
+	token := login(t, client, srv)
+
+	resp := doRequest(t, client, http.MethodPost, srv.URL+"/api/v1/certificates/"+strconv.Itoa(row.ID)+"/renew", nil, func(r *http.Request) { //nolint:bodyclose // closed via t.Cleanup inside doRequest
+		r.Header.Set("X-CSRF-Token", token)
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	body := decodeJSONBody(t, resp)
+	if body["name"] != "renew-cert" {
+		t.Fatalf("name = %v, want renew-cert", body["name"])
+	}
+
+	renewed, err := appdb.GetCertByName(db, "renew-cert")
+	if err != nil || renewed == nil {
+		t.Fatalf("GetCertByName after renew: %v", err)
+	}
+	if renewed.Serial == "renew-cert-orig-serial" {
+		t.Fatal("serial unchanged after renew, want the new fake CA's cert serial")
+	}
+}
+
+// TestRevokeCertificate_Success proves the admin-only mutation end to end:
+// an admin session (not manager, Section 6's role split) hits revoke, the
+// fake CA's Revoke is called, and the row's status becomes "revoked".
+func TestRevokeCertificate_Success(t *testing.T) {
+	db := openCertTestDB(t)
+	certsDir := t.TempDir()
+	if err := appdb.InsertCert(db, &models.Certificate{
+		Name: "revoke-cert", Domain: "revoke.example.com", CertPath: "/nonexistent/revoke-cert.crt", KeyPath: "/nonexistent/revoke-cert.key",
+		Serial: "revoke-cert-serial", KeyType: "EC:P-256", IssueDuration: "8760h",
+	}); err != nil {
+		t.Fatalf("InsertCert: %v", err)
+	}
+	row, err := appdb.GetCertByName(db, "revoke-cert")
+	if err != nil || row == nil {
+		t.Fatalf("GetCertByName: %v", err)
+	}
+
+	ca := &fakeIssueCA{}
+	srv := newCertTestServerWithCA(t, db, &config.Config{CertsDir: certsDir}, ca)
+	client := newClient(t)
+	token := login(t, client, srv)
+
+	original := testUser.Role
+	testUser.Role = "admin"
+	t.Cleanup(func() { testUser.Role = original })
+
+	resp := doRequest(t, client, http.MethodPost, srv.URL+"/api/v1/certificates/"+strconv.Itoa(row.ID)+"/revoke", nil, func(r *http.Request) { //nolint:bodyclose // closed via t.Cleanup inside doRequest
+		r.Header.Set("X-CSRF-Token", token)
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	revoked, err := appdb.GetCert(db, row.ID)
+	if err != nil || revoked == nil {
+		t.Fatalf("GetCert after revoke: %v", err)
+	}
+	if revoked.Status != "revoked" {
+		t.Fatalf("status = %q, want revoked", revoked.Status)
+	}
+}
+
+// multipartRealCertBody builds a POST /api/v1/certificates/import/upload
+// body carrying real PEM bytes, the success-path sibling of
+// certificates_test.go's multipartImportBody (which deliberately uploads
+// "not a real cert" because it only exercises the 422/401 cases).
+func multipartRealCertBody(t *testing.T, name, domain string, certPEM, keyPEM []byte) (*bytes.Buffer, string) {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	if err := mw.WriteField("name", name); err != nil {
+		t.Fatalf("WriteField(name): %v", err)
+	}
+	if err := mw.WriteField("domain", domain); err != nil {
+		t.Fatalf("WriteField(domain): %v", err)
+	}
+	fw, err := mw.CreateFormFile("certFile", "certificate.crt")
+	if err != nil {
+		t.Fatalf("CreateFormFile(certFile): %v", err)
+	}
+	if _, err := fw.Write(certPEM); err != nil {
+		t.Fatalf("Write(certFile): %v", err)
+	}
+	if keyPEM != nil {
+		kw, err := mw.CreateFormFile("keyFile", "private.key")
+		if err != nil {
+			t.Fatalf("CreateFormFile(keyFile): %v", err)
+		}
+		if _, err := kw.Write(keyPEM); err != nil {
+			t.Fatalf("Write(keyFile): %v", err)
+		}
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatalf("mw.Close: %v", err)
+	}
+	return &buf, mw.FormDataContentType()
+}
+
+// TestImportCertificateUpload_Success proves handlers.ImportCertificateUpload
+// end to end: a real cert+key pair, saved under CertsDir, with the row
+// readable afterward via GET /api/v1/certificates/{id}.
+func TestImportCertificateUpload_Success(t *testing.T) {
+	db := openCertTestDB(t)
+	certsDir := t.TempDir()
+	srv := newCertTestServerWithCA(t, db, &config.Config{CertsDir: certsDir}, nil)
+	client := newClient(t)
+	token := login(t, client, srv)
+
+	certPEM, keyPEM := genSelfSignedPEM(t, "upload.example.com", time.Now().Add(365*24*time.Hour))
+	buf, contentType := multipartRealCertBody(t, "upload-cert", "upload.example.com", certPEM, keyPEM)
+	resp := doRequest(t, client, http.MethodPost, srv.URL+"/api/v1/certificates/import/upload", buf, func(r *http.Request) { //nolint:bodyclose // closed via t.Cleanup inside doRequest
+		r.Header.Set("Content-Type", contentType)
+		r.Header.Set("X-CSRF-Token", token)
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	body := decodeJSONBody(t, resp)
+	if body["name"] != "upload-cert" {
+		t.Fatalf("name = %v, want upload-cert", body["name"])
+	}
+	if _, statErr := os.Stat(filepath.Join(certsDir, "upload-cert", "certificate.crt")); statErr != nil {
+		t.Fatalf("certificate file not written: %v", statErr)
+	}
+}
+
+// TestImportCertificatesByPaths_MixedBatchReportsPerItem is Section 6's
+// explicit behaviour-change requirement: unlike the old import/scan, which
+// swallowed per-item failures into a count, every item in a mixed batch
+// (one importable file, one missing file) gets its own ok/error result.
+func TestImportCertificatesByPaths_MixedBatchReportsPerItem(t *testing.T) {
+	db := openCertTestDB(t)
+	certsDir := t.TempDir()
+	goodDir := filepath.Join(certsDir, "good-item")
+	if err := os.MkdirAll(goodDir, 0o750); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	certPEM, _ := genSelfSignedPEM(t, "good.example.com", time.Now().Add(365*24*time.Hour))
+	goodCertPath := filepath.Join(goodDir, "certificate.crt")
+	if err := os.WriteFile(goodCertPath, certPEM, 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	srv := newCertTestServerWithCA(t, db, &config.Config{CertsDir: certsDir}, nil)
+	client := newClient(t)
+	token := login(t, client, srv)
+
+	reqBody := `[
+		{"name":"good-item","domain":"good.example.com","certPath":"good-item/certificate.crt"},
+		{"name":"bad-item","domain":"bad.example.com","certPath":"missing-item/certificate.crt"}
+	]`
+	resp := doRequest(t, client, http.MethodPost, srv.URL+"/api/v1/certificates/import/paths", bytes.NewReader([]byte(reqBody)), func(r *http.Request) { //nolint:bodyclose // closed via t.Cleanup inside doRequest
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("X-CSRF-Token", token)
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (bulk operations never fail the whole request for a partial failure)", resp.StatusCode)
+	}
+	body := decodeJSONBody(t, resp)
+	results, _ := body["results"].([]any)
+	if len(results) != 2 {
+		t.Fatalf("got %d results, want 2", len(results))
+	}
+	byRef := map[string]map[string]any{}
+	for _, raw := range results {
+		r, _ := raw.(map[string]any)
+		byRef[r["ref"].(string)] = r
+	}
+	if byRef["good-item"]["status"] != "ok" {
+		t.Fatalf("good-item status = %v, want ok", byRef["good-item"]["status"])
+	}
+	if byRef["bad-item"]["status"] != "error" {
+		t.Fatalf("bad-item status = %v, want error", byRef["bad-item"]["status"])
+	}
+	if errMsg, _ := byRef["bad-item"]["error"].(string); errMsg == "" {
+		t.Fatal("bad-item carries no error message")
+	}
+
+	if row, err := appdb.GetCertByName(db, "good-item"); err != nil || row == nil {
+		t.Fatalf("good-item was not persisted: %v", err)
+	}
+	if row, _ := appdb.GetCertByName(db, "bad-item"); row != nil {
+		t.Fatal("bad-item must not be persisted")
+	}
+}
+
+// TestListCertificateImportCandidates_ReflectsDisk proves
+// handlers.ImportCandidates against a real filesystem fixture: a cert file
+// on disk with no matching database row must be listed; one already
+// registered (insertTestCert below writes the DB row directly, matching
+// serial) must not be.
+func TestListCertificateImportCandidates_ReflectsDisk(t *testing.T) {
+	db := openCertTestDB(t)
+	certsDir := t.TempDir()
+
+	strayDir := filepath.Join(certsDir, "stray-cert")
+	if err := os.MkdirAll(strayDir, 0o750); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	strayCertPEM, strayKeyPEM := genSelfSignedPEM(t, "stray.example.com", time.Now().Add(365*24*time.Hour))
+	if err := os.WriteFile(filepath.Join(strayDir, "certificate.crt"), strayCertPEM, 0o600); err != nil {
+		t.Fatalf("WriteFile(cert): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(strayDir, "private.key"), strayKeyPEM, 0o600); err != nil {
+		t.Fatalf("WriteFile(key): %v", err)
+	}
+
+	// A registered certificate, on disk under the same root, must not show
+	// up as a candidate: scanExistingCerts checks the serial against the
+	// database (cert_ops.go).
+	registeredDir := filepath.Join(certsDir, "registered-cert")
+	if err := os.MkdirAll(registeredDir, 0o750); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	registeredCertPEM, _ := genSelfSignedPEM(t, "registered.example.com", time.Now().Add(365*24*time.Hour))
+	registeredCertPath := filepath.Join(registeredDir, "certificate.crt")
+	if err := os.WriteFile(registeredCertPath, registeredCertPEM, 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	block, _ := pem.Decode(registeredCertPEM)
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		t.Fatalf("ParseCertificate: %v", err)
+	}
+	if err := appdb.InsertCert(db, &models.Certificate{
+		Name: "registered-cert", Domain: "registered.example.com", CertPath: registeredCertPath, KeyPath: "",
+		Serial: cert.SerialNumber.String(), KeyType: "EC:P-256", IssueDuration: "8760h",
+	}); err != nil {
+		t.Fatalf("InsertCert: %v", err)
+	}
+
+	srv := newCertTestServerWithCA(t, db, &config.Config{CertsDir: certsDir}, nil)
+	client := newClient(t)
+	login(t, client, srv)
+
+	// listCertificateImportCandidates answers a bare JSON array, not an
+	// object, so this cannot use doGet (mount_test.go), which only decodes
+	// into map[string]any.
+	resp := doRequest(t, client, http.MethodGet, srv.URL+"/api/v1/certificates/import-candidates", nil, nil) //nolint:bodyclose // closed via t.Cleanup inside doRequest
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var candidates []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&candidates); err != nil {
+		t.Fatalf("decode candidates: %v", err)
+	}
+
+	var names []string
+	for _, item := range candidates {
+		names = append(names, item["name"].(string))
+	}
+	if !containsStr(names, "stray-cert") {
+		t.Fatalf("candidates = %v, want stray-cert present", names)
+	}
+	if containsStr(names, "registered-cert") {
+		t.Fatalf("candidates = %v, want registered-cert absent (already in the database)", names)
+	}
+}
+
+// containsStr is a small local helper; this file has no other use for a
+// generic slice-contains and importing a library for one check is not
+// worth it.
+func containsStr(list []string, want string) bool {
+	for _, v := range list {
+		if v == want {
+			return true
+		}
+	}
+	return false
 }
