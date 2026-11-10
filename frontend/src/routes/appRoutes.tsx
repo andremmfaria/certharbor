@@ -1,10 +1,15 @@
 import type { RouteObject } from 'react-router'
+import type { ComponentType } from 'react'
 import { AuthGate } from '../auth/AuthGate'
 import { LoginPage } from '../auth/LoginPage'
 import { Splash } from '../components/Splash'
 import { AppLayout } from '../layouts/AppLayout'
 import { AuthLayout } from '../layouts/AuthLayout'
+import { CertificateDetailPage } from './CertificateDetailPage'
+import { CertificatesPage } from './CertificatesPage'
 import { DashboardPage } from './DashboardPage'
+import { ImportPage } from './ImportPage'
+import { IssuePage } from './IssuePage'
 import { NotFoundPage } from './NotFoundPage'
 import { placeholderFor } from './Placeholder'
 import { RequireRole } from './RequireRole'
@@ -15,8 +20,18 @@ function relative(path: string, prefix = ''): string {
   return path.slice(prefix.length).replace(/^\//, '')
 }
 
+// The four leaves phase 4 builds for real; everything else is still a
+// placeholder until its own phase lands.
+const BUILT_PAGES: Record<string, ComponentType> = {
+  dashboard: DashboardPage,
+  certificates: CertificatesPage,
+  'certificate-detail': CertificateDetailPage,
+  issue: IssuePage,
+  import: ImportPage,
+}
+
 function leaf(route: RouteEntry): RouteObject {
-  const Page = route.name === 'dashboard' ? DashboardPage : placeholderFor(route)
+  const Page = BUILT_PAGES[route.name] ?? placeholderFor(route)
   if (route.path === '/') return { index: true, Component: Page }
   if (route.requiredRole && route.requiredRole !== 'viewer') {
     return {
