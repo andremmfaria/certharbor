@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"step-webui/config"
-	"step-webui/middleware"
-	"step-webui/models"
-	"step-webui/security"
+	"certharbor/config"
+	"certharbor/middleware"
+	"certharbor/models"
+	"certharbor/security"
 
 	"github.com/gorilla/sessions"
 )

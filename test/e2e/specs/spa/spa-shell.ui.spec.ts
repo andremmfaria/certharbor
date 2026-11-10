@@ -77,13 +77,13 @@ test.describe.serial("the SPA through the origin", () => {
     const cookies = await setCookies(login);
     expect(cookies.length, "the login sets the session and CSRF cookies").toBeGreaterThanOrEqual(2);
     for (const c of cookies) {
-      expect(c, "prefixed").toMatch(/^__Host-step-webui(-csrf)?=/);
+      expect(c, "prefixed").toMatch(/^__Host-certharbor(-csrf)?=/);
       expect(c).toMatch(/;\s*Secure/i);
       expect(c).toMatch(/;\s*Path=\/(;|$)/i);
       expect(c).not.toMatch(/;\s*Domain=/i);
     }
     const jar = await page.context().cookies();
-    expect(jar.map((c) => c.name).sort()).toEqual(expect.arrayContaining(["__Host-step-webui", "__Host-step-webui-csrf"]));
+    expect(jar.map((c) => c.name).sort()).toEqual(expect.arrayContaining(["__Host-certharbor", "__Host-certharbor-csrf"]));
 
     // The router writes its root as the bare basename, which nginx redirects to
     // the base with its slash, so a reload there lands on the shell too.
@@ -182,7 +182,7 @@ test.describe.serial("the SPA through the origin", () => {
   // Last in the file: it stops the backend, and restores it before returning.
   test("E2E-SPA-03: with the backend stopped the API answers problem+json and the SPA renders the unavailable state", async ({ page }) => {
     test.setTimeout(4 * 60_000);
-    await composeOrThrow("stop", "step-webui");
+    await composeOrThrow("stop", "certharbor-control");
     try {
       const res = await page.context().request.get(`${BASE_URL}/api/v1/session`);
       expect(res.status()).toBe(503);
@@ -194,7 +194,7 @@ test.describe.serial("the SPA through the origin", () => {
       await expect(page.getByTestId("page-login")).toHaveCount(0);
       await expect(page.getByLabel("Password")).toHaveCount(0);
     } finally {
-      await composeOrThrow("start", "step-webui");
+      await composeOrThrow("start", "certharbor-control");
       await waitOriginHealthy();
     }
   });

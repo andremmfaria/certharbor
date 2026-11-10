@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'step-webui-preload-reload'
+const STORAGE_KEY = 'certharbor-preload-reload'
 const MIN_INTERVAL_MS = 30_000
 
 // A frontend deploy replaces content-hashed chunks wholesale, so a tab opened

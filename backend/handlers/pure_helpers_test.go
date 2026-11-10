@@ -149,10 +149,10 @@ func TestParsePostgresURL(t *testing.T) {
 	}{
 		{ //nolint:gosec // G101: test-only credential URL
 			name:     "full postgres URL",
-			raw:      "postgres://stepwebui:secret@localhost:5432/mydb",
+			raw:      "postgres://certharbor:secret@localhost:5432/mydb",
 			wantHost: "localhost",
 			wantPort: "5432",
-			wantUser: "stepwebui",
+			wantUser: "certharbor",
 			wantDB:   "mydb",
 			wantPw:   "secret",
 		},

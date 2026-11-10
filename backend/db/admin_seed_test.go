@@ -1,4 +1,4 @@
-// Package db provides database access helpers for step-webui.
+// Package db provides database access helpers for certharbor.
 package db
 
 import (
@@ -31,7 +31,7 @@ func TestResolveAdminPassword(t *testing.T) {
 			got, err := resolveAdminPassword(func(string) string { return tc.envVal })
 			if tc.wantErr {
 				if err == nil {
-					t.Fatal("expected error when STEPWEBUI_ADMIN_PASSWORD is empty, got nil")
+					t.Fatal("expected error when CERTHARBOR_ADMIN_PASSWORD is empty, got nil")
 				}
 				return
 			}
@@ -53,7 +53,7 @@ func TestResolveAdminPasswordErrorMessage(t *testing.T) {
 		t.Fatal("expected non-nil error")
 	}
 	msg := err.Error()
-	for _, want := range []string{"STEPWEBUI_ADMIN_PASSWORD", "openssl"} {
+	for _, want := range []string{"CERTHARBOR_ADMIN_PASSWORD", "openssl"} {
 		if !errors.Is(err, err) { // keep the import used
 			_ = want
 		}

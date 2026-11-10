@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────────────────────
-# Step-CA WebUI, deployment test
+# Certharbor, deployment test
 #
 # Simulates a brand-new user installing from scratch:
 #   1. Clones the repo into a temp directory
@@ -9,16 +9,16 @@
 #   4. Reports ✓/✗ for each check, prints relevant logs on failure
 #
 # Run on a clean VM (preferably one that has NEVER had the project before):
-#   curl -fsSL https://raw.githubusercontent.com/andremmfaria/step-ca-webui/main/scripts/test_deploy.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/andremmfaria/certharbor/main/scripts/test_deploy.sh | bash
 # Or:
-#   wget -O- https://raw.githubusercontent.com/andremmfaria/step-ca-webui/main/scripts/test_deploy.sh | bash
+#   wget -O- https://raw.githubusercontent.com/andremmfaria/certharbor/main/scripts/test_deploy.sh | bash
 # ──────────────────────────────────────────────────────────────────────────────
 
 set -uo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/andremmfaria/step-ca-webui.git}"
+REPO_URL="${REPO_URL:-https://github.com/andremmfaria/certharbor.git}"
 BRANCH="${BRANCH:-main}"
-TARGET_DIR="${TARGET_DIR:-/opt/step-ca-webui-test}"
+TARGET_DIR="${TARGET_DIR:-/opt/certharbor-test}"
 
 # colors
 if [[ -t 1 ]]; then
@@ -46,7 +46,7 @@ check() {
 cat <<EOF
 
 ${B}╔══════════════════════════════════════════════════════════════╗
-║          Step-CA WebUI, automated deployment test              ║
+║          Certharbor, automated deployment test              ║
 ╚══════════════════════════════════════════════════════════════╝${X}
 
   Repo:    $REPO_URL
@@ -115,11 +115,11 @@ check "containers running"            \
       "docker compose ps --format '{{.Service}} {{.State}}' | grep -c running" \
       0  # any non-error exit; we just check the command runs
 
-check "step-webui container is healthy"  \
-      "docker compose ps --format '{{.Service}}|{{.Status}}' | grep '^step-webui|' | grep -q healthy"
+check "certharbor-control container is healthy"  \
+      "docker compose ps --format '{{.Service}}|{{.Status}}' | grep '^certharbor-control|' | grep -q healthy"
 
-check "step-webui-web container is healthy"  \
-      "docker compose ps --format '{{.Service}}|{{.Status}}' | grep '^step-webui-web|' | grep -q healthy"
+check "certharbor-console container is healthy"  \
+      "docker compose ps --format '{{.Service}}|{{.Status}}' | grep '^certharbor-console|' | grep -q healthy"
 
 check "postgres container is healthy" \
       "docker compose ps --format '{{.Service}}|{{.Status}}' | grep '^postgres|' | grep -q healthy"
@@ -127,8 +127,8 @@ check "postgres container is healthy" \
 check "step-ca container is healthy"  \
       "docker compose ps --format '{{.Service}}|{{.Status}}' | grep '^step-ca|' | grep -q healthy"
 
-check "step-webui publishes no host port" \
-      "test -z \"\$(docker compose port step-webui 8443 2>/dev/null)\""
+check "certharbor-control publishes no host port" \
+      "test -z \"\$(docker compose port certharbor-control 8443 2>/dev/null)\""
 
 check "HTTPS responds through nginx (any 2xx/3xx)"  \
       "curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://localhost/login | grep -qE '^(200|302|303)$'"
@@ -157,8 +157,8 @@ check "credentials.txt has chmod 600" \
 check ".env has chmod 600"            \
       "stat -c '%a' .env | grep -q '^600$'"
 
-check "no errors in step-webui logs (last 50 lines)" \
-      "! docker compose logs --tail 50 step-webui 2>&1 | grep -iE 'panic|fatal|err.*template|cannot'"
+check "no errors in certharbor-control logs (last 50 lines)" \
+      "! docker compose logs --tail 50 certharbor-control 2>&1 | grep -iE 'panic|fatal|err.*template|cannot'"
 
 # ── 5. summary ────────────────────────────────────────────────────────────────
 echo

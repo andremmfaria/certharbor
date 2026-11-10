@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"step-webui/config"
-	"step-webui/models"
-	"step-webui/security"
+	"certharbor/config"
+	"certharbor/models"
+	"certharbor/security"
 
 	"github.com/pquerna/otp/totp"
 )
@@ -157,7 +157,7 @@ func localLogin() *config.Config { return &config.Config{LocalLoginEnabled: true
 func (f *loginFixture) csrf(t *testing.T) string {
 	t.Helper()
 	res := doGet(t, f.client, f.srv.URL+"/api/v1/session")
-	token := cookieValue(res.cookies, "step-webui-csrf")
+	token := cookieValue(res.cookies, "certharbor-csrf")
 	if token == "" {
 		t.Fatal("GET /api/v1/session did not mint a CSRF cookie")
 	}
@@ -264,7 +264,7 @@ func TestCreateSession_ReMintsTheCSRFPair(t *testing.T) {
 		r.Header.Set("Content-Type", "application/json")
 		r.Header.Set("X-CSRF-Token", before)
 	})
-	after := cookieValue(resp.Cookies(), "step-webui-csrf")
+	after := cookieValue(resp.Cookies(), "certharbor-csrf")
 	if after == "" || after == before {
 		t.Fatalf("csrf cookie after login = %q, want a new value different from %q", after, before)
 	}

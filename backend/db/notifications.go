@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"step-webui/models"
+	"certharbor/models"
 )
 
 // InitNotificationSchema creates the notification settings and log tables if absent,

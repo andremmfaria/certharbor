@@ -3,7 +3,7 @@ package handlers
 import (
 	"testing"
 
-	"step-webui/config"
+	"certharbor/config"
 )
 
 // TestCAClient_ConstructionFailureNotCached confirms Handler.caClient() never

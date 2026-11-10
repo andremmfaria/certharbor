@@ -10,8 +10,8 @@ import (
 // Distinct info labels keep the signing key and the encryption key
 // independent even though both come from one SECRET_KEY.
 const (
-	sessionHashKeyInfo  = "step-webui session cookie authentication key"
-	sessionBlockKeyInfo = "step-webui session cookie encryption key"
+	sessionHashKeyInfo  = "certharbor session cookie authentication key"
+	sessionBlockKeyInfo = "certharbor session cookie encryption key"
 )
 
 // sessionKeyLen is 32 for both keys: an HMAC-SHA256 key at its block-friendly

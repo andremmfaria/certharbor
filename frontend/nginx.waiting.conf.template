@@ -19,14 +19,14 @@ http {
 
   server {
     listen 8443 ssl default_server;
-    ssl_certificate /etc/step-webui/ephemeral/waiting.crt;
-    ssl_certificate_key /etc/step-webui/ephemeral/waiting.key;
+    ssl_certificate /etc/certharbor/ephemeral/waiting.crt;
+    ssl_certificate_key /etc/certharbor/ephemeral/waiting.key;
     ssl_protocols TLSv1.2 TLSv1.3;
 
     location / {
       default_type application/problem+json;
       add_header Cache-Control "no-store" always;
-      return 503 '{"type":"https://step-ca-webui/errors/web-certificate-missing","title":"Service Unavailable","status":503,"detail":"waiting for ${WEB_MISSING}"}';
+      return 503 '{"type":"https://certharbor/errors/web-certificate-missing","title":"Service Unavailable","status":503,"detail":"waiting for ${WEB_MISSING}"}';
     }
   }
 }

@@ -84,7 +84,7 @@ document.querySelectorAll('.drop-zone').forEach(setupDropZone);
   manName.addEventListener('input', function () {
     var v = this.value.trim();
     if (!v) { return; }
-    if (!crtTouched) { crt.value = 'opt/step-webui/certs/' + v + '/certificate.crt'; }
-    if (key && !keyTouched) { key.value = 'opt/step-webui/certs/' + v + '/private.key'; }
+    if (!crtTouched) { crt.value = 'opt/certharbor/certs/' + v + '/certificate.crt'; }
+    if (key && !keyTouched) { key.value = 'opt/certharbor/certs/' + v + '/private.key'; }
   });
 })();

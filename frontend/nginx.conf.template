@@ -49,7 +49,7 @@ http {
   limit_conn_zone $binary_remote_addr zone=perip:10m;
   limit_req_zone $binary_remote_addr zone=api:10m rate=${WEB_RATE_LIMIT};
 
-  # A variable proxy_pass re-resolves step-webui per request, so a recreated
+  # A variable proxy_pass re-resolves certharbor-control per request, so a recreated
   # backend container is followed without restarting nginx. It also means no
   # upstream block and no upstream keepalive, and that is what keeps request
   # smuggling unreachable: desync needs a reused connection. Adding an upstream
@@ -63,8 +63,8 @@ http {
     server_name ${WEB_HOSTNAME};
     root /usr/share/nginx/html;
 
-    ssl_certificate /etc/step-webui/ssl/web.crt;
-    ssl_certificate_key /etc/step-webui/ssl/web.key;
+    ssl_certificate /etc/certharbor/ssl/web.crt;
+    ssl_certificate_key /etc/certharbor/ssl/web.key;
     ssl_protocols TLSv1.2 TLSv1.3;
 
     gzip on;
@@ -123,13 +123,13 @@ http {
       client_max_body_size 8m;
       # Stream a backup bundle instead of spooling it to disk first.
       proxy_buffering off;
-      set $backend "step-webui:8443";
+      set $backend "certharbor-control:8443";
       # $request_uri is mandatory: with a variable, proxy_pass drops the URI.
       proxy_pass https://$backend$request_uri;
-      proxy_ssl_trusted_certificate /etc/step-webui/ssl/root_ca.crt;
+      proxy_ssl_trusted_certificate /etc/certharbor/ssl/root_ca.crt;
       proxy_ssl_verify on;
       proxy_ssl_verify_depth 2;
-      proxy_ssl_name step-webui;
+      proxy_ssl_name certharbor-control;
       proxy_ssl_server_name on;
       proxy_ssl_protocols TLSv1.2 TLSv1.3;
       # nginx's own 502/504 (backend down, unresolvable, or failing TLS
@@ -150,12 +150,12 @@ http {
       proxy_hide_header X-Content-Type-Options;
       client_max_body_size 8m;
       proxy_buffering off;
-      set $backend "step-webui:8443";
+      set $backend "certharbor-control:8443";
       proxy_pass https://$backend$request_uri;
-      proxy_ssl_trusted_certificate /etc/step-webui/ssl/root_ca.crt;
+      proxy_ssl_trusted_certificate /etc/certharbor/ssl/root_ca.crt;
       proxy_ssl_verify on;
       proxy_ssl_verify_depth 2;
-      proxy_ssl_name step-webui;
+      proxy_ssl_name certharbor-control;
       proxy_ssl_server_name on;
       proxy_ssl_protocols TLSv1.2 TLSv1.3;
       error_page 502 503 504 = @apidown;
@@ -165,7 +165,7 @@ http {
       default_type application/problem+json;
       add_header Cache-Control "no-store" always;
       add_header X-Content-Type-Options "nosniff" always;
-      return 503 '{"type":"https://step-ca-webui/errors/upstream-unavailable","title":"Service Unavailable","status":503}';
+      return 503 '{"type":"https://certharbor/errors/upstream-unavailable","title":"Service Unavailable","status":503}';
     }
   }
 

@@ -10,9 +10,9 @@ import (
 	"context"
 	"net/http"
 
-	"step-webui/apitypes"
-	"step-webui/handlers"
-	appmw "step-webui/middleware"
+	"certharbor/apitypes"
+	"certharbor/handlers"
+	appmw "certharbor/middleware"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
@@ -56,7 +56,7 @@ func httpFrom(ctx context.Context) (*http.Request, http.ResponseWriter) {
 // routes below api.UseMiddleware, so they bypass every authorisation check
 // (D9). SchemasPath has its own register site independent of CreateHooks.
 func config() huma.Config {
-	cfg := huma.DefaultConfig("step-ca-webui", handlers.Version)
+	cfg := huma.DefaultConfig("certharbor", handlers.Version)
 	cfg.CreateHooks = nil
 	cfg.DocsPath = ""
 	cfg.OpenAPIPath = ""
@@ -68,7 +68,7 @@ func config() huma.Config {
 			Type:        "apiKey",
 			In:          "cookie",
 			Name:        appmw.SessionCookieBase,
-			Description: "Encrypted session cookie, served as __Host-step-webui when SESSION_SECURE is on (D6). Role names in a requirement array are documentation: enforcement is server-side.",
+			Description: "Encrypted session cookie, served as __Host-certharbor when SESSION_SECURE is on (D6). Role names in a requirement array are documentation: enforcement is server-side.",
 		},
 	}
 	// Installed here rather than on the mounted API so cmd/openapi's

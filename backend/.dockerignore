@@ -4,7 +4,7 @@
 .gitattributes
 
 # Compiled binaries (build happens inside the container)
-step-webui
+certharbor
 *.exe
 *.test
 

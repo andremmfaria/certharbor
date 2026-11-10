@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"step-webui/config"
+	"certharbor/config"
 )
 
 // defaultTestCfg returns a *config.Config that matches the docker-compose
@@ -14,7 +14,7 @@ func defaultTestCfg() *config.Config {
 	return &config.Config{ //nolint:gosec // G101: test-only cfg with fake credentials
 		CAURL:       "https://step-ca:9443",
 		RootCert:    "/home/step/certs/root_ca.crt",
-		DatabaseURL: "postgres://stepwebui:stepwebui@postgres:5432/stepwebui?sslmode=disable",
+		DatabaseURL: "postgres://certharbor:certharbor@postgres:5432/certharbor?sslmode=disable",
 	}
 }
 
@@ -36,9 +36,9 @@ func TestFindAdminConsoleCommand(t *testing.T) {
 		{id: "system.date", wantFound: true, wantName: "date", wantArgs: nil},
 		{id: "system.hostname", wantFound: true, wantName: "hostname", wantArgs: nil},
 		{id: "system.identity", wantFound: true, wantName: "id", wantArgs: nil},
-		{id: "system.disk", wantFound: true, wantName: "df", wantArgs: []string{"-h", "/opt/step-webui", "/home/step"}},
+		{id: "system.disk", wantFound: true, wantName: "df", wantArgs: []string{"-h", "/opt/certharbor", "/home/step"}},
 		{id: "system.processes", wantFound: true, wantName: "ps", wantArgs: nil},
-		{id: "app.files", wantFound: true, wantName: "ls", wantArgs: []string{"-la", "/opt/step-webui"}},
+		{id: "app.files", wantFound: true, wantName: "ls", wantArgs: []string{"-la", "/opt/certharbor"}},
 		{id: "app.version", wantFound: true, wantNative: true},
 		{id: "ca.health", wantFound: true, wantNative: true},
 		{id: "openssl.version", wantFound: true, wantName: "openssl", wantArgs: []string{"version", "-a"}},
@@ -46,7 +46,7 @@ func TestFindAdminConsoleCommand(t *testing.T) {
 			id:        "postgres.ready",
 			wantFound: true,
 			wantName:  "pg_isready",
-			wantArgs:  []string{"-h", "postgres", "-p", "5432", "-U", "stepwebui", "-d", "stepwebui"},
+			wantArgs:  []string{"-h", "postgres", "-p", "5432", "-U", "certharbor", "-d", "certharbor"},
 		},
 		// unknown command_id must be rejected
 		{id: "unknown.cmd", wantFound: false},
@@ -103,8 +103,8 @@ func TestAdminCommandLine(t *testing.T) {
 			want: "date",
 		},
 		{
-			c:    adminConsoleCommand{Name: "df", Args: []string{"-h", "/opt/step-webui"}},
-			want: "df -h /opt/step-webui",
+			c:    adminConsoleCommand{Name: "df", Args: []string{"-h", "/opt/certharbor"}},
+			want: "df -h /opt/certharbor",
 		},
 		{
 			c:    adminConsoleCommand{Native: true, ID: "ca.health"},
@@ -139,13 +139,13 @@ func TestPgIsReadyArgs(t *testing.T) {
 	}{
 		{ //nolint:gosec // G101: fake test credential
 			name: "full docker-compose default",
-			dsn:  "postgres://stepwebui:stepwebui@postgres:5432/stepwebui?sslmode=disable",
-			want: []string{"-h", "postgres", "-p", "5432", "-U", "stepwebui", "-d", "stepwebui"},
+			dsn:  "postgres://certharbor:certharbor@postgres:5432/certharbor?sslmode=disable",
+			want: []string{"-h", "postgres", "-p", "5432", "-U", "certharbor", "-d", "certharbor"},
 		},
 		{ //nolint:gosec // G101: fake test credential
 			name: "ECS RDS endpoint with password",
-			dsn:  "postgres://appuser:s3cr3t@db.cluster.us-east-1.rds.amazonaws.com:5432/stepwebui",
-			want: []string{"-h", "db.cluster.us-east-1.rds.amazonaws.com", "-p", "5432", "-U", "appuser", "-d", "stepwebui"},
+			dsn:  "postgres://appuser:s3cr3t@db.cluster.us-east-1.rds.amazonaws.com:5432/certharbor",
+			want: []string{"-h", "db.cluster.us-east-1.rds.amazonaws.com", "-p", "5432", "-U", "appuser", "-d", "certharbor"},
 		},
 		{ //nolint:gosec // G101: fake test credential
 			name: "no port in DSN defaults to 5432",
@@ -155,12 +155,12 @@ func TestPgIsReadyArgs(t *testing.T) {
 		{
 			name: "empty DSN falls back to defaults",
 			dsn:  "",
-			want: []string{"-h", "postgres", "-p", "5432", "-U", "stepwebui", "-d", "stepwebui"},
+			want: []string{"-h", "postgres", "-p", "5432", "-U", "certharbor", "-d", "certharbor"},
 		},
 		{
 			name: "malformed DSN falls back to defaults",
 			dsn:  "not-a-url",
-			want: []string{"-h", "postgres", "-p", "5432", "-U", "stepwebui", "-d", "stepwebui"},
+			want: []string{"-h", "postgres", "-p", "5432", "-U", "certharbor", "-d", "certharbor"},
 		},
 	}
 

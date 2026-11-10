@@ -9,7 +9,7 @@ import (
 // spikeBlobBody is the placeholder payload for GET /api/v1/_spike/blob,
 // unrelated to any certificate: this operation exists only to prove the
 // []byte-response mechanic Phase 4 reuses for real downloads (5.7).
-var spikeBlobBody = []byte("step-ca-webui phase 0 spike blob\n")
+var spikeBlobBody = []byte("certharbor phase 0 spike blob\n")
 
 type spikeBlobOutput struct {
 	ContentType        string `header:"Content-Type"`

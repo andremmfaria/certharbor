@@ -3,5 +3,5 @@
 # With restart "no" the container exits once and stays exited, so the poll for
 # `exited` and the ExitCode read are both well-defined.
 services:
-  step-webui:
+  certharbor-control:
     restart: "no"
