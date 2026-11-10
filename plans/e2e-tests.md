@@ -1,4 +1,4 @@
-# End-to-End Test Specification: step-ca-webui
+# End-to-End Test Specification: certharbor
 
 Status: 2026-09-23. Verified against `backend/` at `9b9d40a`, except Section 2.7.4, which describes the code as it stood before its three prerequisites landed.
 
@@ -40,8 +40,8 @@ Status: 2026-09-23. Verified against `backend/` at `9b9d40a`, except Section 2.7
 | `npx playwright test -g 'E2E-CERT-05'` | one test by ID, since every title begins with its ID |
 | `npx playwright show-report` | open the HTML report from the last local run |
 | `npx playwright show-trace <trace.zip>` | inspect a failure's trace, including request and response bodies |
-| `make e2e-restart-ui` | restart `step-webui`, which clears both process-local rate limiters |
-| `make e2e-reset-ssl` | remove the `step-webui-ssl` volume only |
+| `make e2e-restart-ui` | restart `certharbor`, which clears both process-local rate limiters |
+| `make e2e-reset-ssl` | remove the `certharbor-ssl` volume only |
 | `make e2e-seed-history N` | insert exactly N synthetic `cert_history` rows |
 | `./test/e2e/scenario.sh <scenario>` | run one bootstrap scenario, driving the `infra` project against its own disposable stack |
 | `./test/e2e/collect.sh <dir>` | collect the artifact set in Section 4.6, redacting as it writes |
@@ -49,7 +49,7 @@ Status: 2026-09-23. Verified against `backend/` at `9b9d40a`, except Section 2.7
 
 ## 1. Purpose and scope
 
-This is the project's end-to-end suite. It validates the deployed `step-ca-webui` stack (postgres + step-ca + step-webui, `docker-compose.yml`) as a black box: real HTTP requests against a running container set, real TLS handshakes, real files on the compose volumes. A test belongs here when its property is only observable against a running stack.
+This is the project's end-to-end suite. It validates the deployed `certharbor` stack (postgres + step-ca + certharbor, `docker-compose.yml`) as a black box: real HTTP requests against a running container set, real TLS handshakes, real files on the compose volumes. A test belongs here when its property is only observable against a running stack.
 
 The suite was seeded from the step CLI to `ca` library swap plan, removed on 2026-10-21 once the swap had fully landed in `backend/stepca/` (see `plans/frontend-backend-split.md`, Section 12). Section 5 traces which tests discharge which of that plan's criteria and risks.
 
@@ -132,13 +132,13 @@ Nothing else in Section 3 is expected red. In particular E2E-AUTH-11 through E2E
 
 **Mailpit hygiene within this leg.** E2E-AUTH-09 and E2E-NOTIF-01 share one mailpit instance and each asserts "exactly one message arrives." Every mail-consuming test in this leg purges mailpit's inbox, or records its current message count as a baseline, immediately before the step that expects delivery, and diffs against that baseline rather than asserting an absolute inbox size. E2E-AUTH-09 runs before E2E-NOTIF-01 in this leg: both configure SMTP through `POST /admin/notifications` as their own precondition, so E2E-NOTIF-01's settings POST is the one left in effect, and neither depends on the other's configuration surviving.
 
-**Intra-leg order and env restoration (`oidc-mail`).** E2E-AUTH-08, E2E-AUTH-09, E2E-AUTH-13, E2E-AUTH-16 and E2E-NOTIF-01 run first, against the leg's stock OIDC-plus-mail override with no other env change beyond E2E-AUTH-09's own `PUBLIC_BASE_URL` phase, which that entry's own teardown restores. E2E-CFG-02 runs next, starting from `TRUST_PROXY=true` with an untrusted `TRUSTED_PROXY_CIDRS`, widening it mid-test, and ending its merged final phase on `TRUST_PROXY=false`; its own teardown restores both keys to the leg's starting values. E2E-CFG-01's `LOCAL_LOGIN_ENABLED` row runs next, starting from the leg's stock `LOCAL_LOGIN_ENABLED=true` and restoring it before handing off. E2E-CFG-01's `USE_HTTPS` row runs last and is terminal for the leg, since it leaves `step-webui`'s own healthcheck failing by design (Section 3.12); nothing in the leg runs after it, so it carries no restore step. Every row that flips an environment key states its own starting value and its own restore step in its own entry, on top of this order. The leg's stack starts from a stock `.env` plus the compose overrides named above, with no other pre-existing edit.
+**Intra-leg order and env restoration (`oidc-mail`).** E2E-AUTH-08, E2E-AUTH-09, E2E-AUTH-13, E2E-AUTH-16 and E2E-NOTIF-01 run first, against the leg's stock OIDC-plus-mail override with no other env change beyond E2E-AUTH-09's own `PUBLIC_BASE_URL` phase, which that entry's own teardown restores. E2E-CFG-02 runs next, starting from `TRUST_PROXY=true` with an untrusted `TRUSTED_PROXY_CIDRS`, widening it mid-test, and ending its merged final phase on `TRUST_PROXY=false`; its own teardown restores both keys to the leg's starting values. E2E-CFG-01's `LOCAL_LOGIN_ENABLED` row runs next, starting from the leg's stock `LOCAL_LOGIN_ENABLED=true` and restoring it before handing off. E2E-CFG-01's `USE_HTTPS` row runs last and is terminal for the leg, since it leaves `certharbor`'s own healthcheck failing by design (Section 3.12); nothing in the leg runs after it, so it carries no restore step. Every row that flips an environment key states its own starting value and its own restore step in its own entry, on top of this order. The leg's stack starts from a stock `.env` plus the compose overrides named above, with no other pre-existing edit.
 
 ## 2. Test environment
 
 ### 2.1 Compose stack
 
-Standard stack: `docker-compose.yml` with `postgres` (16-alpine), `step-ca` (`smallstep/step-ca:0.30.2`), `step-webui` (built from `backend/Dockerfile`). Bring up with:
+Standard stack: `docker-compose.yml` with `postgres` (16-alpine), `step-ca` (`smallstep/step-ca:0.30.2`), `certharbor` (built from `backend/Dockerfile`). Bring up with:
 
 ```
 cp .env.example .env
@@ -146,40 +146,40 @@ make setup                    # generates secrets/postgres_password, secrets/sec
 docker compose up -d --build
 ```
 
-`make setup` only creates `secrets/*` files if absent (`FORCE=1` to regenerate). `secrets/ca_password` is read by `step-ca` at first init (`DOCKER_STEPCA_INIT_PASSWORD_FILE`) and by `step-webui` (`PROVISIONER_PASSWORD_FILE`) to write `PASSWORD_FILE` (`backend/entrypoint.sh`).
+`make setup` only creates `secrets/*` files if absent (`FORCE=1` to regenerate). `secrets/ca_password` is read by `step-ca` at first init (`DOCKER_STEPCA_INIT_PASSWORD_FILE`) and by `certharbor` (`PROVISIONER_PASSWORD_FILE`) to write `PASSWORD_FILE` (`backend/entrypoint.sh`).
 
-Six named volumes exist: `postgres-data`, `step-ca-data`, `step-webui-certs`, `step-webui-ssl`, `step-webui-data`, `step-webui-uploads` (`docker-compose.yml:142-148`). Five of them are backup components and E2E-BAK-01 asserts one tarball each: `step-ca-data`, `step-webui-data`, `step-webui-certs`, `step-webui-uploads`, plus `postgres-data` as a SQL dump rather than a tarball. `step-webui-ssl` is deliberately excluded from the bundle, since the UI's serving certificate is reissued on boot rather than restored.
+Six named volumes exist: `postgres-data`, `step-ca-data`, `certharbor-certs`, `certharbor-ssl`, `certharbor-data`, `certharbor-uploads` (`docker-compose.yml:142-148`). Five of them are backup components and E2E-BAK-01 asserts one tarball each: `step-ca-data`, `certharbor-data`, `certharbor-certs`, `certharbor-uploads`, plus `postgres-data` as a SQL dump rather than a tarball. `certharbor-ssl` is deliberately excluded from the bundle, since the UI's serving certificate is reissued on boot rather than restored.
 
-`step-ca-data` is additionally mounted into `step-webui` **read-only** at `/home/step` (`docker-compose.yml:71`). Section 2.4 covers the consequences.
+`step-ca-data` is additionally mounted into `certharbor` **read-only** at `/home/step` (`docker-compose.yml:71`). Section 2.4 covers the consequences.
 
 ### 2.2 Fresh-volume vs reused-volume scenarios
 
 Two distinct starting states. The bootstrap tests in Section 3.1 need the fresh one, most of the rest do not.
 
 - **Fresh volumes** (`docker compose down -v` first, or a never-started stack): all six volumes empty. `step-ca`'s `DOCKER_STEPCA_INIT_*` env vars (name, DNS names, provisioner) take effect only on this path, since they are consumed by `step ca init` at first boot.
-- **Reused volumes**: `step-ca-data` already holds `ca.json` plus root and intermediate certs, and `postgres-data` already holds a populated `users` table, so the `STEPWEBUI_ADMIN_PASSWORD` seeding in Section 2.3 is skipped.
+- **Reused volumes**: `step-ca-data` already holds `ca.json` plus root and intermediate certs, and `postgres-data` already holds a populated `users` table, so the `CERTHARBOR_ADMIN_PASSWORD` seeding in Section 2.3 is skipped.
 
 **The TLS duration claims are not part of that split.** `scripts/step-ca-bootstrap.sh` re-patches `ca.json` on **every** step-ca start: it reads `STEPCA_DEFAULT_TLS_CERT_DURATION` and `STEPCA_MAX_TLS_CERT_DURATION` from the environment and rewrites `defaultTLSCertDuration`/`maxTLSCertDuration` on the named provisioner via `jq` unconditionally (`scripts/step-ca-bootstrap.sh:26-60`), whether or not the volume is fresh. Changing either duration therefore requires `step-ca` to be **recreated** (`docker compose up -d step-ca`), not a fresh volume. `docker compose restart` reuses the container's existing environment and does not pick up an `.env` edit, so `restart` alone leaves the old duration in place; `up -d` re-reads `.env` and recreates the container with it. This materially cheapens every duration-boundary test: E2E-CERT-11 lowers `STEPCA_MAX_TLS_CERT_DURATION` and restores it with two recreates rather than two 90-second `down -v` cycles.
 
-The same script also relaxes `$STEPPATH/certs` to 0755 and the `*.crt` files to 0644 on every start (`:20-24`), which is what makes the read-only volume share readable by step-webui's non-root uid at all.
+The same script also relaxes `$STEPPATH/certs` to 0755 and the `*.crt` files to 0644 on every start (`:20-24`), which is what makes the read-only volume share readable by certharbor's non-root uid at all.
 
-Tear down fresh-volume tests with `docker compose down -v`. Reused-volume tests need only `docker compose down`, or targeted cleanup of a specific row and file. Two bootstrap tests need less than either: E2E-BOOT-03 and E2E-BOOT-04 care only about `/opt/step-webui/ssl`, so `docker volume rm <project>_step-webui-ssl` is sufficient and is roughly two orders of magnitude faster than a full `down -v`, and it avoids re-seeding the admin user.
+Tear down fresh-volume tests with `docker compose down -v`. Reused-volume tests need only `docker compose down`, or targeted cleanup of a specific row and file. Two bootstrap tests need less than either: E2E-BOOT-03 and E2E-BOOT-04 care only about `/opt/certharbor/ssl`, so `docker volume rm <project>_certharbor-ssl` is sufficient and is roughly two orders of magnitude faster than a full `down -v`, and it avoids re-seeding the admin user.
 
 ### 2.3 Seed credentials flow
 
-`db/schema.go` seeds the initial admin **only when the `users` table is empty**, and **fails startup (`log.Fatal`) if `STEPWEBUI_ADMIN_PASSWORD` is unset at that point** (`schema.go:145-162`, `resolveAdminPassword`, `schema.go:187-195`):
+`db/schema.go` seeds the initial admin **only when the `users` table is empty**, and **fails startup (`log.Fatal`) if `CERTHARBOR_ADMIN_PASSWORD` is unset at that point** (`schema.go:145-162`, `resolveAdminPassword`, `schema.go:187-195`):
 
 ```go
 if pw == "" {
-    return "", fmt.Errorf("[FATAL] No admin user exists and STEPWEBUI_ADMIN_PASSWORD is not set. ...")
+    return "", fmt.Errorf("[FATAL] No admin user exists and CERTHARBOR_ADMIN_PASSWORD is not set. ...")
 }
 ```
 
-There is no default password. Under the stock `restart: unless-stopped` policy, a fresh volume with `STEPWEBUI_ADMIN_PASSWORD` unset crash-loops `step-webui`, visible as the container never passing its healthcheck and `docker compose ps` showing it restarting. E2E-BOOT-07 case (b) runs under the `fatals` scenario's own `restart: "no"` override instead, so it observes one non-zero exit and an `exited` container rather than this crash loop.
+There is no default password. Under the stock `restart: unless-stopped` policy, a fresh volume with `CERTHARBOR_ADMIN_PASSWORD` unset crash-loops `certharbor`, visible as the container never passing its healthcheck and `docker compose ps` showing it restarting. E2E-BOOT-07 case (b) runs under the `fatals` scenario's own `restart: "no"` override instead, so it observes one non-zero exit and an `exited` container rather than this crash loop.
 
-Every fresh-volume test must set `STEPWEBUI_ADMIN_PASSWORD` in `.env` before `docker compose up`, and both CI scenario drivers do. Seeded user: `username=admin`, `role=admin`, password equal to the env value.
+Every fresh-volume test must set `CERTHARBOR_ADMIN_PASSWORD` in `.env` before `docker compose up`, and both CI scenario drivers do. Seeded user: `username=admin`, `role=admin`, password equal to the env value.
 
-In **local development**, remove `STEPWEBUI_ADMIN_PASSWORD` from `.env` after the first successful login, since it is not re-read once a user row exists. In **CI** it stays in `.env` for the life of the job, because jobs are ephemeral and a later step may recreate the stack. The collector redacts it before any artifact is written (Section 4.6), and E2E-SEC-04 asserts that the redaction worked.
+In **local development**, remove `CERTHARBOR_ADMIN_PASSWORD` from `.env` after the first successful login, since it is not re-read once a user row exists. In **CI** it stays in `.env` for the life of the job, because jobs are ephemeral and a later step may recreate the stack. The collector redacts it before any artifact is written (Section 4.6), and E2E-SEC-04 asserts that the redaction worked.
 
 ### 2.4 Root provisioning and the `UI_TLS_MODE` matrix
 
@@ -205,17 +205,17 @@ There are **four** root-provisioning modes, not three, and they are tried in a f
 
 Three of those six rows end in a self-signed certificate, and all three log a message containing the substring `falling back to self-signed` (`tlsbootstrap.go:214`, `:230`, `:235`). **No test may treat that substring as a positive identification of a path.** Self-signed is the terminal state of every failure path and also the default-branch outcome. Match the exact full message, and pair it with the message that uniquely identifies the path, which for the retry loop is `obtaining UI leaf certificate from step-ca`. Asserting the substring's *count is zero* is a different and legitimate use, and E2E-BOOT-04 does exactly that.
 
-`SSL_CERT` and `SSL_KEY` are **not** environment variables. `config.Load` hardcodes `/opt/step-webui/ssl/server.crt` and `/opt/step-webui/ssl/server.key` (`config/config.go:93-94`), with no `getEnv` for either. Tests that need a pre-seeded UI certificate must write to those two fixed paths inside the `step-webui-ssl` volume.
+`SSL_CERT` and `SSL_KEY` are **not** environment variables. `config.Load` hardcodes `/opt/certharbor/ssl/server.crt` and `/opt/certharbor/ssl/server.key` (`config/config.go:93-94`), with no `getEnv` for either. Tests that need a pre-seeded UI certificate must write to those two fixed paths inside the `certharbor-ssl` volume.
 
 ### 2.5 Which `.env` keys actually reach the container
 
-`docker-compose.yml`'s `step-webui` environment block is the whole interface. A key that is absent from that block, or hardcoded in it, cannot be set from `.env`, and the edit fails silently rather than erroring.
+`docker-compose.yml`'s `certharbor` environment block is the whole interface. A key that is absent from that block, or hardcoded in it, cannot be set from `.env`, and the edit fails silently rather than erroring.
 
 | Key | Reaches the container | How a test sets it |
 |---|---|---|
 | `UI_TLS_MODE`, `CA_FINGERPRINT`, `CA_ROOT_CERT_PEM`, `UI_HOSTNAME`, `HOST_IP` | yes | `.env` |
-| `UI_HTTPS_PORT` | **host-side only.** It sets the published host port in the `ports:` mapping (`docker-compose.yml:65`) and never appears in the `step-webui` environment block, so it changes what a host-context test dials, not anything the process reads | `.env`, consumed by tests as the port to connect to |
-| `SESSION_SECURE`, `ENABLE_HSTS`, `PUBLIC_BASE_URL`, `STEPWEBUI_ADMIN_PASSWORD` | yes | `.env` |
+| `UI_HTTPS_PORT` | **host-side only.** It sets the published host port in the `ports:` mapping (`docker-compose.yml:65`) and never appears in the `certharbor` environment block, so it changes what a host-context test dials, not anything the process reads | `.env`, consumed by tests as the port to connect to |
+| `SESSION_SECURE`, `ENABLE_HSTS`, `PUBLIC_BASE_URL`, `CERTHARBOR_ADMIN_PASSWORD` | yes | `.env` |
 | `PROVISIONER`, `TZ`, `STEP_CA_IMAGE`, `STEPCA_DEFAULT_TLS_CERT_DURATION`, `STEPCA_MAX_TLS_CERT_DURATION` | yes | `.env`, then recreate the affected service (`docker compose up -d <service>`). `restart` reuses the existing container's environment and does not apply an `.env` edit |
 | `SECRET_KEY_FILE` | yes, but hardcoded to `/run/secrets/secret_key` (`:100`) | not settable |
 | `SECRET_KEY` | **no** key exists in the block at all | write the value into `secrets/secret_key` |
@@ -225,15 +225,15 @@ Three of those six rows end in a self-signed certificate, and all three log a me
 | all eleven `OIDC_*` | **no**, absent | `compose.e2e-oidc.yml` |
 | `TRUST_PROXY`, `TRUSTED_PROXY_CIDRS`, `LOCAL_LOGIN_ENABLED` | **no**, absent | `compose.e2e-oidc.yml`. `TRUST_PROXY=true` without a usable `TRUSTED_PROXY_CIDRS` is fatal at boot |
 | `USE_HTTPS` | **no**, absent | `compose.e2e-config.yml` |
-| `ALLOWED_DOMAIN_SUFFIXES` | **no**, absent from the `step-webui` environment block (`docker-compose.yml:76-109`); the key exists only as a commented-out example at `.env.example:210`. Setting it in `.env` alone is the silent no-op this section warns about | `compose.e2e-config.yml`, then recreate `step-webui`. Comma-separated; empty means unrestricted |
+| `ALLOWED_DOMAIN_SUFFIXES` | **no**, absent from the `certharbor` environment block (`docker-compose.yml:76-109`); the key exists only as a commented-out example at `.env.example:210`. Setting it in `.env` alone is the silent no-op this section warns about | `compose.e2e-config.yml`, then recreate `certharbor`. Comma-separated; empty means unrestricted |
 | `UI_CERT_DURATION` | **not yet.** Owed by the Section 2.7.4 prerequisite. Once `config.Load` reads it, it needs the same treatment as `ALLOWED_DOMAIN_SUFFIXES`: a passthrough added to `compose.e2e-config.yml` | `compose.e2e-config.yml`, once the prerequisite lands |
-| `SSL_CERT`, `SSL_KEY` | **no**, and not env vars in the code either | write to the fixed paths in `step-webui-ssl` |
+| `SSL_CERT`, `SSL_KEY` | **no**, and not env vars in the code either | write to the fixed paths in `certharbor-ssl` |
 
 **`.env.example` is stale in two places** and neither is a code defect:
 
 | `.env.example` | Claim | Reality |
 |---|---|---|
-| `:31` | `STEPWEBUI_ADMIN_PASSWORD` "If left empty, defaults to `Admin123!`" | there is no default, and startup fatals (Section 2.3) |
+| `:31` | `CERTHARBOR_ADMIN_PASSWORD` "If left empty, defaults to `Admin123!`" | there is no default, and startup fatals (Section 2.3) |
 | `:124-125` | `SSL_CERT` and `SSL_KEY` are settable | both are hardcoded in `config.Load` |
 
 ### 2.6 Log-assertion mechanics
@@ -248,7 +248,7 @@ Consequences that bind every log-based assertion in this document:
 
 The same positive-control requirement applies to absence assertions over the database, over the CA's own request log, and over rendered pages.
 
-**Recreates truncate `docker compose logs`.** A `docker compose up -d <service>` recreate replaces the container, and `docker compose logs` only ever shows the current container's own log, not any predecessor's. Several tests recreate `step-webui` mid-run (E2E-CERT-11, E2E-CERT-12, E2E-CFG-01, E2E-CFG-02, among others), so a full-history log sweep taken after any of them has already lost everything logged before the most recent recreate. The rule: **before every `step-webui` recreate, the harness appends the container's current log to a cumulative capture file**, then lets the recreate proceed. Any test or script that needs the run's whole log history reads that cumulative capture file rather than calling `docker compose logs` directly. E2E-SEC-03's full-log sweep and `collect.sh` (Section 4.6) both depend on this and are the two places it matters; this is the one place the rule is stated.
+**Recreates truncate `docker compose logs`.** A `docker compose up -d <service>` recreate replaces the container, and `docker compose logs` only ever shows the current container's own log, not any predecessor's. Several tests recreate `certharbor` mid-run (E2E-CERT-11, E2E-CERT-12, E2E-CFG-01, E2E-CFG-02, among others), so a full-history log sweep taken after any of them has already lost everything logged before the most recent recreate. The rule: **before every `certharbor` recreate, the harness appends the container's current log to a cumulative capture file**, then lets the recreate proceed. Any test or script that needs the run's whole log history reads that cumulative capture file rather than calling `docker compose logs` directly. E2E-SEC-03's full-log sweep and `collect.sh` (Section 4.6) both depend on this and are the two places it matters; this is the one place the rule is stated.
 
 ### 2.7 Required test infrastructure
 
@@ -258,12 +258,12 @@ Nothing in Section 3 is runnable until this list is built. Every item is referen
 
 | Override | What it changes | Unblocks |
 |---|---|---|
-| `compose.e2e-image.yml` | replaces `step-webui`'s `build:` block with `image: step-ca-webui:e2e` | every CI job. Without it each job pays its own `up -d --build`. It does not remove `build:` from the merged config, since compose overrides only add or replace keys by default; that is harmless here because CI never passes `--build`, so the unused `build:` block is never evaluated |
-| `compose.e2e-fingerprint.yml` | drops the `step-ca-data:/home/step:ro` mount with `volumes: !override [...]` (compose's merge-override tag; a plain `volumes:` key would be merged with the base list rather than replacing it, and the read-only mount would survive), sets `ROOT_CERT: /opt/step-webui/data/root_ca.crt` on a writable volume | E2E-BOOT-01, E2E-BOOT-05, E2E-BOOT-06, E2E-BOOT-09 |
-| `compose.e2e-nodeps.yml` | removes `step-webui`'s `depends_on` conditions on `step-ca` and `postgres` with `depends_on: !reset` (compose ≥ v2.24; a plain `depends_on:` key merges rather than clears). Where the pinned compose version predates `!reset`, the scenario driver runs `docker compose up --no-deps step-webui` instead | E2E-BOOT-02, E2E-BOOT-07 case (c) |
-| `compose.e2e-oidc.yml` | adds `ghcr.io/navikt/mock-oauth2-server` plus a `mock-oidc-ready` readiness container, since the upstream image ships no healthcheck **and is distroless**, so the `wget` probe an earlier revision specified could never run and left `step-webui` waiting on it forever, and passes through all eleven `OIDC_*` keys plus `LOCAL_LOGIN_ENABLED`, `TRUST_PROXY` and `TRUSTED_PROXY_CIDRS`, gated on `E2E_OIDC_ENABLED=1` | E2E-AUTH-08, E2E-AUTH-13, E2E-AUTH-16, E2E-CFG-01's `LOCAL_LOGIN_ENABLED` row, E2E-CFG-02 |
+| `compose.e2e-image.yml` | replaces `certharbor`'s `build:` block with `image: certharbor:e2e` | every CI job. Without it each job pays its own `up -d --build`. It does not remove `build:` from the merged config, since compose overrides only add or replace keys by default; that is harmless here because CI never passes `--build`, so the unused `build:` block is never evaluated |
+| `compose.e2e-fingerprint.yml` | drops the `step-ca-data:/home/step:ro` mount with `volumes: !override [...]` (compose's merge-override tag; a plain `volumes:` key would be merged with the base list rather than replacing it, and the read-only mount would survive), sets `ROOT_CERT: /opt/certharbor/data/root_ca.crt` on a writable volume | E2E-BOOT-01, E2E-BOOT-05, E2E-BOOT-06, E2E-BOOT-09 |
+| `compose.e2e-nodeps.yml` | removes `certharbor`'s `depends_on` conditions on `step-ca` and `postgres` with `depends_on: !reset` (compose ≥ v2.24; a plain `depends_on:` key merges rather than clears). Where the pinned compose version predates `!reset`, the scenario driver runs `docker compose up --no-deps certharbor` instead | E2E-BOOT-02, E2E-BOOT-07 case (c) |
+| `compose.e2e-oidc.yml` | adds `ghcr.io/navikt/mock-oauth2-server` plus a `mock-oidc-ready` readiness container, since the upstream image ships no healthcheck **and is distroless**, so the `wget` probe an earlier revision specified could never run and left `certharbor` waiting on it forever, and passes through all eleven `OIDC_*` keys plus `LOCAL_LOGIN_ENABLED`, `TRUST_PROXY` and `TRUSTED_PROXY_CIDRS`, gated on `E2E_OIDC_ENABLED=1` | E2E-AUTH-08, E2E-AUTH-13, E2E-AUTH-16, E2E-CFG-01's `LOCAL_LOGIN_ENABLED` row, E2E-CFG-02 |
 | `compose.e2e-mail.yml` | adds `axllent/mailpit`, SMTP on 1025 and HTTP API on 8025, gated on `E2E_MAIL_ENABLED=1` | E2E-AUTH-09, E2E-NOTIF-01 |
-| `compose.e2e-le.yml` | adds a local ACME server (`pebble` or equivalent) and an HTTP-01 challenge path routed to `step-webui`'s port 80, gated on `E2E_LE_ENABLED=1`. Passes through the `LE_ACME_DIRECTORY_URL` prerequisite from Section 2.7.4 pointed at the local server, plus `LEGO_CA_CERTIFICATES` so `lego`'s HTTP client trusts the local server's self-signed root | E2E-LE-01 through E2E-LE-04, and the manager and admin `/le/*` rows of E2E-RBAC-01. The viewer `403` half of those rows needs no override, since `RequireRole` rejects before any LE-specific code runs, and runs unconditionally in the PR-tier entry (Section 3.3) |
+| `compose.e2e-le.yml` | adds a local ACME server (`pebble` or equivalent) and an HTTP-01 challenge path routed to `certharbor`'s port 80, gated on `E2E_LE_ENABLED=1`. Passes through the `LE_ACME_DIRECTORY_URL` prerequisite from Section 2.7.4 pointed at the local server, plus `LEGO_CA_CERTIFICATES` so `lego`'s HTTP client trusts the local server's self-signed root | E2E-LE-01 through E2E-LE-04, and the manager and admin `/le/*` rows of E2E-RBAC-01. The viewer `403` half of those rows needs no override, since `RequireRole` rejects before any LE-specific code runs, and runs unconditionally in the PR-tier entry (Section 3.3) |
 | `compose.e2e-config.yml` | passes through `USE_HTTPS`, `ALLOWED_DOMAIN_SUFFIXES` and, once the Section 2.7.4 prerequisite lands, `UI_CERT_DURATION` | E2E-CFG-01's `USE_HTTPS` row, E2E-CERT-12, E2E-RENEW-01 |
 
 Without `compose.e2e-fingerprint.yml`, `CA_FINGERPRINT` is unreachable in this deployment: the root cert is always already present, so `ensureRootCert` early-returns and never reads the fingerprint, and even if it did the fetch would write back to a read-only mount and fail with `EROFS`. `docker-compose.yml:89-94` says as much in its own comment.
@@ -278,9 +278,9 @@ Without `compose.e2e-fingerprint.yml`, `CA_FINGERPRINT` is unreachable in this d
 |---|---|
 | `test/e2e` as its own Node project | Playwright Test in TypeScript, with its own `package.json`, `tsconfig.json` and `playwright.config.ts`. Kept outside both the Go module and the repo-root frontend tooling, so its dependencies never reach `govulncheck` or `trivy-fs`, both currently blocking. `@playwright/test`'s version here must match the tag on the harness image below, or the reporter and the runtime disagree |
 | a pinned `mcr.microsoft.com/playwright` image | the base for the harness image below. Pinned by tag and digest, since an unpinned image changes browser version between runs. The digest is a placeholder until filled in before the workflow's first run |
-| `test/e2e/Dockerfile`, the harness image | `FROM` the pinned Playwright image, adding `docker-ce-cli` and `docker-compose-plugin`, then `COPY package*.json ./` and `npm ci` before the rest of the project is copied in, so the `node_modules` tree is baked into an image layer rather than reinstalled per job. Built once by the `image` job alongside `step-ca-webui:e2e` and cached the same way. This is what lets the `api` and `ui` containers reach `docker`/`docker compose` over a mounted socket, which is the single mechanism this suite uses for every container-touching or database-touching assertion the `api`/`ui` projects need: `docker compose exec step-webui ...`, `docker compose logs ...`, `docker compose stop/start ...`, and `docker compose exec -T postgres psql ...` for database checks, rather than a second, separate mechanism for each. It is also what makes the warm-cache `npm ci` numbers in Section 4.2.1's cost table achievable: without the baked-in layer, every container's `npm ci` would pay the cold-cache cost |
-| the repo root and `/var/run/docker.sock`, bind-mounted into the harness container | gives the container the compose file, `.env`, `secrets/*` and the ability to drive `docker compose` on the same stack it is a member of. `STEPWEBUI_ADMIN_PASSWORD` and the `secrets/ca_password`/`secret_key`/`postgres_password` canaries are read directly off the mounted files rather than passed as additional environment variables, which is one fewer thing to keep in sync with Section 4.5's masking |
-| `test/e2e/scenario.sh <scenario>` | one entry point per bootstrap scenario, naming a compose override and invoking the `infra` project with the scenario's grep filter. Sets `STEPWEBUI_ADMIN_PASSWORD`, except for the `fatals` scenario's case (b) |
+| `test/e2e/Dockerfile`, the harness image | `FROM` the pinned Playwright image, adding `docker-ce-cli` and `docker-compose-plugin`, then `COPY package*.json ./` and `npm ci` before the rest of the project is copied in, so the `node_modules` tree is baked into an image layer rather than reinstalled per job. Built once by the `image` job alongside `certharbor:e2e` and cached the same way. This is what lets the `api` and `ui` containers reach `docker`/`docker compose` over a mounted socket, which is the single mechanism this suite uses for every container-touching or database-touching assertion the `api`/`ui` projects need: `docker compose exec certharbor ...`, `docker compose logs ...`, `docker compose stop/start ...`, and `docker compose exec -T postgres psql ...` for database checks, rather than a second, separate mechanism for each. It is also what makes the warm-cache `npm ci` numbers in Section 4.2.1's cost table achievable: without the baked-in layer, every container's `npm ci` would pay the cold-cache cost |
+| the repo root and `/var/run/docker.sock`, bind-mounted into the harness container | gives the container the compose file, `.env`, `secrets/*` and the ability to drive `docker compose` on the same stack it is a member of. `CERTHARBOR_ADMIN_PASSWORD` and the `secrets/ca_password`/`secret_key`/`postgres_password` canaries are read directly off the mounted files rather than passed as additional environment variables, which is one fewer thing to keep in sync with Section 4.5's masking |
+| `test/e2e/scenario.sh <scenario>` | one entry point per bootstrap scenario, naming a compose override and invoking the `infra` project with the scenario's grep filter. Sets `CERTHARBOR_ADMIN_PASSWORD`, except for the `fatals` scenario's case (b) |
 | `test/e2e/collect.sh <dir>` | the artifact collector, specified in Section 4.6. Redacts before it writes. Tolerates a dead or absent stack, since it also runs after a failure that killed the stack, and always emits at least a marker file, so `upload-artifact`'s `if-no-files-found: error` fails on a genuinely empty collection rather than masking the real failure behind a missing-artifact error |
 | `test/e2e/assert-redacted.sh <dir>` | E2E-SEC-04's canary sweep over the collected artifact |
 | an OTP library in the harness project | TOTP code generation for E2E-AUTH-04 through E2E-AUTH-07, behind the boundary-guard fixture in Section 4.1.4 |
@@ -294,8 +294,8 @@ The `infra` project runs on the host, because it drives `docker compose` and ins
 
 | Target | Effect |
 |---|---|
-| `make e2e-restart-ui` | `docker compose restart step-webui`. Both rate limiters are process-local maps, so this converts two multi-minute real-time waits into a wait of roughly 20-30 seconds to healthy again, since the healthcheck's own `start_period` is 20s (`docker-compose.yml:117-122`) before probing even begins |
-| `make e2e-reset-ssl` | removes the `step-webui-ssl` volume only |
+| `make e2e-restart-ui` | `docker compose restart certharbor`. Both rate limiters are process-local maps, so this converts two multi-minute real-time waits into a wait of roughly 20-30 seconds to healthy again, since the healthcheck's own `start_period` is 20s (`docker-compose.yml:117-122`) before probing even begins |
+| `make e2e-reset-ssl` | removes the `certharbor-ssl` volume only |
 | `make e2e-seed-history N` | inserts exactly N synthetic `cert_history` rows without disturbing the real ones |
 | `make e2e-fresh` | `down -v` plus `up -d --wait` |
 | `make e2e-main` | runs the `api` then the `ui` project against the long-lived stack, in the order given in Section 3.0.3 |
@@ -314,7 +314,7 @@ All three items below are decided: the change will be made, not fallen back on. 
 - An optional floor of 1 minute in `nextRenewalSleep`, so a very short configured duration cannot drive the renewal loop into a busy spin.
 - No client-side hard floor beyond that: the CA's own `validityValidator` is the enforcer of what duration is actually acceptable, not this application.
 
-This alone is not enough to make the value reachable in a test: `docker-compose.yml`'s `step-webui` environment block has no `UI_CERT_DURATION` key either, so the compose-side half of this prerequisite is the passthrough already specified on `compose.e2e-config.yml` in Sections 2.7.1 and 2.5. The two halves must land together; landing `config.Load`'s side without the compose passthrough (or vice versa) is a silent no-op, since the container never sees the variable, or the code never reads it, and E2E-RENEW-01 would still be exercising the fallback `8760h` while believing it configured something. E2E-RENEW-01's preconditions name both halves.
+This alone is not enough to make the value reachable in a test: `docker-compose.yml`'s `certharbor` environment block has no `UI_CERT_DURATION` key either, so the compose-side half of this prerequisite is the passthrough already specified on `compose.e2e-config.yml` in Sections 2.7.1 and 2.5. The two halves must land together; landing `config.Load`'s side without the compose passthrough (or vice versa) is a silent no-op, since the container never sees the variable, or the code never reads it, and E2E-RENEW-01 would still be exercising the fallback `8760h` while believing it configured something. E2E-RENEW-01's preconditions name both halves.
 
 Lowering `STEPCA_MAX_TLS_CERT_DURATION` is not an alternative. `validityValidator.Valid` in smallstep/certificates v0.30.2 **rejects** an over-long request with a 403 and the message `requested duration of %v is more than the authorized maximum certificate duration of %v`, rather than clamping. Against a hardcoded `8760h` request and a short maximum, every issuance attempt fails, `ensureUICert` falls back to self-signed, and the renewer then computes its sleep from the ten-year self-signed certificate and waits about 6.7 years. The job hangs until the CI timeout on every run.
 
@@ -350,8 +350,8 @@ E2E-SEC-06's skip-until-fixed contract (Section 1.2) stays in force until this l
 
 Both assertion lists below were captured on a fresh stock stack (no compose override). Both are environment-dependent and neither could be derived from source; the values recorded here are what the suite encodes.
 
-- **E2E-BAK-01's component list.** `/home/step` is mounted read-only, while step-webui runs as uid 10001. `writeDirTGZ` propagates the walk error (`handlers/backup.go:297-299`), so a permission denial aborts that component. One backup on the fresh stock stack, read straight from `manifest.json`:
-  - `components`: `postgres` (`postgres-stepwebui.sql`, `ok`), `step-webui-data` (`step-webui-data.tgz`, `ok`), `step-webui-certs` (`step-webui-certs.tgz`, `ok`), `step-webui-uploads` (`step-webui-uploads.tgz`, `ok`).
+- **E2E-BAK-01's component list.** `/home/step` is mounted read-only, while certharbor runs as uid 10001. `writeDirTGZ` propagates the walk error (`handlers/backup.go:297-299`), so a permission denial aborts that component. One backup on the fresh stock stack, read straight from `manifest.json`:
+  - `components`: `postgres` (`postgres-certharbor.sql`, `ok`), `certharbor-data` (`certharbor-data.tgz`, `ok`), `certharbor-certs` (`certharbor-certs.tgz`, `ok`), `certharbor-uploads` (`certharbor-uploads.tgz`, `ok`).
   - `warnings`: `["step-ca-data failed: open /home/step/config: permission denied"]`.
   - The denied path is `/home/step/config`, not `/home/step/secrets`. `step-ca-data.tgz` **is present** in the bundle, it is not omitted: it contains the `certs/` subtree but not `config/`, since the walk aborts partway through and `writeDirTGZ` still flushes what it archived before the error. It is excluded from `components` (no successful component entry for it) and named only in `warnings`, present but incomplete rather than absent.
 - **E2E-ADM-07's check-name list.** `preflight` assembles its list from several helpers whose row counts are not fixed in source. Captured on the same fresh stock stack, in order:
@@ -383,7 +383,7 @@ Both assertion lists below were captured on a fresh stock stack (no compose over
 
 **`docker compose cp` for E2E-CERT-07:** the test plants its material through `/issue` instead.
 
-**Any `apk add` inside the runtime image:** it runs as `USER stepwebui` (uid 10001, `Dockerfile:48`) so `apk add` cannot succeed, and `openssl` is already installed (`Dockerfile:29`).
+**Any `apk add` inside the runtime image:** it runs as `USER certharbor` (uid 10001, `Dockerfile:48`) so `apk add` cannot succeed, and `openssl` is already installed (`Dockerfile:29`).
 
 ### 2.8 Running a subset locally
 
@@ -446,7 +446,7 @@ Every test that depends on a flagged stack **skips with an explicit reason** whe
 
 1. **Fixtures.** Create `viewer_user`, `manager_user` and the dedicated 2FA subject. Seed `cert_history` for E2E-HIST-01.
 2. **E2E-AUTH-01, E2E-AUTH-11, E2E-CSRF-01, E2E-CSRF-05, E2E-RBAC-01, E2E-RBAC-02, E2E-STATIC-01, E2E-SEC-06, E2E-ORIGIN-01.** These need a working login and nothing else. E2E-CSRF-05 needs two independent sessions established in the same step. E2E-AUTH-01 and E2E-AUTH-11 create and use their own throwaway users rather than the fixtures above, per the standing rule in Section 4.1.4.
-3. **E2E-CERT-01 through E2E-CERT-13.** E2E-CERT-04 and E2E-CERT-05 must operate on **different** certificate ids, since revocation and renewal interfere. E2E-CERT-07 issues its own material rather than borrowing E2E-CERT-01's, because a revoked certificate keeps both its file and its row and a scan therefore finds nothing. E2E-CERT-11 recreates `step-ca` twice and E2E-CERT-12 recreates `step-webui` once, so both take the barrier. E2E-CERT-13 destroys `e2e-server-ec-p256`, so it runs after every test that reads it.
+3. **E2E-CERT-01 through E2E-CERT-13.** E2E-CERT-04 and E2E-CERT-05 must operate on **different** certificate ids, since revocation and renewal interfere. E2E-CERT-07 issues its own material rather than borrowing E2E-CERT-01's, because a revoked certificate keeps both its file and its row and a scan therefore finds nothing. E2E-CERT-11 recreates `step-ca` twice and E2E-CERT-12 recreates `certharbor` once, so both take the barrier. E2E-CERT-13 destroys `e2e-server-ec-p256`, so it runs after every test that reads it.
 4. **E2E-PROV-01 then E2E-PROV-02**, adjacent and in that order. The first is the second's positive control.
 5. **E2E-HIST-01 to E2E-HIST-03, E2E-SEC-01.**
 6. **E2E-ADM-01 to E2E-ADM-05, E2E-ADM-07, E2E-ADM-08, then E2E-SEC-02.** E2E-SEC-02 asserts E2E-ADM-01's `console.run` row and must follow it.
@@ -465,7 +465,7 @@ Every test that depends on a flagged stack **skips with an explicit reason** whe
 
 Every test that stops, restarts or kills a container runs behind a shared **start-and-wait-healthy barrier**, never in parallel with issuance, and must restore the service and wait for healthy before releasing it. This is the canonical list, and the individual tests carry only the tag:
 
-E2E-PROV-02, E2E-ADM-03, E2E-CERT-11, E2E-CERT-12, E2E-CFG-01, E2E-CFG-02 (restarts `step-webui` between header variants and recreates it before its widened-CIDR phase), E2E-HLTH-01, E2E-HLTH-03, E2E-HLTH-04, E2E-HLTH-05, E2E-HLTH-06, E2E-AUTH-09 (which restarts `step-webui` to clear its reset budget), E2E-SPA-03 (which stops `step-webui` and starts it again), and E2E-AUTH-03's teardown fallback.
+E2E-PROV-02, E2E-ADM-03, E2E-CERT-11, E2E-CERT-12, E2E-CFG-01, E2E-CFG-02 (restarts `certharbor` between header variants and recreates it before its widened-CIDR phase), E2E-HLTH-01, E2E-HLTH-03, E2E-HLTH-04, E2E-HLTH-05, E2E-HLTH-06, E2E-AUTH-09 (which restarts `certharbor` to clear its reset budget), E2E-SPA-03 (which stops `certharbor` and starts it again), and E2E-AUTH-03's teardown fallback.
 
 #### 3.0.5 Log-absence isolation
 
@@ -495,8 +495,8 @@ Every test in this section runs against a **disposable single-purpose stack**.
 Teardown differs by test, and the differences are load-bearing:
 
 - **`docker compose down -v`** for E2E-BOOT-02, E2E-BOOT-07, E2E-BOOT-08 and E2E-BOOT-09.
-- **`down -v` for every volume except `step-ca-data`** for E2E-BOOT-01, E2E-BOOT-05 and E2E-BOOT-06. All three depend on the CA identity the fingerprint was computed from, so destroying `step-ca-data` between them invalidates `CA_FINGERPRINT` and the three tests stop being comparable. Use `docker compose down` followed by targeted `docker volume rm` of the step-webui volumes.
-- **`make e2e-reset-ssl`** for E2E-BOOT-03 and E2E-BOOT-04, which care only about `/opt/step-webui/ssl`. It is roughly two orders of magnitude faster than a full `down -v` and avoids re-seeding the admin user.
+- **`down -v` for every volume except `step-ca-data`** for E2E-BOOT-01, E2E-BOOT-05 and E2E-BOOT-06. All three depend on the CA identity the fingerprint was computed from, so destroying `step-ca-data` between them invalidates `CA_FINGERPRINT` and the three tests stop being comparable. Use `docker compose down` followed by targeted `docker volume rm` of the certharbor volumes.
+- **`make e2e-reset-ssl`** for E2E-BOOT-03 and E2E-BOOT-04, which care only about `/opt/certharbor/ssl`. It is roughly two orders of magnitude faster than a full `down -v` and avoids re-seeding the admin user.
 
 The steps below are written with `docker compose up -d --build`, which is what a developer runs locally. In CI the image is already built by the `image` job, so the scenario driver substitutes `-f compose.e2e-image.yml` and drops `--build`. That substitution is the driver's job and is not repeated in every test.
 
@@ -509,18 +509,18 @@ The steps below are written with `docker compose up -d --build`, which is what a
 
 *Preconditions:*
 1. Stack composed as `docker-compose.yml` **plus `compose.e2e-fingerprint.yml`**. Without the override this test passes without exercising anything: the root cert is already present via the read-only mount, `ensureRootCert` early-returns at its `os.Stat` guard, `CA_FINGERPRINT` is never read, and the grepped log line never appears.
-2. `.env`: `UI_TLS_MODE=stepca`, `STEPWEBUI_ADMIN_PASSWORD=<strong pw>`, `CA_ROOT_CERT_PEM` empty.
+2. `.env`: `UI_TLS_MODE=stepca`, `CERTHARBOR_ADMIN_PASSWORD=<strong pw>`, `CA_ROOT_CERT_PEM` empty.
 3. Obtain the fingerprint: `docker compose down -v`, then `docker compose up -d --wait step-ca`, then `docker compose exec step-ca step certificate fingerprint /home/step/certs/root_ca.crt`. Write it to `CA_FINGERPRINT` in `.env`. Do **not** `down -v` after this point, because `step-ca-data` must retain the cert the fingerprint was computed from. The `step` CLI is present in the `smallstep/step-ca` image. If a future image drops it, substitute `openssl x509 -in /home/step/certs/root_ca.crt -outform DER | openssl dgst -sha256`, which produces the same lowercase hex digest.
 
 *Steps:*
 1. `docker compose up -d --build`.
-2. Poll `docker compose ps --format json step-webui` until `Health == "healthy"`. Bound at **180s**. The healthcheck's own ceiling is `start_period 20s + interval 10s × retries 10 = 120s` (`docker-compose.yml:117-122`), so 180s is a real timeout rather than an unbounded wait. On expiry, report the last observed health state and the last ten log lines.
-3. `docker compose logs --no-color --timestamps step-webui | grep -F 'fetching root CA certificate via CA_FINGERPRINT'`.
-4. `docker compose logs --no-color --timestamps step-webui | grep -F 'root CA certificate fetched and verified'`.
-5. `docker compose logs --no-color --timestamps step-webui | grep -F 'UI leaf certificate obtained'`.
-6. `docker compose exec step-webui test -s /opt/step-webui/data/root_ca.crt`.
+2. Poll `docker compose ps --format json certharbor` until `Health == "healthy"`. Bound at **180s**. The healthcheck's own ceiling is `start_period 20s + interval 10s × retries 10 = 120s` (`docker-compose.yml:117-122`), so 180s is a real timeout rather than an unbounded wait. On expiry, report the last observed health state and the last ten log lines.
+3. `docker compose logs --no-color --timestamps certharbor | grep -F 'fetching root CA certificate via CA_FINGERPRINT'`.
+4. `docker compose logs --no-color --timestamps certharbor | grep -F 'root CA certificate fetched and verified'`.
+5. `docker compose logs --no-color --timestamps certharbor | grep -F 'UI leaf certificate obtained'`.
+6. `docker compose exec certharbor test -s /opt/certharbor/data/root_ca.crt`.
 7. `openssl s_client -connect localhost:${UI_HTTPS_PORT:-443} -showcerts </dev/null 2>/dev/null | openssl x509 -noout -issuer -subject -dates`.
-8. `docker compose exec step-webui which step`.
+8. `docker compose exec certharbor which step`.
 9. `grep -cE '(^|[^-[:alnum:]])step +(ca|certificate|version|crypto)([^-[:alnum:]]|$)' backend/entrypoint.sh`.
 
 *Assertions:*
@@ -545,14 +545,14 @@ The steps below are written with `docker compose up -d --build`, which is what a
 *Preconditions:* Fresh volumes, but with a **root cert present and a CA that refuses connections**. Both conditions are required, and a stack that satisfies only the second is the trap here. Concretely:
 1. `docker compose down -v`, then `docker compose up -d --wait step-ca postgres` so that `step-ca-data` is initialised and the root cert exists.
 2. `docker compose stop step-ca`.
-3. `.env`: `UI_TLS_MODE=stepca`, `STEPWEBUI_ADMIN_PASSWORD` set.
-4. `compose.e2e-nodeps.yml`, which removes `step-webui`'s `depends_on: step-ca: condition: service_healthy`. Without it `docker compose up step-webui` will not start at all against a stopped CA.
+3. `.env`: `UI_TLS_MODE=stepca`, `CERTHARBOR_ADMIN_PASSWORD` set.
+4. `compose.e2e-nodeps.yml`, which removes `certharbor`'s `depends_on: step-ca: condition: service_healthy`. Without it `docker compose up certharbor` will not start at all against a stopped CA.
 
 If the root cert is absent, `stepca.New` fails eagerly on the missing file, `caClient` is nil, `ensureUICert` takes the nil-client short-circuit, and the fallback is instantaneous. That variant is a legitimate scenario, but it is **E2E-BOOT-09**, not this test. Conflating the two produces a test that finishes in roughly zero seconds while claiming to exercise a thirty-second retry loop, which is why the timestamp gap below is an assertion rather than a note.
 
 *Steps:*
-1. `docker compose up -d --build step-webui`.
-2. Poll `docker compose logs --no-color --timestamps step-webui` every 2s until the exact line `step-ca certificate issuance failed after retries, falling back to self-signed` appears. Bound at 90s.
+1. `docker compose up -d --build certharbor`.
+2. Poll `docker compose logs --no-color --timestamps certharbor` every 2s until the exact line `step-ca certificate issuance failed after retries, falling back to self-signed` appears. Bound at 90s.
 3. `curl -sk -o /dev/null -w '%{http_code}\n' https://localhost:${UI_HTTPS_PORT:-443}/login`.
 4. `openssl s_client -connect localhost:${UI_HTTPS_PORT:-443} </dev/null 2>/dev/null | openssl x509 -noout -issuer -subject`.
 
@@ -574,7 +574,7 @@ If the root cert is absent, `stepca.New` fails eagerly on the missing file, `caC
 
 *Objective:* Prove the `provided` branch is a genuine no-op, using a live negative control rather than an absence assertion.
 
-*Preconditions:* `.env`: `UI_TLS_MODE=provided`, `STEPWEBUI_ADMIN_PASSWORD` set. Seed a certificate and key at the two hardcoded paths `/opt/step-webui/ssl/server.crt` and `/opt/step-webui/ssl/server.key` before `step-webui` starts. Generate it **on the harness**, not inside the runtime image, and copy it into the `step-webui-ssl` volume with a throwaway alpine container. The image runs as uid 10001 and cannot `apk add`, and it would not need to since `openssl` is already present, but generating outside keeps the material under the harness's control:
+*Preconditions:* `.env`: `UI_TLS_MODE=provided`, `CERTHARBOR_ADMIN_PASSWORD` set. Seed a certificate and key at the two hardcoded paths `/opt/certharbor/ssl/server.crt` and `/opt/certharbor/ssl/server.key` before `certharbor` starts. Generate it **on the harness**, not inside the runtime image, and copy it into the `certharbor-ssl` volume with a throwaway alpine container. The image runs as uid 10001 and cannot `apk add`, and it would not need to since `openssl` is already present, but generating outside keeps the material under the harness's control:
 
 ```
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -days 1 -nodes \
@@ -589,7 +589,7 @@ openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -days 1 -nodes \
 
 *Assertions:*
 - Step 2 shows `CN=test-provided` and a SHA-256 fingerprint identical to the file the harness generated.
-- Step 4 shows a **different** subject and a different fingerprint, and `docker compose logs --no-color --timestamps step-webui | grep -F 'UI leaf certificate obtained'` finds the line.
+- Step 4 shows a **different** subject and a different fingerprint, and `docker compose logs --no-color --timestamps certharbor | grep -F 'UI leaf certificate obtained'` finds the line.
 
 The negative control is what makes this test meaningful. Asserting only that no bootstrap log lines appeared in step 2 would pass just as well if the entire bootstrap block had been deleted from `main`.
 
@@ -602,13 +602,13 @@ The negative control is what makes this test meaningful. Asserting only that no 
 
 *Objective:* Prove the default branch generates a self-signed certificate in-process, and that it arrived there by the default branch rather than by falling out of a failed `stepca` attempt.
 
-*Preconditions:* Fresh `step-webui-ssl` volume. `.env`: `UI_TLS_MODE` commented out entirely, so `config.Load`'s `getEnv("UI_TLS_MODE", "self-signed")` default applies (`config/config.go:114`). `STEPWEBUI_ADMIN_PASSWORD` set.
+*Preconditions:* Fresh `certharbor-ssl` volume. `.env`: `UI_TLS_MODE` commented out entirely, so `config.Load`'s `getEnv("UI_TLS_MODE", "self-signed")` default applies (`config/config.go:114`). `CERTHARBOR_ADMIN_PASSWORD` set.
 
 *Steps:*
 1. `docker compose up -d --build`, wait for healthy.
 2. `openssl s_client -connect localhost:${UI_HTTPS_PORT:-443} </dev/null 2>/dev/null | openssl x509 -noout -issuer -subject -dates -ext subjectAltName`.
-3. `docker compose logs --no-color --timestamps step-webui | grep -cF 'generated self-signed TLS certificate'`.
-4. `docker compose logs --no-color --timestamps step-webui | grep -cF 'falling back to self-signed'`.
+3. `docker compose logs --no-color --timestamps certharbor | grep -cF 'generated self-signed TLS certificate'`.
+4. `docker compose logs --no-color --timestamps certharbor | grep -cF 'falling back to self-signed'`.
 
 *Assertions:*
 - Issuer equals subject.
@@ -636,7 +636,7 @@ The last two assertions are the point of the test. Without them it passes agains
 2. Poll the logs every 2s for the exact line `could not fetch root CA certificate after retries, continuing without it`. Bound at 90s.
 3. `docker compose ps --format json step-ca`.
 4. `docker compose exec step-ca curl -sk https://localhost:9443/health`.
-5. `docker compose exec step-webui test -e /opt/step-webui/data/root_ca.crt`.
+5. `docker compose exec certharbor test -e /opt/certharbor/data/root_ca.crt`.
 6. `curl -sk https://localhost:${UI_HTTPS_PORT:-443}/ready` and **parse the JSON**.
 7. `curl -sk -o /dev/null -w '%{http_code}\n' https://localhost:${UI_HTTPS_PORT:-443}/login`.
 
@@ -659,14 +659,14 @@ The last two assertions are the point of the test. Without them it passes agains
 
 *Objective:* Cover the fourth root-provisioning mode, which exists for ECS and Kubernetes deployments where a shared volume is impractical, and which no other test touches.
 
-*Preconditions:* `compose.e2e-fingerprint.yml` (so `ROOT_CERT` points at a writable path and no root cert pre-exists). `.env`: `UI_TLS_MODE=stepca`, `CA_FINGERPRINT` **empty**, `CA_ROOT_CERT_PEM` set to the literal PEM of the running CA's root, read out beforehand with `docker compose exec step-ca cat /home/step/certs/root_ca.crt`. `STEPWEBUI_ADMIN_PASSWORD` set.
+*Preconditions:* `compose.e2e-fingerprint.yml` (so `ROOT_CERT` points at a writable path and no root cert pre-exists). `.env`: `UI_TLS_MODE=stepca`, `CA_FINGERPRINT` **empty**, `CA_ROOT_CERT_PEM` set to the literal PEM of the running CA's root, read out beforehand with `docker compose exec step-ca cat /home/step/certs/root_ca.crt`. `CERTHARBOR_ADMIN_PASSWORD` set.
 
 *Steps:*
 1. `docker compose up -d --build`, wait for healthy.
-2. `docker compose logs --no-color --timestamps step-webui | grep -F 'wrote root CA certificate from CA_ROOT_CERT_PEM'`.
-3. `docker compose logs --no-color --timestamps step-webui | grep -cF 'fetching root CA certificate via CA_FINGERPRINT'`.
-4. `docker compose exec step-webui cat /opt/step-webui/data/root_ca.crt` and compare byte-for-byte with the PEM supplied in `CA_ROOT_CERT_PEM`.
-5. `docker compose logs --no-color --timestamps step-webui | grep -F 'UI leaf certificate obtained'`.
+2. `docker compose logs --no-color --timestamps certharbor | grep -F 'wrote root CA certificate from CA_ROOT_CERT_PEM'`.
+3. `docker compose logs --no-color --timestamps certharbor | grep -cF 'fetching root CA certificate via CA_FINGERPRINT'`.
+4. `docker compose exec certharbor cat /opt/certharbor/data/root_ca.crt` and compare byte-for-byte with the PEM supplied in `CA_ROOT_CERT_PEM`.
+5. `docker compose logs --no-color --timestamps certharbor | grep -F 'UI leaf certificate obtained'`.
 6. `curl -sk https://localhost:${UI_HTTPS_PORT:-443}/ready`.
 
 *Assertions:*
@@ -685,23 +685,23 @@ The last two assertions are the point of the test. Without them it passes agains
 
 *Objective:* Pin the five intended `log.Fatal` paths, so that "never fatal on CA failure" is asserted against a known set of fatals that are intended.
 
-*Preconditions:* Fresh volumes for cases (b) and (c). Each case is a separate `up` of `step-webui` alone with the rest of the stack already healthy. Unlike every other bootstrap scenario, `scenario.sh fatals` does **not** set `STEPWEBUI_ADMIN_PASSWORD` for case (b), which needs it absent. **The scenario's own override sets `restart: "no"` on `step-webui`**, replacing the stock `restart: unless-stopped` (`docker-compose.yml:63`), for every case in this scenario, not only case (c). Against the stock policy a fatal exit restarts the container into the same fatal, and reading `ExitCode` mid-crash-loop races the next restart; with `restart: "no"` the container exits once and stays exited. Poll `docker inspect --format '{{.State.Status}}' "$(docker compose ps -q step-webui)"` until it reports `exited`, then read `ExitCode`. Resolve the container id through `docker compose ps -q` rather than the bare name `step-webui`, since a bare name is ambiguous whenever more than one compose project is live on the same host, which every bootstrap scenario running alongside others in CI is.
+*Preconditions:* Fresh volumes for cases (b) and (c). Each case is a separate `up` of `certharbor` alone with the rest of the stack already healthy. Unlike every other bootstrap scenario, `scenario.sh fatals` does **not** set `CERTHARBOR_ADMIN_PASSWORD` for case (b), which needs it absent. **The scenario's own override sets `restart: "no"` on `certharbor`**, replacing the stock `restart: unless-stopped` (`docker-compose.yml:63`), for every case in this scenario, not only case (c). Against the stock policy a fatal exit restarts the container into the same fatal, and reading `ExitCode` mid-crash-loop races the next restart; with `restart: "no"` the container exits once and stays exited. Poll `docker inspect --format '{{.State.Status}}' "$(docker compose ps -q certharbor)"` until it reports `exited`, then read `ExitCode`. Resolve the container id through `docker compose ps -q` rather than the bare name `certharbor`, since a bare name is ambiguous whenever more than one compose project is live on the same host, which every bootstrap scenario running alongside others in CI is.
 
 *Steps and assertions, one per case:*
 
 | Case | Injected condition | Expected |
 |---|---|---|
 | (a) weak `SECRET_KEY` | write the literal `change-me-in-production-32chars!` into `secrets/secret_key`, then repeat with a string shorter than 32 bytes | Container exits non-zero. Logs contain `FATAL: SECRET_KEY is the default or shorter than 32 chars` (`main.go:132`). Both sub-cases tested |
-| (b) empty users table with no admin password | fresh `postgres-data`, `STEPWEBUI_ADMIN_PASSWORD` unset | Container exits non-zero once and stays `exited` under the scenario's `restart: "no"` override (see the preconditions above). Logs contain `No admin user exists and STEPWEBUI_ADMIN_PASSWORD is not set` (`db/schema.go:145-162`) |
+| (b) empty users table with no admin password | fresh `postgres-data`, `CERTHARBOR_ADMIN_PASSWORD` unset | Container exits non-zero once and stays `exited` under the scenario's `restart: "no"` override (see the preconditions above). Logs contain `No admin user exists and CERTHARBOR_ADMIN_PASSWORD is not set` (`db/schema.go:145-162`) |
 | (c) database unreachable | `docker compose stop postgres`, plus `compose.e2e-nodeps.yml` | Container exits non-zero. Logs contain `Cannot connect to database:` (`main.go:161`). Bound the wait at **90s**: `entrypoint.sh:70-77` runs a 60-iteration one-second wait-for-PostgreSQL loop before exec'ing the binary, so the fatal is delayed by up to 60s and is preceded by `PostgreSQL not reachable ... continuing; the app will retry.` |
 | (d) `TRUST_PROXY=true` with a malformed CIDR list, and with an empty one | `TRUST_PROXY=true`, `TRUSTED_PROXY_CIDRS=not-a-cidr`, then again with `TRUSTED_PROXY_CIDRS` unset | The malformed list: container exits non-zero and the logs contain `FATAL: TRUST_PROXY=true requires a usable TRUSTED_PROXY_CIDRS` (`main.go`). The empty list is **not** fatal: the container stays `running` and the logs contain `trusted proxy name does not resolve yet: forwarding headers are ignored until it does`, because the backend resolves `WEB_UPSTREAM_HOST` every five seconds and this scenario has no nginx for the name to resolve to. An empty `WEB_UPSTREAM_HOST` is fatal as well, but compose's default fills it in, so no stack reaches that case. This is the suite's only coverage of both sub-cases (Section 3.0.6) |
 | (e) bad `OIDC_DEFAULT_ROLE` with OIDC on | `OIDC_ENABLED=true`, `OIDC_DEFAULT_ROLE=nonsense` | Container exits non-zero. Logs contain `is not one of viewer, manager, admin` (`main.go:151-153`). The value is operator-supplied and reaches a role field without passing either `UsersPost` check, so it was a second route around the V9 invariant |
 
-The `SECRET_KEY` mechanism in case (a) is not interchangeable with an `.env` edit. `docker-compose.yml:100` passes only `SECRET_KEY_FILE`, and there is no `SECRET_KEY` key in the `step-webui` environment block, so setting it in `.env` is the silent no-op described in Section 2.5. The value has to reach `secrets/secret_key`.
+The `SECRET_KEY` mechanism in case (a) is not interchangeable with an `.env` edit. `docker-compose.yml:100` passes only `SECRET_KEY_FILE`, and there is no `SECRET_KEY` key in the `certharbor` environment block, so setting it in `.env` is the silent no-op described in Section 2.5. The value has to reach `secrets/secret_key`.
 
-For every fatal case, wait for the container to reach `exited` and assert `docker inspect --format '{{.State.ExitCode}}' "$(docker compose ps -q step-webui)"` is non-zero. A container that logs the fatal message and keeps serving never reaches `exited`, so the bounded wait fails, which is the regression this test must catch. There is no `curl` against a UI port, because the backend publishes none.
+For every fatal case, wait for the container to reach `exited` and assert `docker inspect --format '{{.State.ExitCode}}' "$(docker compose ps -q certharbor)"` is non-zero. A container that logs the fatal message and keeps serving never reaches `exited`, so the bounded wait fails, which is the regression this test must catch. There is no `curl` against a UI port, because the backend publishes none.
 
-*Positive control:* the same job runs one `up` with none of the five conditions injected and asserts the container reaches `healthy`. Without it, a compose override that simply prevented `step-webui` from starting at all would pass all five cases.
+*Positive control:* the same job runs one `up` with none of the five conditions injected and asserts the container reaches `healthy`. Without it, a compose override that simply prevented `certharbor` from starting at all would pass all five cases.
 
 *Teardown:* `docker compose down -v`.
 
@@ -712,13 +712,13 @@ For every fatal case, wait for the container to reach `exited` and assert `docke
 
 *Objective:* Cover the graceful-shutdown path (`signal.NotifyContext` on `SIGINT`/`SIGTERM`, then `srv.Shutdown`), which no other test reaches and which a refactor of `main`'s tail could silently remove.
 
-*Preconditions:* Its own disposable stack, since the test terminates `step-webui`. Harness on `step-network`, admin session established. Seed 200 certificates via repeated `POST /issue` and run `make e2e-seed-history 5000` for the `cert_history` table. This is a starting recipe, not a promise: the point is a bundle that takes several seconds to stream, and the test calibrates against its own run rather than trusting this number, per step 1 below.
+*Preconditions:* Its own disposable stack, since the test terminates `certharbor`. Harness on `step-network`, admin session established. Seed 200 certificates via repeated `POST /issue` and run `make e2e-seed-history 5000` for the `cert_history` table. This is a starting recipe, not a promise: the point is a bundle that takes several seconds to stream, and the test calibrates against its own run rather than trusting this number, per step 1 below.
 
 *Steps:*
 1. `POST /admin/backup/download` once, untimed, to measure this stack's actual wall clock for the seeded bundle. If it completes in under three seconds, seed more certificates and history and repeat until it takes at least three seconds. This calibration run's bundle is discarded.
 2. Start the timed request: `POST /admin/backup/download` again. Record the wall clock the request was issued.
 3. Wait until the response has demonstrably started streaming before signalling: the response headers have been received and at least one body chunk has arrived, with more still pending. Signalling on a fixed delay (for example "500ms after the request is issued") is vacuous if the bundle already finished building and started streaming before that delay elapses, or if it has not yet started at all; this step is what makes "mid-write" a checked condition rather than an assumption.
-4. `docker compose kill -s SIGTERM step-webui`.
+4. `docker compose kill -s SIGTERM certharbor`.
 5. Read the response to step 2 to completion.
 6. Concurrently, issue a second request 1s after the signal.
 
@@ -739,11 +739,11 @@ For every fatal case, wait for the container to reach `exited` and assert `docke
 *Preconditions:* `compose.e2e-fingerprint.yml` so that `ROOT_CERT` is a writable path with no file at it. `.env`: `UI_TLS_MODE=stepca`, `CA_FINGERPRINT` empty, `CA_ROOT_CERT_PEM` empty. `step-ca` running and healthy. Admin session available.
 
 *Steps:*
-1. `docker compose up -d --build step-webui`, wait for healthy.
-2. `docker compose logs --no-color --timestamps step-webui | grep -F 'CA client construction failed during TLS bootstrap'`.
-3. `docker compose logs --no-color --timestamps step-webui | grep -F 'UI_TLS_MODE=stepca but no CA client is available, falling back to self-signed'`.
+1. `docker compose up -d --build certharbor`, wait for healthy.
+2. `docker compose logs --no-color --timestamps certharbor | grep -F 'CA client construction failed during TLS bootstrap'`.
+3. `docker compose logs --no-color --timestamps certharbor | grep -F 'UI_TLS_MODE=stepca but no CA client is available, falling back to self-signed'`.
 4. Log in as admin, `POST /admin/console` with `command_id=ca.health`.
-5. Write a valid root cert into place **at runtime, without restarting**: `docker compose exec step-ca cat /home/step/certs/root_ca.crt` piped into `docker compose exec -T step-webui sh -c 'cat > /opt/step-webui/data/root_ca.crt'`.
+5. Write a valid root cert into place **at runtime, without restarting**: `docker compose exec step-ca cat /home/step/certs/root_ca.crt` piped into `docker compose exec -T certharbor sh -c 'cat > /opt/certharbor/data/root_ca.crt'`.
 6. `POST /admin/console` with `command_id=ca.health` again, still with no restart.
 
 *Assertions:*
@@ -757,7 +757,7 @@ For every fatal case, wait for the container to reach `exited` and assert `docke
 
 Shared preconditions unless noted: long-lived stack up, admin seeded, harness running as a container on `step-network` so that each test can own its source IP, and a second non-admin user created via `POST /admin/users` (Section 3.3 covers that endpoint).
 
-**Ordering constraints for this section, which are load-bearing.** `security.RL` keys on the client IP and `IsBlocked` is consulted *before* credential verification (`handlers/auth.go:64-70`), so E2E-AUTH-02 and E2E-AUTH-03 poison their source IP for roughly five minutes for every subsequent login from it. Two remedies, and the suite uses both: give those two tests their own harness container with its own address, and run them last within the section. E2E-AUTH-04 through E2E-AUTH-07 leave TOTP enabled on their subject, so they use a dedicated user and a mandatory disable teardown. E2E-AUTH-09 consumes its own 3-per-15-minute budget and is bounded by `docker compose restart step-webui`, which clears both process-local limiter maps.
+**Ordering constraints for this section, which are load-bearing.** `security.RL` keys on the client IP and `IsBlocked` is consulted *before* credential verification (`handlers/auth.go:64-70`), so E2E-AUTH-02 and E2E-AUTH-03 poison their source IP for roughly five minutes for every subsequent login from it. Two remedies, and the suite uses both: give those two tests their own harness container with its own address, and run them last within the section. E2E-AUTH-04 through E2E-AUTH-07 leave TOTP enabled on their subject, so they use a dedicated user and a mandatory disable teardown. E2E-AUTH-09 consumes its own 3-per-15-minute budget and is bounded by `docker compose restart certharbor`, which clears both process-local limiter maps.
 
 Session idle timeout and absolute lifetime are not re-tested here. `middleware/middleware_test.go` already asserts them directly (`TestRequireLogin_AbsoluteLifetimeExpired`, `TestRequireLogin_ExpiredSession_Redirects`, `TestRequireLogin_FreshSession_AbsoluteLifetimeNotExpired`), and `SessionTimeout=8h`/`SessionMaxLifetime=24h` are Go constants (`middleware/middleware.go:29,34`) that no environment variable can shorten.
 
@@ -769,7 +769,7 @@ Session idle timeout and absolute lifetime are not re-tested here. `middleware/m
 *Preconditions:* create a disposable local user, using the worker-scoped admin fixture's already-authenticated context (Section 4.1.4) to issue the `POST /admin/users` call. This test logs that throwaway user out in its own teardown, and `POST /logout` bumps `session_epoch` for every session the acted-on user holds (`handlers/auth.go:222`); running the flow below against `admin` itself would evict the worker-scoped admin fixture that the rest of the run depends on.
 
 *Steps:*
-1. `GET /login`, capture the `csrf_token` hidden input and the `step-webui` cookie into jar A. Call this token `T_pre`.
+1. `GET /login`, capture the `csrf_token` hidden input and the `certharbor` cookie into jar A. Call this token `T_pre`.
 2. `POST /login` with `csrf_token=T_pre`, `username=<the throwaway user>`, `password=<its password>`, same jar.
 3. `GET /login` again on the post-login jar and capture the new `csrf_token`, `T_post`.
 4. `POST /profile` with `action=theme`, `theme=dark`, `csrf_token=T_pre`, using the post-login jar.
@@ -808,7 +808,7 @@ Do **not** assert "the session cookie value changed". `securecookie` encrypts wi
 
 #### E2E-AUTH-03: a correct password is rejected while the IP is blocked
 
-*Tier:* PR (e2e-main). Immediately follows E2E-AUTH-02 on the same IP. Its teardown fallback restarts `step-webui`, so it carries the Section 3.0.4 barrier tag conditionally, on that fallback path.
+*Tier:* PR (e2e-main). Immediately follows E2E-AUTH-02 on the same IP. Its teardown fallback restarts `certharbor`, so it carries the Section 3.0.4 barrier tag conditionally, on that fallback path.
 
 *Preconditions:* the dedicated lockout user and its known password, shared with E2E-AUTH-02 (that entry's precondition).
 
@@ -920,7 +920,7 @@ Do **not** assert "the session cookie value changed". `securecookie` encrypts wi
 
 #### E2E-AUTH-09: password reset request and completion
 
-*Tier:* nightly (`oidc-mail` leg). Skips with reason when `E2E_MAIL_ENABLED` is unset. Restarts `step-webui`, so it takes the Section 3.0.4 barrier.
+*Tier:* nightly (`oidc-mail` leg). Skips with reason when `E2E_MAIL_ENABLED` is unset. Restarts `certharbor`, so it takes the Section 3.0.4 barrier.
 
 *Preconditions:*
 - Stack composed with `compose.e2e-mail.yml` (mailpit, SMTP on 1025, HTTP API on 8025).
@@ -940,7 +940,7 @@ Do **not** assert "the session cookie value changed". `securecookie` encrypts wi
 7. `POST /reset-password` again reusing the same `token`.
 8. A **third** `POST /forgot-password` from the same IP, for a different nonexistent identifier. This is still within budget (steps 1, 2 and this one make three) and is expected to succeed generically, the same as step 2.
 9. A **fourth** `POST /forgot-password` from the same IP. This is the one the budget in the preconditions refers to.
-10. **The `PUBLIC_BASE_URL` refusal case.** Recreate `step-webui` (`docker compose up -d step-webui`; a `restart` would not apply the `.env` edit, per Section 2.5) with `PUBLIC_BASE_URL` empty. Record mailpit's message count as a fresh baseline, since the recreate also clears the password-reset rate limiter. `POST /forgot-password` with the subject's identifier again, against the recreated stack.
+10. **The `PUBLIC_BASE_URL` refusal case.** Recreate `certharbor` (`docker compose up -d certharbor`; a `restart` would not apply the `.env` edit, per Section 2.5) with `PUBLIC_BASE_URL` empty. Record mailpit's message count as a fresh baseline, since the recreate also clears the password-reset rate limiter. `POST /forgot-password` with the subject's identifier again, against the recreated stack.
 
 *Assertions:*
 - Steps 1 and 2 both render `If an account with that login or email exists, a password reset link has been sent.` (`genericResetInfo`, `handlers/password_reset.go:29`) at `200`, and the stripped bodies are **byte-identical**. The CSRF token must be stripped before the comparison, since it is regenerated per response and would otherwise fail the diff for an unrelated reason. Both requests must share a cookie jar.
@@ -951,9 +951,9 @@ Do **not** assert "the session cookie value changed". `securecookie` encrypts wi
 - Step 7 yields `This reset link is invalid or has expired. Please request a new one.` (`MarkPasswordResetTokenUsed` plus `InvalidatePasswordResetTokens`, `handlers/password_reset.go:204-206`).
 - Step 9 returns the **same generic response**, with no client-observable rate-limit signal, while `/admin/security` gains a row with reason `Password reset rate limited` for the pseudo-user `password-reset` (`handlers/password_reset.go:58`).
 - The new password works at `/login` and the old one does not.
-- Step 10 returns the **same generic response** as steps 1, 2 and 8, with zero mailpit messages above its own fresh baseline. As the positive control that the refusal actually happened rather than the request silently no-opping some other way, `docker compose logs --no-color --timestamps step-webui | grep -F 'password reset link could not be built'` finds the line (`handlers/password_reset.go:114`), and `/admin/security` gains a row for the subject with reason `Password reset link not built: PUBLIC_BASE_URL is not configured; refusing to send a password reset link` (`:256-266`).
+- Step 10 returns the **same generic response** as steps 1, 2 and 8, with zero mailpit messages above its own fresh baseline. As the positive control that the refusal actually happened rather than the request silently no-opping some other way, `docker compose logs --no-color --timestamps certharbor | grep -F 'password reset link could not be built'` finds the line (`handlers/password_reset.go:114`), and `/admin/security` gains a row for the subject with reason `Password reset link not built: PUBLIC_BASE_URL is not configured; refusing to send a password reset link` (`:256-266`).
 
-*Teardown:* recreate `step-webui` with `PUBLIC_BASE_URL` restored to the leg's stock value.
+*Teardown:* recreate `certharbor` with `PUBLIC_BASE_URL` restored to the leg's stock value.
 
 
 #### E2E-AUTH-11: logout is a POST, and a GET to the same path logs nobody out
@@ -995,7 +995,7 @@ E2E-AUTH-12 covers the stronger property, that a **copy** of the cookie taken be
 *Preconditions:* a disposable admin-role throwaway user it creates and logs out itself, not the shared `admin` fixture, for the same reason given in E2E-AUTH-11 (Section 4.1.4).
 
 *Steps:*
-1. Log the dedicated admin-role user in on jar A. Copy the raw `step-webui` cookie value to a variable, simulating a capture.
+1. Log the dedicated admin-role user in on jar A. Copy the raw `certharbor` cookie value to a variable, simulating a capture.
 2. `GET /admin` with the captured value as a bare `Cookie` header and no jar, to establish that the capture is a working credential.
 3. `POST /logout` on jar A with the `csrf_token` scraped from the page's inline logout form. `GET /logout` must not be used here: `LogoutGet` is a bare redirect that ends nothing (`handlers/auth.go:209-211`), and only the CSRF-gated `POST /logout` bumps `session_epoch` (`:215,222`).
 4. Repeat step 2 with the same captured value.
@@ -1042,7 +1042,7 @@ E2E-AUTH-12 covers the stronger property, that a **copy** of the cookie taken be
 1. Complete an OIDC login as `oidc-unmapped`.
 2. Read the `oidc-unmapped` row.
 3. As admin, `POST /admin/users action=change_role` on `oidc-unmapped` to `manager`.
-4. Recreate `step-webui` with `OIDC_SYNC_ROLE=false` (`docker compose up -d step-webui`; a `restart` would not apply the `.env` edit, per Section 2.5).
+4. Recreate `certharbor` with `OIDC_SYNC_ROLE=false` (`docker compose up -d certharbor`; a `restart` would not apply the `.env` edit, per Section 2.5).
 5. Complete a second OIDC login as `oidc-unmapped`, whose claims still carry no mapped group.
 6. Read the `oidc-unmapped` row again.
 
@@ -1051,7 +1051,7 @@ E2E-AUTH-12 covers the stronger property, that a **copy** of the cookie taken be
 - Step 2 shows the new row with `role='viewer'` and `auth_source='oidc'`.
 - Step 6 still shows `role='manager'`. With `OIDC_SYNC_ROLE=false`, `UpsertOIDCUser`'s `DO UPDATE` clause omits `role` from its `SET` list entirely (`db/users.go:289-299`), so a second login for a still-unmapped subject does not revert the admin's manual promotion. E2E-AUTH-08's own sync-back row (its step 7) runs with `OIDC_SYNC_ROLE=true` and a mapped group, so it does not cover this path.
 
-*Teardown:* restore `OIDC_SYNC_ROLE` to the leg's default value and recreate `step-webui`.
+*Teardown:* restore `OIDC_SYNC_ROLE` to the leg's default value and recreate `certharbor`.
 
 
 #### E2E-AUTH-14: deactivation, demotion and deletion take effect on the next request
@@ -1392,11 +1392,11 @@ Without steps 1 to 4 this test passes identically when the CA's request logging 
 
 #### E2E-CERT-12: the domain-suffix policy is unrestricted by default and binds both issue and renew
 
-*Tier:* PR (e2e-main). Recreates `step-webui` between phases, so it takes the Section 3.0.4 barrier.
+*Tier:* PR (e2e-main). Recreates `certharbor` between phases, so it takes the Section 3.0.4 barrier.
 
 *Objective:* Section 6.6. `ALLOWED_DOMAIN_SUFFIXES` is a mechanism whose default reproduces the old behaviour, so both halves need asserting: that an empty key restricts nothing, and that a set key is enforced everywhere a name reaches the CA.
 
-*Preconditions:* run in two phases against the long-lived stack, applying `compose.e2e-config.yml` and recreating `step-webui` (`docker compose up -d step-webui`) between them so the `ALLOWED_DOMAIN_SUFFIXES` edit actually reaches the container.
+*Preconditions:* run in two phases against the long-lived stack, applying `compose.e2e-config.yml` and recreating `certharbor` (`docker compose up -d certharbor`) between them so the `ALLOWED_DOMAIN_SUFFIXES` edit actually reaches the container.
 
 *Phase 1, key unset.*
 1. As `manager_user`, `POST /issue` with `domain=login.microsoftonline.com`, template `server`.
@@ -1422,7 +1422,7 @@ Without steps 1 to 4 this test passes identically when the CA's request logging 
 - Row 6 (the `/renew/{id}` refusal) instead returns **`302` to `/certificates`**, since `Renew` flashes and redirects on every failure branch rather than rendering inline (`handlers/certs.go:266-269`). Assert the flash reads `Error: domain "…" is not covered by ALLOWED_DOMAIN_SUFFIXES (example.com)`, and that the on-disk certificate and its `certificates` row are byte-for-byte and field-for-field unchanged from before the attempt. Row 6 is the regression guard for the placement decision: the check sits in `issueCert` rather than in `normalizeIssuePolicy` because `Renew` never calls the latter, so a check in the obvious-looking place would have left renewal as an open bypass.
 - Row 4 must be asserted explicitly rather than folded into row 5. A naive `strings.HasSuffix(name, suffix)` passes rows 1, 2, 3 and 5 and fails only row 4.
 
-*Teardown:* restore `ALLOWED_DOMAIN_SUFFIXES` to empty and recreate `step-webui`.
+*Teardown:* restore `ALLOWED_DOMAIN_SUFFIXES` to empty and recreate `certharbor`.
 
 *Not covered:* anything a caller who bypasses the UI can do. This key constrains what the application asks the CA to sign, not what the CA will sign. A holder of the provisioner password talking to step-ca directly is bound only by an x509 `allow`/`deny` block in `ca.json`, which is step-ca configuration and outside this application.
 
@@ -1546,7 +1546,7 @@ A prefix match on a string the test itself caused to be written round-trips a `H
 
 *Steps:* fetch and search each of these surfaces:
 
-1. The cumulative `step-webui` log capture (Section 2.6), not a live `docker compose logs step-webui`, since earlier recreates in this run have already truncated the live view.
+1. The cumulative `certharbor` log capture (Section 2.6), not a live `docker compose logs certharbor`, since earlier recreates in this run have already truncated the live view.
 2. `docker compose logs step-ca`, in full. `step-ca` is never recreated mid-run, so its live log is already complete.
 3. The output of all ten admin-console commands.
 4. `GET /admin/about`.
@@ -1557,7 +1557,7 @@ A prefix match on a string the test itself caused to be written round-trips a `H
 
 *Assertions:*
 - The canary appears in **none** of them.
-- **Positive control:** the same search applied to `docker compose exec step-webui cat /opt/step-webui/data/provisioner_password` finds it. That proves the search is capable of finding the string in this environment, which is what makes the negatives above informative.
+- **Positive control:** the same search applied to `docker compose exec certharbor cat /opt/certharbor/data/provisioner_password` finds it. That proves the search is capable of finding the string in this environment, which is what makes the negatives above informative.
 
 *Not covered:* the other half of R9, that the password byte slice is zeroed after `Token()` returns, is structurally unobservable from outside the process. It belongs in a unit test over `stepca`, and no black-box assertion can stand in for it.
 
@@ -1567,7 +1567,7 @@ A prefix match on a string the test itself caused to be written round-trips a `H
 
 *Objective:* This is E2E-SEC-03's canary sweep pointed at the CI artifact rather than at the UI, and it is load-bearing for the pipeline rather than for the product. GitHub's `::add-mask::` masks the live log stream only. It does not touch the contents of an uploaded file. Without this test, publishing per-service logs and a database dump on every failure is a credential-disclosure mechanism.
 
-*Steps:* after the collector has assembled the artifact directory but before `upload-artifact` runs, grep every file in it for: the `ca_password` canary, the `secret_key` canary, the `postgres_password` canary, the value of `STEPWEBUI_ADMIN_PASSWORD`, and any `totp_secret` value present in the database at that moment.
+*Steps:* after the collector has assembled the artifact directory but before `upload-artifact` runs, grep every file in it for: the `ca_password` canary, the `secret_key` canary, the `postgres_password` canary, the value of `CERTHARBOR_ADMIN_PASSWORD`, and any `totp_secret` value present in the database at that moment.
 
 *Assertions:*
 - Zero hits across the artifact directory.
@@ -1583,7 +1583,7 @@ A prefix match on a string the test itself caused to be written round-trips a `H
 *Steps:* `POST /admin/backup/download` as admin. Extract the result.
 
 *Assertions:*
-- The admin bundle's `postgres-stepwebui.sql` contains the `users` table's `totp_secret` column values **in plaintext**. Assert this positively. It is a true statement about the artifact and the reason the previous assertion matters, and a future change that encrypts them at rest should have to update this test deliberately.
+- The admin bundle's `postgres-certharbor.sql` contains the `users` table's `totp_secret` column values **in plaintext**. Assert this positively. It is a true statement about the artifact and the reason the previous assertion matters, and a future change that encrypts them at rest should have to update this test deliberately.
 - On the stock stack, `step-ca-data.tgz` is always produced (Section 2.7.5), but truncated at `/home/step/config`, and never reaches `/home/step/secrets` (`filepath.WalkDir` visits `certs/`, then `config/`, then `secrets/` in lexical order and aborts on the first walk error). Assert positively that it contains `certs/`, and do **not** assert that it contains `secrets/root_ca_key` against this stack: that file is out of reach behind the same permission denial E2E-BAK-01 records in `manifest.json`'s `warnings`. If a future fix to the read-only mount permissions lets the walk complete, this row should be revisited to assert `secrets/root_ca_key` positively.
 
 #### E2E-SEC-06: sensitive pages are not cacheable
@@ -1640,7 +1640,7 @@ Preconditions for the whole section: logged in as admin.
 *Assertions:*
 - Every one returns `Success=true` and `ExitCode=0`. Assert this in a loop.
 - `postgres.ready`'s output contains `accepting connections`.
-- `system.identity`'s output names uid 10001, matching `USER stepwebui` in `Dockerfile:48`.
+- `system.identity`'s output names uid 10001, matching `USER certharbor` in `Dockerfile:48`.
 
 Nothing else about these outputs is asserted. "Sane output" for a date, a hostname or a process list has no falsifiable form, and asserting that `openssl.version` reports a real build string tests the contents of a base image this project does not build.
 
@@ -1697,13 +1697,13 @@ Run the `delete` case last, since it destroys the subject.
 *Steps:* `POST /admin/backup/download` with `csrf_token` as admin. Save the body as `backup.tgz` and extract it.
 
 *Assertions:*
-- `Content-Type: application/gzip` and `Content-Disposition: attachment; filename="step-ca-webui-backup-<timestamp>.tgz"`.
-- `tar tzf backup.tgz` lists `manifest.json`, `postgres-stepwebui.sql`, `step-ca-data.tgz`, `step-webui-data.tgz`, `step-webui-certs.tgz` and `step-webui-uploads.tgz`. `step-ca-data.tgz` is present as a file even though it is not a `components` entry, below.
-- `manifest.json` has `format == "step-ca-webui-backup-v1"`. Its `components` object has exactly four entries on the stock stack, per Section 2.7.5's calibration: `postgres` (`postgres-stepwebui.sql`, `ok`), `step-webui-data` (`step-webui-data.tgz`, `ok`), `step-webui-certs` (`step-webui-certs.tgz`, `ok`), `step-webui-uploads` (`step-webui-uploads.tgz`, `ok`). `step-ca-data` is deliberately **not** among them; see below.
+- `Content-Type: application/gzip` and `Content-Disposition: attachment; filename="certharbor-backup-<timestamp>.tgz"`.
+- `tar tzf backup.tgz` lists `manifest.json`, `postgres-certharbor.sql`, `step-ca-data.tgz`, `certharbor-data.tgz`, `certharbor-certs.tgz` and `certharbor-uploads.tgz`. `step-ca-data.tgz` is present as a file even though it is not a `components` entry, below.
+- `manifest.json` has `format == "certharbor-backup-v1"`. Its `components` object has exactly four entries on the stock stack, per Section 2.7.5's calibration: `postgres` (`postgres-certharbor.sql`, `ok`), `certharbor-data` (`certharbor-data.tgz`, `ok`), `certharbor-certs` (`certharbor-certs.tgz`, `ok`), `certharbor-uploads` (`certharbor-uploads.tgz`, `ok`). `step-ca-data` is deliberately **not** among them; see below.
 - `manifest.json`'s `warnings` array is exactly `["step-ca-data failed: open /home/step/config: permission denied"]`.
 - **For each of the four `components` entries, recompute SHA-256 over the extracted file and compare it against the manifest's recorded value.** This is the only assertion in this suite that is fully independent of the code under test: it re-derives the property from the artifact rather than asking the application to confirm its own claim. `step-ca-data.tgz` has no manifest digest to check against on this stack, since the walk that produces it never completed; see the next point for what to assert about it instead.
 - `step-ca-data.tgz` is **present but incomplete**, not absent: extracting it finds the `certs/` subtree but not `config/`. `filepath.WalkDir` visits `/home/step` in lexical order (`certs`, `config`, `secrets`, ...) and aborts on the first error, which is the `EACCES` on `/home/step/config`; `secrets/` is never reached either. Assert `certs/` is present and `config/` is absent inside the extracted `step-ca-data.tgz`, and do not assert a SHA-256 match for it, a `components` entry for it, or that it is missing from the tarball altogether.
-- `postgres-stepwebui.sql` contains `COPY` or `INSERT INTO` statements for `certificates`, `users` and `cert_history`, and is plain SQL readable by `psql` rather than a custom-format dump.
+- `postgres-certharbor.sql` contains `COPY` or `INSERT INTO` statements for `certificates`, `users` and `cert_history`, and is plain SQL readable by `psql` rather than a custom-format dump.
 - `/admin/security` gains a row containing `backup.download filename=...` (`handlers/backup.go:67`).
 
 #### E2E-BAK-03: a backup bundle actually restores
@@ -1712,11 +1712,11 @@ Run the `delete` case last, since it destroys the subject.
 
 *Objective:* E2E-BAK-01 proves the bundle is internally consistent, that every component's hash matches the manifest's recorded value. Nothing else in this suite proves the bundle is actually restorable, which is the gap this entry closes, on the procedure `README.md` documents ("How do I back up and restore the data?"): unpack the archive, restore the PostgreSQL dump, and restore the Docker volumes.
 
-*Preconditions:* a source stack with a known admin password. On a fresh source stack the `certificates` table is empty and `step-webui-certs.tgz` in any bundle taken from it is empty too, so this entry must **seed at least one issuance via `/issue`** on the source stack before it takes the backup it goes on to restore: that issuance is what puts a row in `certificates` and the cert plus key into `step-webui-certs.tgz`. Download the bundle from the source stack exactly as E2E-BAK-01 does, after the seed issuance. Fresh, empty named volumes for a second, disposable stack, none of them shared with the source stack.
+*Preconditions:* a source stack with a known admin password. On a fresh source stack the `certificates` table is empty and `certharbor-certs.tgz` in any bundle taken from it is empty too, so this entry must **seed at least one issuance via `/issue`** on the source stack before it takes the backup it goes on to restore: that issuance is what puts a row in `certificates` and the cert plus key into `certharbor-certs.tgz`. Download the bundle from the source stack exactly as E2E-BAK-01 does, after the seed issuance. Fresh, empty named volumes for a second, disposable stack, none of them shared with the source stack.
 
 *Steps:*
-1. Untar the bundle's volume components (`step-ca-data.tgz`, `step-webui-data.tgz`, `step-webui-certs.tgz`, `step-webui-uploads.tgz`) directly into the fresh named volumes. Per Section 2.7.5, all four are present as files on the stock stack; `step-ca-data.tgz` is truncated (`certs/` present, `config/` absent), which this step restores as-is, incomplete, matching what a real restore from this stack actually has to work with.
-2. Bring up `postgres` alone on the fresh stack and `psql` the bundle's `postgres-stepwebui.sql` dump into it.
+1. Untar the bundle's volume components (`step-ca-data.tgz`, `certharbor-data.tgz`, `certharbor-certs.tgz`, `certharbor-uploads.tgz`) directly into the fresh named volumes. Per Section 2.7.5, all four are present as files on the stock stack; `step-ca-data.tgz` is truncated (`certs/` present, `config/` absent), which this step restores as-is, incomplete, matching what a real restore from this stack actually has to work with.
+2. Bring up `postgres` alone on the fresh stack and `psql` the bundle's `postgres-certharbor.sql` dump into it.
 3. Bring up the rest of the stack (`docker compose up -d --wait`).
 4. Log in as admin with the source stack's known admin password.
 5. `GET /certificates` and locate the row for the seeded issuance's certificate by name.
@@ -1724,7 +1724,7 @@ Run the `delete` case last, since it destroys the subject.
 
 *Assertions:*
 - Step 4 succeeds: the restored `users` table carries a working password hash for admin.
-- Step 5 finds the seeded certificate's row, restored from the dump, with its file present under the restored `step-webui-certs` volume.
+- Step 5 finds the seeded certificate's row, restored from the dump, with its file present under the restored `certharbor-certs` volume.
 - Step 6 returns `200` with `status == "ready"` in the parsed body, which also carries the certificate keys listed under E2E-HLTH-02.
 
 *Teardown:* `docker compose down -v` on the disposable restore stack. The source stack and its bundle are untouched throughout, since this test only ever reads from them.
@@ -1741,7 +1741,7 @@ Every test in this section runs behind the barrier defined in Section 3.0.4.
 
 *Assertions:* `200` with body exactly `{"status":"ok"}` in all three cases. `Liveness` performs no database and no CA check (`handlers/health.go:21-25`).
 
-*Not covered:* the both-stopped case. Reaching it requires killing postgres after step-webui is already running and then also stopping step-ca, which adds no observable beyond the two single cases.
+*Not covered:* the both-stopped case. Reaching it requires killing postgres after certharbor is already running and then also stopping step-ca, which adds no observable beyond the two single cases.
 
 *Teardown:* restart both `step-ca` and postgres, and wait for both healthy, since the steps above leave neither running.
 
@@ -1799,7 +1799,7 @@ Do not "immediately GET" after `docker compose start`. step-ca's healthcheck has
 - **Every authenticated request is now refused with `302` to `/login` while the database is down.** `RequireLogin` re-reads the user row on every request and treats a load error as a rejected session (`middleware/middleware.go:114-119`), so a database outage logs everyone out rather than serving stale sessions. That is fail-closed by design and this is the test that observes it. Assert it explicitly, so that a future change to serve stale sessions during an outage has to change this line.
 - Sessions come back on the next request once postgres is healthy, without a re-login, provided the cookie has not aged past its idle or absolute limits.
 
-step-webui's own healthcheck also starts failing around this point, because `GET /login` renders a page whose base data touches the database. Capture that interaction rather than treating it as noise.
+certharbor's own healthcheck also starts failing around this point, because `GET /login` renders a page whose base data touches the database. Capture that interaction rather than treating it as noise.
 
 **Cost note for the reader.** `RequireLogin`'s row re-read is one database query per authenticated request across the whole application. It is the price of the revocation property in Section 6.3.
 
@@ -1825,13 +1825,13 @@ Asserting instead that "the other checks stay ok" asserts an environment fact ra
 
 *Blocked on:* the `UI_CERT_DURATION` prerequisite in Section 2.7.4. If that change is not made, delete this test rather than ship it, since with the duration hardcoded the job hangs until the CI timeout on every run. It is the only coverage anywhere for the renewal flow.
 
-*Preconditions:* fresh volumes. Stack composed with `compose.e2e-config.yml`, which is what makes `UI_CERT_DURATION` reach the container (Section 2.5); without it the key is a silent no-op like `ALLOWED_DOMAIN_SUFFIXES` without the same override. `.env`: `UI_TLS_MODE=stepca`, `STEPWEBUI_ADMIN_PASSWORD` set, `UI_CERT_DURATION=6m`. The CA enforces a `minTLSCertDuration` of five minutes by default, so six minutes is the shortest safe value. No change to `STEPCA_*_TLS_CERT_DURATION` is needed, and consequently no fresh volume is needed on the step-ca side either, since `scripts/step-ca-bootstrap.sh` re-patches the claims on every start anyway.
+*Preconditions:* fresh volumes. Stack composed with `compose.e2e-config.yml`, which is what makes `UI_CERT_DURATION` reach the container (Section 2.5); without it the key is a silent no-op like `ALLOWED_DOMAIN_SUFFIXES` without the same override. `.env`: `UI_TLS_MODE=stepca`, `CERTHARBOR_ADMIN_PASSWORD` set, `UI_CERT_DURATION=6m`. The CA enforces a `minTLSCertDuration` of five minutes by default, so six minutes is the shortest safe value. No change to `STEPCA_*_TLS_CERT_DURATION` is needed, and consequently no fresh volume is needed on the step-ca side either, since `scripts/step-ca-bootstrap.sh` re-patches the claims on every start anyway.
 
 *Steps:*
 1. `docker compose up -d --build`, wait for healthy.
 2. Confirm `stepca`-mode bootstrap succeeded using E2E-BOOT-01's log assertions.
 3. `openssl s_client -connect localhost:${UI_HTTPS_PORT:-443} </dev/null 2>/dev/null | openssl x509 -noout -dates -serial`. Record `notBefore`, `notAfter` and the serial.
-4. `docker compose logs --no-color --timestamps step-webui | grep -F 'TLS leaf auto-renewer started'`.
+4. `docker compose logs --no-color --timestamps certharbor | grep -F 'TLS leaf auto-renewer started'`.
 5. Poll the same `s_client` probe every 15s, bounded at 6 minutes, recording every observed serial and every handshake outcome.
 
 *Assertions:*
@@ -1839,7 +1839,7 @@ Asserting instead that "the other checks stay ok" asserts an environment fact ra
 - The renewer goroutine started.
 - The serial changes at approximately two thirds of the **observed** window from step 3, not two thirds of the nominal `6m` request, and **before** the original certificate's `notAfter`. Deriving the renewal point from the requested duration rather than the observed one would make this assertion fail on the backdate margin alone, for a reason unrelated to the renewer's own correctness. That ordering is the property: a renewer that fires after expiry is a renewer that causes an outage.
 - **Every probe in the polling loop completes a handshake successfully**, with no connection error and no expired-certificate error. `certReloader.GetCertificate` re-stats both files on each handshake and reloads on an mtime change (`tlsreload.go`), so the swap is invisible to clients. A single failed handshake in the trace is a real finding.
-- `docker compose logs --no-color --timestamps step-webui | grep -F 'leaf renewed'` shows the backend leaf's line (`certPath` ending `server.crt`, `reason=due`) with `nextRenewalIn` of roughly two thirds of the observed window (around 4 to 5 minutes, not a fixed 4). The web leaf logs its own `leaf renewed` line in the same iteration, since one loop renews both and sleeps on the minimum.
+- `docker compose logs --no-color --timestamps certharbor | grep -F 'leaf renewed'` shows the backend leaf's line (`certPath` ending `server.crt`, `reason=due`) with `nextRenewalIn` of roughly two thirds of the observed window (around 4 to 5 minutes, not a fixed 4). The web leaf logs its own `leaf renewed` line in the same iteration, since one loop renews both and sleeps on the minimum.
 - If renewal fails, `leaf renewal failed, will retry` appears with `retryIn=5m0s` (`uiCertRenewFailureBackoff`, which is `leafcert.RenewFailureBackoff`). Treat its presence as a failure of this test, but capture it, since the backoff path is otherwise unobserved.
 
 *Teardown:* `docker compose down -v`.
@@ -1910,9 +1910,9 @@ Twelve environment keys change runtime behaviour. This is the complete list and 
 
 #### E2E-CFG-01: the response-header and config-switch matrix
 
-*Tier:* PR (e2e-main), except the `LOCAL_LOGIN_ENABLED` and `USE_HTTPS` rows, which need override stacks and run in the nightly `oidc-mail` leg. Runs second to last in the long-lived stack, per Section 3.0.3. Behind the Section 3.0.4 barrier: each configuration change recreates `step-webui`.
+*Tier:* PR (e2e-main), except the `LOCAL_LOGIN_ENABLED` and `USE_HTTPS` rows, which need override stacks and run in the nightly `oidc-mail` leg. Runs second to last in the long-lived stack, per Section 3.0.3. Behind the Section 3.0.4 barrier: each configuration change recreates `certharbor`.
 
-*Steps:* read the response headers for a representative route from every tier plus `/login`, `/health` and `/static/css/base.css`, once per configuration below. Each configuration change is applied by editing `.env` and **recreating** `step-webui` (`docker compose up -d step-webui`; `restart` reuses the existing container's environment and would leave the previous configuration in effect), and the original configuration is restored the same way in teardown.
+*Steps:* read the response headers for a representative route from every tier plus `/login`, `/health` and `/static/css/base.css`, once per configuration below. Each configuration change is applied by editing `.env` and **recreating** `certharbor` (`docker compose up -d certharbor`; `restart` reuses the existing container's environment and would leave the previous configuration in effect), and the original configuration is restored the same way in teardown.
 
 *Assertions:* one row per configuration, in the table below.
 
@@ -1925,16 +1925,16 @@ Twelve environment keys change runtime behaviour. This is the complete list and 
 | `ENABLE_HSTS=false` | `Strict-Transport-Security: max-age=0` (`:47`). The header is present with a zero max-age, not absent |
 | `SESSION_SECURE=true` | the session cookie carries `Secure`, and `GET /admin/about` reports the `Session cookie` preflight check as `ok` |
 | `SESSION_SECURE=false` | the cookie has no `Secure` flag, the preflight check reports `warn`, and the startup log contains `SESSION_SECURE=false: session cookies will not carry the Secure flag` (`main.go:135`) |
-| `LOCAL_LOGIN_ENABLED=false` with OIDC on | `POST /login` redirects to `/auth/oidc/login` instead of verifying a credential (`handlers/auth.go:50-53`). Needs the OIDC override. Starts from the leg's stock `LOCAL_LOGIN_ENABLED=true`; restore it and recreate `step-webui` before this row hands off to the next in the leg |
-| `USE_HTTPS=true` with no cert on disk | the process binds the TLS listener and does not exit, and every handshake fails. The flag takes precedence over the `os.Stat` auto-detection (`main.go:394-398`), so `ListenAndServeTLS` starts with `certReloader.GetCertificate`, which has no last-good certificate to fall back on (`tlsreload.go:38-45`) and errors on every call. **Preconditions for this row only:** `UI_TLS_MODE=provided` and a fresh `step-webui-ssl` volume. Without `UI_TLS_MODE=provided`, the default `self-signed` branch generates a working certificate at boot whenever `cfg.SSLCert` is absent (`tlsbootstrap.go:239-243`), which puts a cert on disk before the server ever starts and defeats this row's premise; `provided` is a no-op (`tlsbootstrap.go:207-208`), so the fresh volume stays empty. Because no cert ever exists, `step-webui`'s own healthcheck (`https://localhost:8443/login`, `docker-compose.yml:118`) fails by design for the life of this row: wait for the container to reach `running`, not `healthy`, before proceeding. Assert that the container stays up and that `openssl s_client` fails, not that anything is served. Starts from `USE_HTTPS` unset; no restore step, since this row is terminal for the leg (Section 1.3) and nothing after it depends on the value |
+| `LOCAL_LOGIN_ENABLED=false` with OIDC on | `POST /login` redirects to `/auth/oidc/login` instead of verifying a credential (`handlers/auth.go:50-53`). Needs the OIDC override. Starts from the leg's stock `LOCAL_LOGIN_ENABLED=true`; restore it and recreate `certharbor` before this row hands off to the next in the leg |
+| `USE_HTTPS=true` with no cert on disk | the process binds the TLS listener and does not exit, and every handshake fails. The flag takes precedence over the `os.Stat` auto-detection (`main.go:394-398`), so `ListenAndServeTLS` starts with `certReloader.GetCertificate`, which has no last-good certificate to fall back on (`tlsreload.go:38-45`) and errors on every call. **Preconditions for this row only:** `UI_TLS_MODE=provided` and a fresh `certharbor-ssl` volume. Without `UI_TLS_MODE=provided`, the default `self-signed` branch generates a working certificate at boot whenever `cfg.SSLCert` is absent (`tlsbootstrap.go:239-243`), which puts a cert on disk before the server ever starts and defeats this row's premise; `provided` is a no-op (`tlsbootstrap.go:207-208`), so the fresh volume stays empty. Because no cert ever exists, `certharbor`'s own healthcheck (`https://localhost:8443/login`, `docker-compose.yml:118`) fails by design for the life of this row: wait for the container to reach `running`, not `healthy`, before proceeding. Assert that the container stays up and that `openssl s_client` fails, not that anything is served. Starts from `USE_HTTPS` unset; no restore step, since this row is terminal for the leg (Section 1.3) and nothing after it depends on the value |
 
 `ENABLE_HSTS` and `SESSION_SECURE` reach the container through `.env`. `LOCAL_LOGIN_ENABLED` needs `compose.e2e-oidc.yml` and `USE_HTTPS` needs `compose.e2e-config.yml`, per Section 2.5.
 
-*Teardown:* restore `ENABLE_HSTS` and `SESSION_SECURE` to the job-level values and recreate `step-webui`.
+*Teardown:* restore `ENABLE_HSTS` and `SESSION_SECURE` to the job-level values and recreate `certharbor`.
 
 #### E2E-CFG-02: a forwarding header is believed only from a trusted peer
 
-*Tier:* nightly (`oidc-mail` leg). Needs `compose.e2e-oidc.yml`, which is the override that passes `TRUST_PROXY` and `TRUSTED_PROXY_CIDRS` through. Skips with reason when `E2E_OIDC_ENABLED` is unset. Restarts or recreates `step-webui` between phases, so it takes the Section 3.0.4 barrier.
+*Tier:* nightly (`oidc-mail` leg). Needs `compose.e2e-oidc.yml`, which is the override that passes `TRUST_PROXY` and `TRUSTED_PROXY_CIDRS` through. Skips with reason when `E2E_OIDC_ENABLED` is unset. Restarts or recreates `certharbor` between phases, so it takes the Section 3.0.4 barrier.
 
 *Objective:* Section 6.4. The rate limiter and the audit log must key off an address the client cannot choose. The final phase below additionally covers the configuration-failure mode E2E-BOOT-07 case (d) does not reach from the runtime side: that a bad `TRUSTED_PROXY_CIDRS` is fatal is BOOT-07's property; that `TRUST_PROXY=false` boots healthy and ignores a forged header regardless is this entry's.
 
@@ -1945,9 +1945,9 @@ Twelve environment keys change runtime behaviour. This is the complete list and 
 2. `make e2e-restart-ui`, so the socket peer's login-attempt count starts fresh for the next variant; `IsBlocked`/`RL.attempts` is a process-local map (`security/security.go`), and every variant below arrives from the same socket peer, so without a restart between them the second and third variants find the peer already blocked from the first and never reach their own fifth-attempt boundary.
 3. Repeat step 1 with `X-Real-IP`, then `make e2e-restart-ui` again, then repeat step 1 with `True-Client-IP`.
 4. `GET /admin/security`.
-5. **Recreate** `step-webui` (`docker compose up -d step-webui`, not `restart`) with `TRUSTED_PROXY_CIDRS` widened in `.env` to include the harness's address. A `restart` reuses the existing container's environment and would leave the narrower list in effect, and the recreate also clears the limiter, which is required regardless since the harness's own address was blocked by the untrusted-peer variants above.
+5. **Recreate** `certharbor` (`docker compose up -d certharbor`, not `restart`) with `TRUSTED_PROXY_CIDRS` widened in `.env` to include the harness's address. A `restart` reuses the existing container's environment and would leave the narrower list in effect, and the recreate also clears the limiter, which is required regardless since the harness's own address was blocked by the untrusted-peer variants above.
 6. Re-run step 1's pattern against the recreated stack, with `X-Forwarded-For: 203.0.113.7, <harness address>`.
-7. **Final phase (Section 3.0.6).** Recreate `step-webui` again with `TRUST_PROXY=false` and `TRUSTED_PROXY_CIDRS` unset.
+7. **Final phase (Section 3.0.6).** Recreate `certharbor` again with `TRUST_PROXY=false` and `TRUSTED_PROXY_CIDRS` unset.
 8. Against that recreated stack, issue five failed logins for a valid username with a forged `X-Forwarded-For` header.
 
 *Assertions:*
@@ -1958,7 +1958,7 @@ Twelve environment keys change runtime behaviour. This is the complete list and 
 - Step 7's recreate starts healthy. `TRUST_PROXY=false` installs no `RealIP` middleware at all, so an absent or unparseable `TRUSTED_PROXY_CIDRS` is irrelevant and must not be fatal under this mode; E2E-BOOT-07 case (d) is what pins the fatal behaviour when `TRUST_PROXY=true` instead.
 - Step 8's forged header changes nothing: the lockout still fires on the fifth attempt and `/admin/security` records the harness's real socket address, not the forged one.
 
-*Teardown:* recreate `step-webui` with `TRUST_PROXY` and `TRUSTED_PROXY_CIDRS` restored to the leg's starting values before the next row in the `oidc-mail` leg runs (Section 1.3).
+*Teardown:* recreate `certharbor` with `TRUST_PROXY` and `TRUSTED_PROXY_CIDRS` restored to the leg's starting values before the next row in the `oidc-mail` leg runs (Section 1.3).
 
 #### E2E-STATIC-01: static assets are served with correct MIME types and resist traversal
 
@@ -1990,7 +1990,7 @@ Twelve environment keys change runtime behaviour. This is the complete list and 
 
 *Assertions:*
 - The temporary user is created with the requested role, and a role value outside `admin`/`manager`/`viewer` falls back to `viewer` (`handlers/admin_temp.go:90-92`).
-- Within 90s of step 4, the row is reported expired and `docker compose logs --no-color --timestamps step-webui | grep -F 'temp users expired'` finds the line, with a `count` of at least 1.
+- Within 90s of step 4, the row is reported expired and `docker compose logs --no-color --timestamps certharbor | grep -F 'temp users expired'` finds the line, with a `count` of at least 1.
 - The bound is 90s rather than 60s because the ticker's phase relative to step 4 is arbitrary.
 
 *Assertions on the credential handover* (Section 6.7):
@@ -1998,7 +1998,7 @@ Twelve environment keys change runtime behaviour. This is the complete list and 
 - **No `new_temp_cred` cookie is set**, and neither the generated password nor the token appears in any `Set-Cookie` header. Positive control for that absence: the session cookie *is* present on the same response, so the header was read.
 - The redirected GET renders the username and password exactly once. **A second GET of the identical URL renders neither**, because `take` deletes the entry before it checks the expiry (`handlers/temp_creds.go:49-63`). Assert the second response contains the username of the new temporary user in the list table but not its password.
 - A GET with a fabricated `?cred=` value renders no credential and does not error.
-- Neither the token nor the generated password appears in `docker compose logs --no-color --timestamps step-webui`, in `auth_log`, or in the `users` row. E2E-SEC-04's canary sweep covers the artifact side of the same property.
+- Neither the token nor the generated password appears in `docker compose logs --no-color --timestamps certharbor`, in `auth_log`, or in the `users` row. E2E-SEC-04's canary sweep covers the artifact side of the same property.
 - The error paths of `POST /admin/users-temp` render their flash on `/admin/users-temp` itself, each exactly once. Section 6.12 records the defect this corrects.
 
 #### E2E-TEMP-02: an expired temporary admin loses access immediately
@@ -2007,7 +2007,7 @@ Twelve environment keys change runtime behaviour. This is the complete list and 
 
 *Objective:* Expiry ends a temporary account's access, not merely its row's active flag. Use a temporary **admin**, since that is the case where the gap mattered.
 
-*Steps:* as E2E-TEMP-01 but with its own fresh `role=admin` temporary user, keeping that user's session in jar A and confirming `GET /admin` returns `200` before expiry. Before setting the row's `expires_at` into the past, record the current `docker compose logs --no-color --timestamps step-webui | grep -cF 'temp users expired'` count, since E2E-TEMP-01 already emitted this line earlier in the Section 3.0.3 order and a bare presence check would pass immediately without waiting for this row's own occurrence (Section 3.0.5). Set `expires_at` into the past, then poll the same grep until its count exceeds the recorded baseline. That new occurrence is the gate: only once the count has increased does this test issue `GET /admin` on jar A again, since it is the only observable confirmation the ticker has actually run against this row rather than a still-pending one, or against the row E2E-TEMP-01 already expired.
+*Steps:* as E2E-TEMP-01 but with its own fresh `role=admin` temporary user, keeping that user's session in jar A and confirming `GET /admin` returns `200` before expiry. Before setting the row's `expires_at` into the past, record the current `docker compose logs --no-color --timestamps certharbor | grep -cF 'temp users expired'` count, since E2E-TEMP-01 already emitted this line earlier in the Section 3.0.3 order and a bare presence check would pass immediately without waiting for this row's own occurrence (Section 3.0.5). Set `expires_at` into the past, then poll the same grep until its count exceeds the recorded baseline. That new occurrence is the gate: only once the count has increased does this test issue `GET /admin` on jar A again, since it is the only observable confirmation the ticker has actually run against this row rather than a still-pending one, or against the row E2E-TEMP-01 already expired.
 
 *Assertions:*
 - The pre-expiry request returns `200`. Positive control.
@@ -2018,7 +2018,7 @@ Twelve environment keys change runtime behaviour. This is the complete list and 
 
 Behind `E2E_LE_ENABLED`, skipped with an explicit reason when it is not set, on the same discipline as E2E-AUTH-08. LE issuance needs an ACME endpoint and a solvable challenge, so the flagged stack supplies `pebble` or an equivalent local ACME server plus a DNS or HTTP-01 responder it controls. Do not point these tests at the real Let's Encrypt service.
 
-**Blocked on the `LE_ACME_DIRECTORY_URL` prerequisite in Section 2.7.4.** Without it the application always dials the real Let's Encrypt production (or staging) directory (`le/lego.go:41-42,142-144`), and no test in this section can be written against a local server at all. If that prerequisite is not made, this entire section is deleted rather than shipped red, the same contract E2E-RENEW-01 carries for `UI_CERT_DURATION`. Every entry below assumes `compose.e2e-le.yml` (Section 2.7.1) is composed in, which sets `LE_ACME_DIRECTORY_URL` at the local server, adds `LEGO_CA_CERTIFICATES` so `lego` trusts it, and routes its HTTP-01 challenge to `step-webui`'s port 80.
+**Blocked on the `LE_ACME_DIRECTORY_URL` prerequisite in Section 2.7.4.** Without it the application always dials the real Let's Encrypt production (or staging) directory (`le/lego.go:41-42,142-144`), and no test in this section can be written against a local server at all. If that prerequisite is not made, this entire section is deleted rather than shipped red, the same contract E2E-RENEW-01 carries for `UI_CERT_DURATION`. Every entry below assumes `compose.e2e-le.yml` (Section 2.7.1) is composed in, which sets `LE_ACME_DIRECTORY_URL` at the local server, adds `LEGO_CA_CERTIFICATES` so `lego` trusts it, and routes its HTTP-01 challenge to `certharbor`'s port 80.
 
 #### E2E-LE-01: the LE dashboard and settings round-trip
 
@@ -2079,7 +2079,7 @@ Behind `E2E_LE_ENABLED`, skipped with an explicit reason when it is not set, on 
 
 ### 3.16 The SPA and the origin
 
-These five tests exist because of the split in `plans/frontend-backend-split.md`, and they land with its Phase 3c. They drive the four-container stack through the published origin, `BASE_URL`, which names `step-webui-web`, with `SESSION_SECURE=true` so the `__Host-` cookie names apply. The SPA is mounted under `SPA_BASE` (`/app`), a single constant in `helpers/env.ts` that becomes the empty string when Phase 9 flips the base path. E2E-SPA-01 to E2E-SPA-03 and E2E-CSP-01 are the `ui` project, in `test/e2e/specs/spa/spa-shell.ui.spec.ts`, one serial `describe`. E2E-ORIGIN-01 is the `api` project, in `test/e2e/specs/origin/origin-01.api.spec.ts`.
+These five tests exist because of the split in `plans/frontend-backend-split.md`, and they land with its Phase 3c. They drive the four-container stack through the published origin, `BASE_URL`, which names `certharbor-web`, with `SESSION_SECURE=true` so the `__Host-` cookie names apply. The SPA is mounted under `SPA_BASE` (`/app`), a single constant in `helpers/env.ts` that becomes the empty string when Phase 9 flips the base path. E2E-SPA-01 to E2E-SPA-03 and E2E-CSP-01 are the `ui` project, in `test/e2e/specs/spa/spa-shell.ui.spec.ts`, one serial `describe`. E2E-ORIGIN-01 is the `api` project, in `test/e2e/specs/origin/origin-01.api.spec.ts`.
 
 #### E2E-SPA-01: log in at `/app/`, navigate, hard-refresh a deep link, log out
 
@@ -2093,7 +2093,7 @@ These five tests exist because of the split in `plans/frontend-backend-split.md`
 5. Open `/app/certificates`, click Sign Out, then `GET /api/v1/session`.
 
 *Assertions:*
-- The login answers `200`, and every `Set-Cookie` on it is `__Host-step-webui` or `__Host-step-webui-csrf` with `Secure`, `Path=/` and no `Domain`. There are at least two, and the browser's jar holds both. A wrong attribute would make the browser drop a `__Host-` cookie silently, so the jar check is what catches it.
+- The login answers `200`, and every `Set-Cookie` on it is `__Host-certharbor` or `__Host-certharbor-csrf` with `Secure`, `Path=/` and no `Domain`. There are at least two, and the browser's jar holds both. A wrong attribute would make the browser drop a `__Host-` cookie silently, so the jar check is what catches it.
 - The dashboard (`data-testid="page-dashboard"`) is visible at the base path and again after a reload.
 - Client-side navigation lands on `/app/certificates` with `page-certificates` visible.
 - The deep link renders `page-admin-user` on a cold load and after a reload, so nginx's fallback serves the shell and the router resolves the path under its basename.
@@ -2131,13 +2131,13 @@ These five tests exist because of the split in `plans/frontend-backend-split.md`
 
 *Tier:* PR (e2e-main, `ui` project). Behind the Section 3.0.4 barrier. Four-minute timeout. Last in its file, since it stops the backend.
 
-*Steps:* `docker compose stop step-webui`, `GET /api/v1/session` through the origin, then open `/app/certificates`.
+*Steps:* `docker compose stop certharbor`, `GET /api/v1/session` through the origin, then open `/app/certificates`.
 
 *Assertions:*
 - The API answers `503` with `Content-Type: application/problem+json` and a `type` ending `/upstream-unavailable`, which is nginx's `@apidown` document.
 - The page shows the unavailable state (`data-testid="unavailable"`), with no `page-login` and no Password field. A login form here would invite a password into a form that cannot work.
 
-*Teardown:* `docker compose start step-webui`, then wait for the backend and nginx to report healthy.
+*Teardown:* `docker compose start certharbor`, then wait for the backend and nginx to report healthy.
 
 #### E2E-ORIGIN-01: every server-rendered route and `/static` asset reaches the backend through the origin
 
@@ -2154,7 +2154,7 @@ These five tests exist because of the split in `plans/frontend-backend-split.md`
 
 ### 4.1 The harness
 
-The suite is Playwright Test in TypeScript. `test/e2e/` is its own Node project carrying `package.json`, `tsconfig.json`, `playwright.config.ts`, `fixtures/`, `helpers/` and `specs/`. It is not part of the `step-webui` Go module and not part of the repo-root frontend tooling, so its dependencies never reach `govulncheck` or the `trivy` filesystem scan, both of which gate today.
+The suite is Playwright Test in TypeScript. `test/e2e/` is its own Node project carrying `package.json`, `tsconfig.json`, `playwright.config.ts`, `fixtures/`, `helpers/` and `specs/`. It is not part of the `certharbor` Go module and not part of the repo-root frontend tooling, so its dependencies never reach `govulncheck` or the `trivy` filesystem scan, both of which gate today.
 
 Specs mirror this document's own sections, one directory per section, so a reader holding a test ID can find its file without an index: `specs/bootstrap/`, `specs/auth/`, `specs/rbac/`, `specs/certs/`, `specs/provisioners/`, `specs/history/`, `specs/admin/`, `specs/backup/`, `specs/health/`, `specs/renewal/`, `specs/csrf/`, `specs/config/`, `specs/temp/`, `specs/le/`, `specs/notifications/`. **Every `test()` title begins with its E2E ID**, so a failure in `junit.xml` names the ID directly and the check UI is usable without cross-referencing.
 
@@ -2201,7 +2201,7 @@ Everything else stays out of `ui`. The admin-console dropdown is server-rendered
 | `trace` | `retain-on-failure` | see Section 4.6 |
 | `screenshot` | `only-on-failure` | |
 | `video` | `retain-on-failure` | |
-| `ignoreHTTPSErrors` | `true`, for both `api` and `ui` | `BASE_URL=https://step-webui:8443`, but the UI's serving certificate never carries a SAN for `step-webui`: the self-signed fallback's SANs are `localhost` and `HOST_IP` (`tlsbootstrap.go:134-144`), and a `stepca`-issued leaf's hostname comes from `resolveUIHostname`, which resolves to `UI_HOSTNAME`, the OS hostname, or `localhost` (`tlsbootstrap.go:189-197`), never to the compose service name the harness dials. Without this the handshake fails on every request, in both projects |
+| `ignoreHTTPSErrors` | `true`, for both `api` and `ui` | `BASE_URL=https://certharbor:8443`, but the UI's serving certificate never carries a SAN for `certharbor`: the self-signed fallback's SANs are `localhost` and `HOST_IP` (`tlsbootstrap.go:134-144`), and a `stepca`-issued leaf's hostname comes from `resolveUIHostname`, which resolves to `UI_HOSTNAME`, the OS hostname, or `localhost` (`tlsbootstrap.go:189-197`), never to the compose service name the harness dials. Without this the handshake fails on every request, in both projects |
 | reporters | `list`, `junit`, `html` | `list` for the job log, `junit` for the check UI, `html` uploaded as an artifact. `playwright.config.ts` pins `junit`'s `outputFile` to land inside the path `actions/upload-artifact` collects, since the two are configured independently and a mismatch silently drops the file the check UI depends on |
 
 #### 4.1.4 Fixtures and helpers
@@ -2278,17 +2278,17 @@ Three containers each paying their own `npm ci` is the price of E2E-AUTH-02/03 n
 | artifact collection | 15s |
 | **total, `selfsigned`/`provided`/`ca-down`/`fatals`** | **≈ 3m05s to 4m05s** |
 
-**The `fingerprint` scenario is the long pole and the table above understates it.** It runs three tests (E2E-BOOT-01, E2E-BOOT-05, E2E-BOOT-06) in sequence inside one scenario: a `down -v`, a `step-ca`-only `up --wait` to read the fingerprint, then `step-webui`'s own `up`, and E2E-BOOT-05 alone carries a 90-second retry-exhaustion bound before it fails over. Realistic wall clock for the scenario step is **5 to 7 minutes**, not 1m30s to 2m30s, giving a scenario total of roughly **6 to 8 minutes** once the fixed overhead above is added. `timeout-minutes: 15` on the job still covers it with margin. Because this scenario can run close to or past `e2e-main`'s own critical path (Section 4.2.1's `≈8m45s`), "sits inside `e2e-main`'s shadow" holds on the typical run but is not a guarantee on every run; the two jobs are fanned out in parallel regardless; either can be the one a reviewer is waiting on.
+**The `fingerprint` scenario is the long pole and the table above understates it.** It runs three tests (E2E-BOOT-01, E2E-BOOT-05, E2E-BOOT-06) in sequence inside one scenario: a `down -v`, a `step-ca`-only `up --wait` to read the fingerprint, then `certharbor`'s own `up`, and E2E-BOOT-05 alone carries a 90-second retry-exhaustion bound before it fails over. Realistic wall clock for the scenario step is **5 to 7 minutes**, not 1m30s to 2m30s, giving a scenario total of roughly **6 to 8 minutes** once the fixed overhead above is added. `timeout-minutes: 15` on the job still covers it with margin. Because this scenario can run close to or past `e2e-main`'s own critical path (Section 4.2.1's `≈8m45s`), "sits inside `e2e-main`'s shadow" holds on the typical run but is not a guarantee on every run; the two jobs are fanned out in parallel regardless; either can be the one a reviewer is waiting on.
 
 **Per pull request:** `image` (1m warm, 5m cold, now building both the application and the harness image) then `e2e-main` at ≈8m45s then `e2e-gate` at 10s. **Roughly 9m55s warm and 13m55s cold**, taking the repository from about five minutes of feedback to about fourteen at worst. Billed runner-minutes are roughly **33**: nine for `e2e-main`, twenty-one across the five bootstrap scenarios (the `fingerprint` scenario alone accounts for six to eight of those), and the rest for `image` and the gate. The five scenarios each pay their own boot and `npm ci`, which is the price of `fail-fast: false` and of one broken scenario not masking the other four.
 
 ### 4.3 Jobs
 
-`image` builds `step-ca-webui:e2e` once and writes the buildx layer cache to `type=gha,scope=e2e`. Both downstream jobs re-materialise the image from that cache rather than recompiling, and then compose with `compose.e2e-image.yml` so that `step-webui`'s `build:` block is never used.
+`image` builds `certharbor:e2e` once and writes the buildx layer cache to `type=gha,scope=e2e`. Both downstream jobs re-materialise the image from that cache rather than recompiling, and then compose with `compose.e2e-image.yml` so that `certharbor`'s `build:` block is never used.
 
 `e2e-main` generates secrets in-job, brings up the long-lived stack with `--wait`, and then runs three separate `docker run` invocations of the harness image, each attached to `step-network`, in this order: the `api` project excluding E2E-AUTH-02 and E2E-AUTH-03, then the `api` project's E2E-AUTH-02/E2E-AUTH-03 pair alone in a second container so they poison their own address rather than the first container's, then the `ui` project. Three invocations rather than one `--project=api --project=ui` command, because Playwright does not guarantee cross-project ordering within a single invocation and `ui`'s four tests depend on fixtures and application state the `api` project establishes; a single command that happened to run `ui` first would fail for a reason unrelated to what it was testing. Between the second and third invocations, the workflow runs an unconditional `make e2e-restart-ui`: the lockout pair's container address is freed when that container exits, and without the restart the `ui` project's own container risks being assigned that same now-unblocked address, which would carry over the lockout pair's rate-limit state. Appendix B carries the exact commands.
 
-`e2e-bootstrap` runs the `infra` project **on the host**, one scenario per matrix entry, with `fail-fast: false` so one broken scenario does not mask the others. Its runner sets `STEPWEBUI_ADMIN_PASSWORD` for every scenario except `fatals` case (b), which requires it absent.
+`e2e-bootstrap` runs the `infra` project **on the host**, one scenario per matrix entry, with `fail-fast: false` so one broken scenario does not mask the others. Its runner sets `CERTHARBOR_ADMIN_PASSWORD` for every scenario except `fatals` case (b), which requires it absent.
 
 Both jobs collect artifacts and run the redaction assertion under `if: always()`, then upload. `e2e-gate` fails unless both report `success`.
 
@@ -2306,7 +2306,7 @@ Appendix B carries the workflow file.
 
 ### 4.5 Secrets
 
-All three `secrets/*` files and `STEPWEBUI_ADMIN_PASSWORD` are generated **in-job** with `make setup FORCE=1` and `openssl rand`, and registered with `::add-mask::`.
+All three `secrets/*` files and `CERTHARBOR_ADMIN_PASSWORD` are generated **in-job** with `make setup FORCE=1` and `openssl rand`, and registered with `::add-mask::`.
 
 **Never store them as repository secrets.** A stored CA provisioner password is a long-lived credential with no rotation story that is readable by any workflow using `secrets: inherit`, and it protects the CA's private keys.
 
@@ -2325,7 +2325,7 @@ Two sources. Playwright emits the first group. The collector emits the second an
 
 **From the collector:**
 
-- **Per-service logs** captured with `--no-color --timestamps`. Timestamps are mandatory, since every `slog.Debug` line is invisible and retry counts are inferable only from the timestamps on the surrounding INFO lines. For `step-webui`, `collect.sh` reads the cumulative capture file (Section 2.6), not a live `docker compose logs step-webui`, since a mid-run recreate truncates the live view to the current container alone.
+- **Per-service logs** captured with `--no-color --timestamps`. Timestamps are mandatory, since every `slog.Debug` line is invisible and retry counts are inferable only from the timestamps on the surrounding INFO lines. For `certharbor`, `collect.sh` reads the cumulative capture file (Section 2.6), not a live `docker compose logs certharbor`, since a mid-run recreate truncates the live view to the current container alone.
 - **`docker inspect` for every container, including `State.Health.Log`.** That is the only place a failing healthcheck probe's own output exists, and `docker compose down` destroys it.
 - **A `psql` dump of `certificates`, `cert_history`, `auth_log` and `users` at failure time.**
 - **The resolved `docker compose config`.**
@@ -2792,7 +2792,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          tags: step-ca-webui:e2e
+          tags: certharbor:e2e
           push: false
           load: true
           cache-from: type=gha,scope=e2e
@@ -2804,7 +2804,7 @@ jobs:
           file: ./test/e2e/Dockerfile
           build-args: |
             PLAYWRIGHT_IMAGE=${{ env.PLAYWRIGHT_IMAGE }}
-          tags: step-ca-webui-harness:e2e
+          tags: certharbor-harness:e2e
           push: false
           load: true
           cache-from: type=gha,scope=e2e-harness
@@ -2825,7 +2825,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          tags: step-ca-webui:e2e
+          tags: certharbor:e2e
           push: false
           load: true
           cache-from: type=gha,scope=e2e
@@ -2836,7 +2836,7 @@ jobs:
           file: ./test/e2e/Dockerfile
           build-args: |
             PLAYWRIGHT_IMAGE=${{ env.PLAYWRIGHT_IMAGE }}
-          tags: step-ca-webui-harness:e2e
+          tags: certharbor-harness:e2e
           push: false
           load: true
           cache-from: type=gha,scope=e2e-harness
@@ -2847,7 +2847,7 @@ jobs:
           echo "::add-mask::${ADMIN_PW}"
           cp .env.example .env
           {
-            echo "STEPWEBUI_ADMIN_PASSWORD=${ADMIN_PW}"
+            echo "CERTHARBOR_ADMIN_PASSWORD=${ADMIN_PW}"
             echo "PUBLIC_BASE_URL=https://localhost"
             echo "SESSION_SECURE=true"
           } >> .env
@@ -2855,7 +2855,7 @@ jobs:
         run: docker compose -f docker-compose.yml -f compose.e2e-image.yml up -d --wait
       # The three steps below run separate containers of the same harness
       # image, all attached to step-network. Each mounts the repo root
-      # (compose file, .env and secrets/ live there, so STEPWEBUI_ADMIN_PASSWORD
+      # (compose file, .env and secrets/ live there, so CERTHARBOR_ADMIN_PASSWORD
       # and the ca_password/secret_key/postgres_password canaries are read
       # off the filesystem rather than threaded through as extra masked
       # env vars) and /var/run/docker.sock (so tests can run
@@ -2873,9 +2873,9 @@ jobs:
             --network step-network \
             -v "$PWD:/repo" -v /var/run/docker.sock:/var/run/docker.sock \
             -w /repo/test/e2e \
-            -e BASE_URL=https://step-webui:8443 \
+            -e BASE_URL=https://certharbor:8443 \
             -e CI=true \
-            step-ca-webui-harness:e2e \
+            certharbor-harness:e2e \
             sh -c 'npm ci && npx playwright test --project=api --grep-invert "E2E-AUTH-02|E2E-AUTH-03"'
       - name: Run the lockout pair on its own harness address
         run: |
@@ -2883,11 +2883,11 @@ jobs:
             --network step-network \
             -v "$PWD:/repo" -v /var/run/docker.sock:/var/run/docker.sock \
             -w /repo/test/e2e \
-            -e BASE_URL=https://step-webui:8443 \
+            -e BASE_URL=https://certharbor:8443 \
             -e CI=true \
-            step-ca-webui-harness:e2e \
+            certharbor-harness:e2e \
             sh -c 'npm ci && npx playwright test --project=api --grep "E2E-AUTH-02|E2E-AUTH-03"'
-      - name: Restart step-webui before the ui project
+      - name: Restart certharbor before the ui project
         # Unconditional, not just on failure: the lockout pair's container
         # address is freed when that container exits, and the freed address
         # can be reassigned to the ui project's own container. Without this
@@ -2900,9 +2900,9 @@ jobs:
             --network step-network \
             -v "$PWD:/repo" -v /var/run/docker.sock:/var/run/docker.sock \
             -w /repo/test/e2e \
-            -e BASE_URL=https://step-webui:8443 \
+            -e BASE_URL=https://certharbor:8443 \
             -e CI=true \
-            step-ca-webui-harness:e2e \
+            certharbor-harness:e2e \
             sh -c 'npm ci && npx playwright test --project=ui'
       - name: Collect artifacts
         if: always()
@@ -2949,7 +2949,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          tags: step-ca-webui:e2e
+          tags: certharbor:e2e
           push: false
           load: true
           cache-from: type=gha,scope=e2e
@@ -2997,6 +2997,6 @@ jobs:
           test "${{ needs.e2e-bootstrap.result }}" = success
 ```
 
-`scenario.sh` generates and exports `STEPWEBUI_ADMIN_PASSWORD` for every scenario except `fatals` case (b), which requires it absent. That is why the bootstrap job's secret step does not append it to `.env` the way `e2e-main`'s does.
+`scenario.sh` generates and exports `CERTHARBOR_ADMIN_PASSWORD` for every scenario except `fatals` case (b), which requires it absent. That is why the bootstrap job's secret step does not append it to `.env` the way `e2e-main`'s does.
 
 The nightly workflow is the same shape with `on: schedule`, a four-value `leg` matrix (`renew`, `oidc-mail`, `le`, `bootstrap-extra`), and a final `report` job with `if: failure()` that opens or updates a single tracking issue.

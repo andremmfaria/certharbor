@@ -6,13 +6,13 @@ import { newJar } from "./session";
  * Drives the authorization-code + PKCE round trip against
  * ghcr.io/navikt/mock-oauth2-server (compose.e2e-oidc.yml).
  *
- * The round trip is three hops, and the middle one is not ours: step-webui
+ * The round trip is three hops, and the middle one is not ours: certharbor
  * redirects to the IdP, the IdP renders an interactive sign-in form, and its
  * submission redirects back to /auth/oidc/callback. Nothing here talks to the
  * IdP through the application, so the helper needs its own request context
  * pointed at the issuer.
  *
- * The state, nonce and PKCE verifier ride in the separate step-webui-oidc cookie
+ * The state, nonce and PKCE verifier ride in the separate certharbor-oidc cookie
  * rather than in the session (D6 of plans/frontend-backend-split.md): the
  * session cookie is SameSite=Strict and a browser would not send it on the
  * cross-site navigation back from the provider. Passing the same jar through
@@ -46,7 +46,7 @@ async function idpContext(): Promise<APIRequestContext> {
 }
 
 /**
- * Starts the flow and returns the IdP authorize URL step-webui redirected to,
+ * Starts the flow and returns the IdP authorize URL certharbor redirected to,
  * with the jar holding the round-trip cookie.
  */
 export async function beginOIDCLogin(

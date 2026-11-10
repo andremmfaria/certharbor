@@ -55,27 +55,27 @@ trap 'rm -f "$env_file"' EXIT
 # Case (b) of the fatals scenario needs the admin password absent, so that
 # scenario is the one place the driver does not set one.
 if [[ "$scenario" != "fatals" ]]; then
-  if ! grep -qE '^STEPWEBUI_ADMIN_PASSWORD=.+' "$env_file"; then
+  if ! grep -qE '^CERTHARBOR_ADMIN_PASSWORD=.+' "$env_file"; then
     admin_pw="$(openssl rand -base64 24)"
     echo "::add-mask::${admin_pw}"
-    sed -i '/^#\?[[:space:]]*STEPWEBUI_ADMIN_PASSWORD=/d' "$env_file"
-    echo "STEPWEBUI_ADMIN_PASSWORD=${admin_pw}" >> "$env_file"
-    export STEPWEBUI_ADMIN_PASSWORD="$admin_pw"
+    sed -i '/^#\?[[:space:]]*CERTHARBOR_ADMIN_PASSWORD=/d' "$env_file"
+    echo "CERTHARBOR_ADMIN_PASSWORD=${admin_pw}" >> "$env_file"
+    export CERTHARBOR_ADMIN_PASSWORD="$admin_pw"
   else
-    STEPWEBUI_ADMIN_PASSWORD="$(sed -n 's/^STEPWEBUI_ADMIN_PASSWORD=//p' "$env_file" | head -1)"
-    export STEPWEBUI_ADMIN_PASSWORD
+    CERTHARBOR_ADMIN_PASSWORD="$(sed -n 's/^CERTHARBOR_ADMIN_PASSWORD=//p' "$env_file" | head -1)"
+    export CERTHARBOR_ADMIN_PASSWORD
   fi
 fi
 
 # Both containers read the mounted secrets as their own non-root uid, which is
 # never the checkout's owner. Mode 600 denies them (step-ca is uid 1000,
-# step-webui 10001) and the CA never finishes booting.
+# certharbor 10001) and the CA never finishes booting.
 chmod 644 "$repo_root"/secrets/* 2>/dev/null || true
 
-# compose.e2e-noweb.yml hides step-webui-web from every compose call the specs
+# compose.e2e-noweb.yml hides certharbor-web from every compose call the specs
 # make, so an origin left running by an earlier main-suite stack in the same
 # project would survive their `down -v`, holding step-network and its volume.
-docker compose -f "$repo_root/docker-compose.yml" --env-file "$env_file" rm -sf step-webui-web >/dev/null
+docker compose -f "$repo_root/docker-compose.yml" --env-file "$env_file" rm -sf certharbor-web >/dev/null
 
 export E2E_COMPOSE_OVERRIDES="$overrides"
 export E2E_ENV_FILE="$env_file"

@@ -17,11 +17,11 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"step-webui/config"
-	"step-webui/models"
-	"step-webui/stepca"
+	"certharbor/config"
+	"certharbor/models"
+	"certharbor/stepca"
 
-	appdb "step-webui/db"
+	appdb "certharbor/db"
 )
 
 // certFromURL parses the chi "id" URL param, fetches the certificate from the

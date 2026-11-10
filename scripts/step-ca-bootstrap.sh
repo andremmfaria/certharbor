@@ -9,7 +9,7 @@ CERTS_DIR="${STEPPATH:-/home/step}/certs"
 
 # The base image leaves $CERTS_DIR at 0750 (drwx--S---), owned by the "step"
 # user, with the group bit missing +x, so no other UID can even traverse
-# into it, let alone read root_ca.crt/intermediate_ca.crt. step-webui (and any
+# into it, let alone read root_ca.crt/intermediate_ca.crt. certharbor (and any
 # other container sharing the step-ca-data volume) reads those files as its
 # own non-root UID, which is a different UID than step-ca's, the standard
 # docker-compose deployment shape this project documents ("root cert is
@@ -20,7 +20,7 @@ CERTS_DIR="${STEPPATH:-/home/step}/certs"
 if [ -d "$CERTS_DIR" ]; then
   chmod 755 "$CERTS_DIR"
   chmod 644 "$CERTS_DIR"/*.crt 2>/dev/null || true
-  echo "[step-ca-webui] relaxed permissions on $CERTS_DIR so containers sharing this volume can read the public root/intermediate certs"
+  echo "[certharbor] relaxed permissions on $CERTS_DIR so containers sharing this volume can read the public root/intermediate certs"
 fi
 
 if [ -f "$CA_CONFIG" ]; then
@@ -50,9 +50,9 @@ if [ -f "$CA_CONFIG" ]; then
       end
     ' "$CA_CONFIG" > "$tmp"; then
     cat "$tmp" > "$CA_CONFIG"
-    echo "[step-ca-webui] ensured TLS duration claims for provisioner '$PROVISIONER_NAME': default=$DEFAULT_TLS_DURATION max=$MAX_TLS_DURATION"
+    echo "[certharbor] ensured TLS duration claims for provisioner '$PROVISIONER_NAME': default=$DEFAULT_TLS_DURATION max=$MAX_TLS_DURATION"
   else
-    echo "[step-ca-webui] failed to update TLS duration claims in $CA_CONFIG" >&2
+    echo "[certharbor] failed to update TLS duration claims in $CA_CONFIG" >&2
     rm -f "$tmp"
     exit 1
   fi

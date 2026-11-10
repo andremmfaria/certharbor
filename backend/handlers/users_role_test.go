@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"step-webui/config"
-	"step-webui/models"
+	"certharbor/config"
+	"certharbor/models"
 )
 
 // sessionFlashes reads back the flashes a handler left in the session cookie,

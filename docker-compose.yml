@@ -7,8 +7,8 @@ services:
     restart: unless-stopped
     environment:
       TZ: "${TZ:-UTC}"
-      POSTGRES_DB:            stepwebui
-      POSTGRES_USER:          stepwebui
+      POSTGRES_DB:            certharbor
+      POSTGRES_USER:          certharbor
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
     secrets:
       - postgres_password
@@ -17,7 +17,7 @@ services:
     networks:
       - step-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U stepwebui -d stepwebui"]
+      test: ["CMD-SHELL", "pg_isready -U certharbor -d certharbor"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -54,23 +54,23 @@ services:
       retries: 10
       start_period: 15s
 
-  # ─── Step-CA WebUI backend (Go) ────────────────────────────────────────────
-  # No published port: step-webui-web is the one public origin, and a second
+  # ─── Certharbor backend (Go) ────────────────────────────────────────────
+  # No published port: certharbor-web is the one public origin, and a second
   # path straight to the backend would bypass its rate limit, its body ceiling
   # and the trusted-proxy identity. Debug with `docker compose exec`.
-  step-webui:
+  certharbor:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: "${BACKEND_IMAGE:-step-ca-webui-backend:${IMAGE_TAG:-local}}"
-    container_name: step-webui
+    image: "${BACKEND_IMAGE:-certharbor-backend:${IMAGE_TAG:-local}}"
+    container_name: certharbor
     restart: unless-stopped
     volumes:
-      - step-webui-certs:/opt/step-webui/certs
-      - step-webui-ssl:/opt/step-webui/ssl
-      - step-webui-web-ssl:/opt/step-webui/web-ssl
-      - step-webui-data:/opt/step-webui/data
-      - step-webui-uploads:/opt/step-webui/uploads
+      - certharbor-certs:/opt/certharbor/certs
+      - certharbor-ssl:/opt/certharbor/ssl
+      - certharbor-web-ssl:/opt/certharbor/web-ssl
+      - certharbor-data:/opt/certharbor/data
+      - certharbor-uploads:/opt/certharbor/uploads
       - step-ca-data:/home/step:ro
     secrets:
       - postgres_password
@@ -83,12 +83,12 @@ services:
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
       POSTGRES_HOST:    postgres
       POSTGRES_PORT:    "5432"
-      POSTGRES_USER:    stepwebui
-      POSTGRES_DB:      stepwebui
+      POSTGRES_USER:    certharbor
+      POSTGRES_DB:      certharbor
       CA_URL:           "https://step-ca:9443"
       ROOT_CERT:        "/home/step/certs/root_ca.crt"
       PROVISIONER:      "${PROVISIONER:-admin}"
-      PASSWORD_FILE:    "/opt/step-webui/data/provisioner_password"
+      PASSWORD_FILE:    "/opt/certharbor/data/provisioner_password"
       # stepca, because nginx verifies the backend's leaf against the CA root
       # and a self-signed one fails that on every request. CA_FINGERPRINT and
       # CA_ROOT_CERT_PEM matter only where step-ca-data is not mounted at
@@ -97,11 +97,11 @@ services:
       CA_FINGERPRINT:   "${CA_FINGERPRINT:-}"
       CA_ROOT_CERT_PEM: "${CA_ROOT_CERT_PEM:-}"
       # nginx's proxy_ssl_name: the backend leaf must carry this name.
-      UI_HOSTNAME:      "${UI_HOSTNAME:-step-webui}"
+      UI_HOSTNAME:      "${UI_HOSTNAME:-certharbor}"
       UI_CERT_DURATION: "${UI_CERT_DURATION:-8760h}"
       WEB_TLS_MODE:     "${WEB_TLS_MODE:-stepca}"
       WEB_HOSTNAME:     "${WEB_HOSTNAME:-}"
-      WEB_UPSTREAM_HOST: "${WEB_UPSTREAM_HOST:-step-webui-web}"
+      WEB_UPSTREAM_HOST: "${WEB_UPSTREAM_HOST:-certharbor-web}"
       PROVISIONER_PASSWORD_FILE: /run/secrets/ca_password
       SECRET_KEY_FILE:  /run/secrets/secret_key
       SESSION_SECURE:   "${SESSION_SECURE:-true}"
@@ -128,7 +128,7 @@ services:
       STEP_CA_IMAGE:    "${STEP_CA_IMAGE:-smallstep/step-ca:0.30.2}"
       HOST_IP:          "${HOST_IP:-127.0.0.1}"
       PORT:             "8443"
-      STEPWEBUI_ADMIN_PASSWORD: "${STEPWEBUI_ADMIN_PASSWORD:-}"
+      CERTHARBOR_ADMIN_PASSWORD: "${CERTHARBOR_ADMIN_PASSWORD:-}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -139,21 +139,21 @@ services:
     healthcheck:
       # /health is liveness only. The marker means the backend fell back to a
       # self-signed leaf nginx cannot verify, so depends_on must hold nginx off.
-      test: ["CMD-SHELL", "curl -fsk --max-time 3 -o /dev/null https://localhost:8443/health && test ! -e /opt/step-webui/ssl/.fallback"]
+      test: ["CMD-SHELL", "curl -fsk --max-time 3 -o /dev/null https://localhost:8443/health && test ! -e /opt/certharbor/ssl/.fallback"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 20s
 
-  # ─── Step-CA WebUI origin (nginx) ─────────────────────────────────────────
+  # ─── Certharbor origin (nginx) ─────────────────────────────────────────
   # Terminates TLS for WEB_HOSTNAME, serves the SPA and proxies the backend.
   # Its healthcheck is the image's own.
-  step-webui-web:
+  certharbor-web:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-    image: "${WEB_IMAGE:-step-ca-webui-web:${IMAGE_TAG:-local}}"
-    container_name: step-webui-web
+    image: "${WEB_IMAGE:-certharbor-web:${IMAGE_TAG:-local}}"
+    container_name: certharbor-web
     restart: unless-stopped
     init: true
     environment:
@@ -165,14 +165,14 @@ services:
       WEB_RELOAD_INTERVAL: "${WEB_RELOAD_INTERVAL:-60}"
       WEB_RATE_LIMIT:      "${WEB_RATE_LIMIT:-20r/s}"
       WEB_RATE_BURST:      "${WEB_RATE_BURST:-40}"
-    # The only certificate-bearing mount. step-webui-ssl holds the backend's
+    # The only certificate-bearing mount. certharbor-ssl holds the backend's
     # private key and step-ca-data the CA's, and neither is mounted here.
     volumes:
-      - step-webui-web-ssl:/etc/step-webui/ssl:ro
+      - certharbor-web-ssl:/etc/certharbor/ssl:ro
     ports:
       - "${UI_HTTPS_PORT:-443}:8443"
     depends_on:
-      step-webui:
+      certharbor:
         condition: service_healthy
     networks:
       - step-net
@@ -198,11 +198,11 @@ secrets:
 volumes:
   postgres-data:
   step-ca-data:
-  step-webui-certs:
-  step-webui-ssl:
-  step-webui-web-ssl:
-  step-webui-data:
-  step-webui-uploads:
+  certharbor-certs:
+  certharbor-ssl:
+  certharbor-web-ssl:
+  certharbor-data:
+  certharbor-uploads:
 
 # ─── Networks ──────────────────────────────────────────────────────────────
 networks:

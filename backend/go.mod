@@ -1,4 +1,4 @@
-module step-webui
+module certharbor
 
 go 1.26.10
 

@@ -112,9 +112,9 @@ export function redirectsToLogin(res: APIResponse): boolean {
  * must not assume either spelling: it probes prefixed first, then bare, the
  * same way src/api/client.ts does.
  */
-export const SESSION_COOKIE_BASE = "step-webui";
-export const CSRF_COOKIE_BASE = "step-webui-csrf";
-export const OIDC_COOKIE_BASE = "step-webui-oidc";
+export const SESSION_COOKIE_BASE = "certharbor";
+export const CSRF_COOKIE_BASE = "certharbor-csrf";
+export const OIDC_COOKIE_BASE = "certharbor-oidc";
 const HOST_PREFIX = "__Host-";
 
 /** Both spellings of a cookie base, prefixed first. */

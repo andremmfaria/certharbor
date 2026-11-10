@@ -24,7 +24,7 @@ export FAKE_NGINX_LOG="$T/calls"
 
 STEP_WEBUI_WEB_ENTRYPOINT_LIB=1
 # shellcheck source=/dev/null
-. /usr/local/bin/step-webui-web-entrypoint
+. /usr/local/bin/certharbor-web-entrypoint
 set +e
 
 SSL_DIR="$T/ssl"

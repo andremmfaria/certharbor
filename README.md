@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="assets/logo.svg" alt="Step-CA WebUI logo" width="140" height="140" />
+<img src="assets/logo.svg" alt="Certharbor logo" width="140" height="140" />
 
-# Step-CA WebUI
+# Certharbor
 
 **Self-hosted web interface for [Smallstep step-ca](https://smallstep.com/docs/step-ca/), manage your private PKI from a browser.**
 
@@ -14,7 +14,7 @@
 
 ---
 
-A small-team-friendly web UI on top of `smallstep/step-ca`. No SaaS, no telemetry, no vendor lock-in, runs on your own server in four Docker containers (the nginx origin step-webui-web, the Go backend step-webui, PostgreSQL, step-ca). The UI talks to step-ca through the Go `smallstep/certificates` library, not the `step` CLI.
+A small-team-friendly web UI on top of `smallstep/step-ca`. No SaaS, no telemetry, no vendor lock-in, runs on your own server in four Docker containers (the nginx origin certharbor-web, the Go backend certharbor, PostgreSQL, step-ca). The UI talks to step-ca through the Go `smallstep/certificates` library, not the `step` CLI.
 
 ## Features
 
@@ -29,14 +29,14 @@ A small-team-friendly web UI on top of `smallstep/step-ca`. No SaaS, no telemetr
 ## Quick Start
 
 ```bash
-git clone https://github.com/andremmfaria/step-ca-webui.git
-cd step-ca-webui
+git clone https://github.com/andremmfaria/certharbor.git
+cd certharbor
 make setup   # copies .env.example → .env and generates secrets/
-# edit .env: set HOST_IP, WEB_HOSTNAME, UI_HTTPS_PORT, PROVISIONER, TZ, and STEPWEBUI_ADMIN_PASSWORD
+# edit .env: set HOST_IP, WEB_HOSTNAME, UI_HTTPS_PORT, PROVISIONER, TZ, and CERTHARBOR_ADMIN_PASSWORD
 make up      # docker compose up -d --build
 ```
 
-`STEPWEBUI_ADMIN_PASSWORD` is not optional on a first boot, and neither is `WEB_HOSTNAME`, the name browsers use for the nginx origin, see [docs/deployment.md](docs/deployment.md). Run `make help` for every other target.
+`CERTHARBOR_ADMIN_PASSWORD` is not optional on a first boot, and neither is `WEB_HOSTNAME`, the name browsers use for the nginx origin, see [docs/deployment.md](docs/deployment.md). Run `make help` for every other target.
 
 ## Documentation
 

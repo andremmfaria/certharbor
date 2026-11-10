@@ -19,10 +19,10 @@ import (
 	"strings"
 	"time"
 
-	"step-webui/config"
-	"step-webui/handlers"
-	"step-webui/leafcert"
-	"step-webui/stepca"
+	"certharbor/config"
+	"certharbor/handlers"
+	"certharbor/leafcert"
+	"certharbor/stepca"
 )
 
 // caBootstrapRetries/caBootstrapInterval bound the root-fetch and

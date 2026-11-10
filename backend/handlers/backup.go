@@ -75,13 +75,13 @@ func (h *Handler) AdminBackupDownload(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) buildBackupBundle(ctx context.Context) (string, string, error) {
 	ts := time.Now().UTC().Format("20060102T150405Z")
-	tmp, err := os.MkdirTemp("", "step-webui-backup-*")
+	tmp, err := os.MkdirTemp("", "certharbor-backup-*")
 	if err != nil {
 		return "", "", err
 	}
 
 	manifest := backupManifest{
-		Format:     "step-ca-webui-backup-v1",
+		Format:     "certharbor-backup-v1",
 		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
 		Version:    Version,
 		BuildDate:  BuildDate,
@@ -106,7 +106,7 @@ func (h *Handler) buildBackupBundle(ctx context.Context) (string, string, error)
 		manifest.Components = append(manifest.Components, c)
 	}
 
-	sqlPath := filepath.Join(tmp, "postgres-stepwebui.sql")
+	sqlPath := filepath.Join(tmp, "postgres-certharbor.sql")
 	if err := h.writePGDump(ctx, sqlPath); err != nil {
 		manifest.Warnings = append(manifest.Warnings, "postgres dump failed: "+err.Error())
 	} else {
@@ -119,9 +119,9 @@ func (h *Handler) buildBackupBundle(ctx context.Context) (string, string, error)
 		target string
 	}{
 		{"step-ca-data", "/home/step", "step-ca-data.tgz"},
-		{"step-webui-data", "/opt/step-webui/data", "step-webui-data.tgz"},
-		{"step-webui-certs", h.cfg.CertsDir, "step-webui-certs.tgz"},
-		{"step-webui-uploads", h.cfg.UploadDir, "step-webui-uploads.tgz"},
+		{"certharbor-data", "/opt/certharbor/data", "certharbor-data.tgz"},
+		{"certharbor-certs", h.cfg.CertsDir, "certharbor-certs.tgz"},
+		{"certharbor-uploads", h.cfg.UploadDir, "certharbor-uploads.tgz"},
 	} {
 		target := filepath.Join(tmp, item.target)
 		if err := writeDirTGZ(item.source, target); err != nil {
@@ -136,15 +136,15 @@ func (h *Handler) buildBackupBundle(ctx context.Context) (string, string, error)
 		return "", "", err
 	}
 
-	bundleName := fmt.Sprintf("step-ca-webui-backup-%s.tgz", ts)
+	bundleName := fmt.Sprintf("certharbor-backup-%s.tgz", ts)
 	bundlePath := filepath.Join(tmp, bundleName)
 	if err := writeBundleTGZ(bundlePath, []string{
 		manifestPath,
-		filepath.Join(tmp, "postgres-stepwebui.sql"),
+		filepath.Join(tmp, "postgres-certharbor.sql"),
 		filepath.Join(tmp, "step-ca-data.tgz"),
-		filepath.Join(tmp, "step-webui-data.tgz"),
-		filepath.Join(tmp, "step-webui-certs.tgz"),
-		filepath.Join(tmp, "step-webui-uploads.tgz"),
+		filepath.Join(tmp, "certharbor-data.tgz"),
+		filepath.Join(tmp, "certharbor-certs.tgz"),
+		filepath.Join(tmp, "certharbor-uploads.tgz"),
 	}); err != nil {
 		return "", "", err
 	}

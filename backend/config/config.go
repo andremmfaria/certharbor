@@ -74,7 +74,7 @@ type Config struct {
 	UICertDuration time.Duration
 
 	// nginx's own leaf (D5 rule 5): "stepca" issues it here and writes it to
-	// the step-webui-web-ssl volume, "provided" leaves the operator to mount
+	// the certharbor-web-ssl volume, "provided" leaves the operator to mount
 	// it. WebHostname has no fallback: a container id as the only SAN would
 	// survive on the volume and be served to browsers that reject it.
 	WebTLSMode  string
@@ -101,26 +101,26 @@ const defaultUICertDuration = 8760 * time.Hour
 func Load() *Config {
 	port, _ := strconv.Atoi(getEnv("PORT", "8443"))
 	return &Config{
-		DatabaseURL:   getEnv("DATABASE_URL", "postgres://stepwebui:stepwebui@postgres:5432/stepwebui?sslmode=disable"),
+		DatabaseURL:   getEnv("DATABASE_URL", "postgres://certharbor:certharbor@postgres:5432/certharbor?sslmode=disable"),
 		CAURL:         getEnv("CA_URL", "https://step-ca:9443"),
 		RootCert:      getEnv("ROOT_CERT", "/home/step/certs/root_ca.crt"),
 		Provisioner:   getEnv("PROVISIONER", "admin"),
-		PasswordFile:  getEnv("PASSWORD_FILE", "/opt/step-webui/data/provisioner_password"),
+		PasswordFile:  getEnv("PASSWORD_FILE", "/opt/certharbor/data/provisioner_password"),
 		StepCAImage:   getEnv("STEP_CA_IMAGE", "smallstep/step-ca:0.30.2"),
 		SecretKey:     getEnvOrFile("SECRET_KEY", "SECRET_KEY_FILE", "change-me-in-production-32chars!"),
 		SessionSecure: getEnvBool("SESSION_SECURE", true),
 		TrustProxy:    getEnvBool("TRUST_PROXY", false),
 
 		TrustedProxyCIDRs:     getEnv("TRUSTED_PROXY_CIDRS", ""),
-		WebUpstreamHost:       strings.TrimSpace(getEnv("WEB_UPSTREAM_HOST", "step-webui-web")),
+		WebUpstreamHost:       strings.TrimSpace(getEnv("WEB_UPSTREAM_HOST", "certharbor-web")),
 		AllowedDomainSuffixes: getEnvList("ALLOWED_DOMAIN_SUFFIXES"),
 
 		PublicBaseURL: strings.TrimRight(strings.TrimSpace(getEnv("PUBLIC_BASE_URL", "")), "/"),
 		Port:          port,
-		CertsDir:      "/opt/step-webui/certs",
-		UploadDir:     "/opt/step-webui/uploads",
-		SSLCert:       "/opt/step-webui/ssl/server.crt",
-		SSLKey:        "/opt/step-webui/ssl/server.key",
+		CertsDir:      "/opt/certharbor/certs",
+		UploadDir:     "/opt/certharbor/uploads",
+		SSLCert:       "/opt/certharbor/ssl/server.crt",
+		SSLKey:        "/opt/certharbor/ssl/server.key",
 
 		OIDCEnabled:      getEnvBool("OIDC_ENABLED", false),
 		OIDCIssuerURL:    getEnv("OIDC_ISSUER_URL", ""),
@@ -150,9 +150,9 @@ func Load() *Config {
 
 		WebTLSMode:  getEnv("WEB_TLS_MODE", "stepca"),
 		WebHostname: strings.TrimSpace(getEnv("WEB_HOSTNAME", "")),
-		WebSSLCert:  "/opt/step-webui/web-ssl/web.crt",
-		WebSSLKey:   "/opt/step-webui/web-ssl/web.key",
-		WebRootCA:   "/opt/step-webui/web-ssl/root_ca.crt",
+		WebSSLCert:  "/opt/certharbor/web-ssl/web.crt",
+		WebSSLKey:   "/opt/certharbor/web-ssl/web.key",
+		WebRootCA:   "/opt/certharbor/web-ssl/root_ca.crt",
 
 		LEACMEDirectoryURL: getEnv("LE_ACME_DIRECTORY_URL", LEProductionDirectoryURL),
 	}

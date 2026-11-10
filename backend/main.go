@@ -1,4 +1,4 @@
-// Package main is the entry point for the Step-CA WebUI web application.
+// Package main is the entry point for the Certharbor web application.
 package main
 
 import (
@@ -22,20 +22,20 @@ import (
 	"syscall"
 	"time"
 
-	humaapi "step-webui/api"
-	"step-webui/config"
-	"step-webui/handlers"
-	"step-webui/models"
-	"step-webui/security"
-	"step-webui/stepca"
+	humaapi "certharbor/api"
+	"certharbor/config"
+	"certharbor/handlers"
+	"certharbor/models"
+	"certharbor/security"
+	"certharbor/stepca"
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/gorilla/sessions"
 
-	appdb "step-webui/db"
+	appdb "certharbor/db"
 
-	mw "step-webui/middleware"
+	mw "certharbor/middleware"
 )
 
 //go:embed templates static
@@ -379,7 +379,7 @@ func main() {
 	}
 	r.Handle("/static/*", http.StripPrefix("/static/", staticHandlerFromFS(staticFS)))
 	// ─── Start server ─────────────────────────────────────────────────────────
-	for _, dir := range []string{cfg.CertsDir, cfg.UploadDir, "/opt/step-webui/ssl", "/opt/step-webui/web-ssl", "/opt/step-webui/data"} {
+	for _, dir := range []string{cfg.CertsDir, cfg.UploadDir, "/opt/certharbor/ssl", "/opt/certharbor/web-ssl", "/opt/certharbor/data"} {
 		_ = os.MkdirAll(dir, 0o750) //nolint:gosec // G301: app data dirs; restrictive perms appropriate for non-root service user
 	}
 
@@ -475,11 +475,11 @@ func main() {
 			MinVersion:     tls.VersionTLS12,
 			GetCertificate: reloader.GetCertificate,
 		}
-		slog.Info("starting Step-CA WebUI (HTTPS)", "port", cfg.Port)
+		slog.Info("starting Certharbor (HTTPS)", "port", cfg.Port)
 		// Empty cert/key paths are valid when GetCertificate is set.
 		go func() { srvErr <- srv.ListenAndServeTLS("", "") }()
 	} else {
-		slog.Warn("starting Step-CA WebUI (HTTP), not suitable for production", "port", cfg.Port)
+		slog.Warn("starting Certharbor (HTTP), not suitable for production", "port", cfg.Port)
 		go func() { srvErr <- srv.ListenAndServe() }()
 	}
 

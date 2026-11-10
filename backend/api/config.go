@@ -3,9 +3,9 @@ package api
 import (
 	"context"
 
-	"step-webui/handlers"
-	appmw "step-webui/middleware"
-	"step-webui/openapi"
+	"certharbor/handlers"
+	appmw "certharbor/middleware"
+	"certharbor/openapi"
 )
 
 // roleLevels mirrors middleware.RequireRole's unexported map. Phase 1 hoists

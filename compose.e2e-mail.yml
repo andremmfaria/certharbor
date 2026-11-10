@@ -1,7 +1,7 @@
 # Mail catcher for the reset-link and notification tests. SMTP on 1025, HTTP
 # API on 8025. Applied by the scenario driver only when E2E_MAIL_ENABLED=1.
 # SMTP itself is configured at runtime through POST /admin/notifications, not
-# through the environment, so nothing is added to step-webui here.
+# through the environment, so nothing is added to certharbor here.
 services:
 
   mailpit:
