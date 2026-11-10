@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"step-webui/security"
+	"certharbor/security"
 )
 
 // TestIntegration_UpsertOIDCUserCannotTakeOverLocalRow is the V1 regression:

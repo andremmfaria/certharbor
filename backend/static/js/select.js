@@ -4,10 +4,10 @@
  */
 
 // Remove the legacy theme key (now stored server-side)
-try{localStorage.removeItem('step-webui-theme');}catch(e){}
+try{localStorage.removeItem('certharbor-theme');}catch(e){}
 var _sidebarOpen = true;
 (function(){
-  var saved = localStorage.getItem('step-webui-sidebar');
+  var saved = localStorage.getItem('certharbor-sidebar');
   if(saved === '0'){
     _sidebarOpen = false;
     document.getElementById('sidebar').classList.add('collapsed');
@@ -22,7 +22,7 @@ function toggleSidebar(){
   document.body.classList.toggle('sb-collapsed', !_sidebarOpen);
   var bf = document.getElementById('burgerFloat');
   if(bf) bf.classList.toggle('visible', !_sidebarOpen);
-  localStorage.setItem('step-webui-sidebar', _sidebarOpen ? '1' : '0');
+  localStorage.setItem('certharbor-sidebar', _sidebarOpen ? '1' : '0');
 }
 
 function toggleGroup(id){

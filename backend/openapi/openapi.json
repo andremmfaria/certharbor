@@ -275,15 +275,15 @@
     },
     "securitySchemes": {
       "session": {
-        "description": "Encrypted session cookie, served as __Host-step-webui when SESSION_SECURE is on (D6). Role names in a requirement array are documentation: enforcement is server-side.",
+        "description": "Encrypted session cookie, served as __Host-certharbor when SESSION_SECURE is on (D6). Role names in a requirement array are documentation: enforcement is server-side.",
         "in": "cookie",
-        "name": "step-webui",
+        "name": "certharbor",
         "type": "apiKey"
       }
     }
   },
   "info": {
-    "title": "step-ca-webui",
+    "title": "certharbor",
     "version": "0.1.0"
   },
   "openapi": "3.1.0",

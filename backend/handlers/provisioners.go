@@ -3,7 +3,7 @@ package handlers
 import (
 	"net/http"
 
-	"step-webui/stepca"
+	"certharbor/stepca"
 )
 
 // Provisioners renders the CA provisioners list page.

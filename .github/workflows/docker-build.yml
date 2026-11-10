@@ -26,12 +26,12 @@ jobs:
           - name: backend
             context: ./backend
             file: ./backend/Dockerfile
-            image: ghcr.io/andremmfaria/step-ca-webui
+            image: ghcr.io/andremmfaria/certharbor
             scope: e2e-backend
           - name: frontend
             context: .
             file: ./frontend/Dockerfile
-            image: ghcr.io/andremmfaria/step-ca-webui-web
+            image: ghcr.io/andremmfaria/certharbor-web
             scope: e2e-frontend
 
     steps:

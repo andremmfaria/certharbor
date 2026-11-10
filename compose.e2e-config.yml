@@ -1,8 +1,8 @@
-# Two keys config.Load reads but the stock step-webui environment block never
+# Two keys config.Load reads but the stock certharbor environment block never
 # passes through, so setting them in .env alone is a silent no-op. USE_HTTPS is
 # E2E-CFG-01's row and ALLOWED_DOMAIN_SUFFIXES is E2E-CERT-12's.
 services:
-  step-webui:
+  certharbor:
     environment:
       USE_HTTPS:               "${USE_HTTPS:-}"
       ALLOWED_DOMAIN_SUFFIXES: "${ALLOWED_DOMAIN_SUFFIXES:-}"

@@ -10,17 +10,17 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o step-webui .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o certharbor .
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
 FROM alpine:3.23
 
-WORKDIR /opt/step-webui
+WORKDIR /opt/certharbor
 
 # Create a non-root user for the runtime process.
 # uid/gid 10001 is in the safe non-system range per container best-practice.
-RUN addgroup -g 10001 -S stepwebui && \
-    adduser -u 10001 -S -G stepwebui stepwebui
+RUN addgroup -g 10001 -S certharbor && \
+    adduser -u 10001 -S -G certharbor certharbor
 
 # openssl stays here solely for admin_console.go's "openssl.version"
 # diagnostic allowlist entry, TLS bootstrap no longer needs it (main.go
@@ -28,23 +28,23 @@ RUN addgroup -g 10001 -S stepwebui && \
 # hadolint ignore=DL3018
 RUN apk add --no-cache curl openssl ca-certificates netcat-openbsd tzdata postgresql-client
 
-COPY --from=builder /build/step-webui .
+COPY --from=builder /build/certharbor .
 COPY templates/ templates/
 COPY static/ static/
 
 RUN mkdir -p data certs uploads ssl web-ssl && \
-    chown -R stepwebui:stepwebui /opt/step-webui
+    chown -R certharbor:certharbor /opt/certharbor
 
 COPY entrypoint.sh /entrypoint.sh
 RUN sed -i 's/\r$//' /entrypoint.sh && \
     chmod +x /entrypoint.sh && \
-    chown stepwebui:stepwebui /entrypoint.sh
+    chown certharbor:certharbor /entrypoint.sh
 
 EXPOSE 8443
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -fsk https://localhost:8443/health || exit 1
 
-USER stepwebui
+USER certharbor
 
 ENTRYPOINT ["/entrypoint.sh"]

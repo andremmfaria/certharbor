@@ -38,17 +38,17 @@ test.describe.serial("bootstrap: ca-down scenario", () => {
 
     // Fresh volumes with a root cert present (stock read-only mount) and step-ca
     // stopped. compose.e2e-nodeps.yml (already in E2E_COMPOSE_OVERRIDES for this
-    // scenario) is what lets step-webui start against it at all.
+    // scenario) is what lets certharbor start against it at all.
     await composeOrThrow("down", "-v");
     await composeOrThrow("up", "-d", "--wait", "step-ca", "postgres");
     await composeOrThrow("stop", "step-ca");
 
     setEnvKeys({ UI_TLS_MODE: "stepca", CA_FINGERPRINT: undefined, CA_ROOT_CERT_PEM: undefined });
-    await upStack("step-webui");
+    await upStack("certharbor");
 
-    const obtaining = await waitForLogLine("step-webui", "obtaining UI leaf certificate from step-ca", { timeoutMs: 90_000 });
+    const obtaining = await waitForLogLine("certharbor", "obtaining UI leaf certificate from step-ca", { timeoutMs: 90_000 });
     const fallback = await waitForLogLine(
-      "step-webui",
+      "certharbor",
       "step-ca certificate issuance failed after retries, falling back to self-signed",
       { timeoutMs: 90_000 },
     );
@@ -88,13 +88,13 @@ test.describe.serial("bootstrap: ca-down scenario", () => {
     setEnvKeys({ UI_TLS_MODE: "stepca", CA_FINGERPRINT: undefined, CA_ROOT_CERT_PEM: undefined });
     await upStack();
 
-    const id = await containerId("step-webui");
+    const id = await containerId("certharbor");
     const startedRes = await run(["docker", "inspect", "--format", "{{.State.StartedAt}}", id]);
     const startedAt = new Date(startedRes.stdout.trim());
 
-    const constructionFailed = await waitForLogLine("step-webui", "CA client construction failed during TLS bootstrap", { timeoutMs: 30_000 });
+    const constructionFailed = await waitForLogLine("certharbor", "CA client construction failed during TLS bootstrap", { timeoutMs: 30_000 });
     const fallback = await waitForLogLine(
-      "step-webui",
+      "certharbor",
       "UI_TLS_MODE=stepca but no CA client is available, falling back to self-signed",
       { timeoutMs: 30_000 },
     );
@@ -112,7 +112,7 @@ test.describe.serial("bootstrap: ca-down scenario", () => {
       (code) => code === "200",
       { timeoutMs: 120_000, intervalMs: 2000 },
     );
-    const marker = await exec("step-webui", "test", "-e", "/opt/step-webui/ssl/.fallback");
+    const marker = await exec("certharbor", "test", "-e", "/opt/certharbor/ssl/.fallback");
     expect(marker.code, "a stepca fallback must leave the .fallback marker that holds nginx off").toBe(0);
 
     const jar = await newJar(`https://${addr}`);
@@ -129,7 +129,7 @@ test.describe.serial("bootstrap: ca-down scenario", () => {
       try {
         const tmpFile = path.join(tmpDir, "root_ca.crt");
         await fs.writeFile(tmpFile, rootPEM.stdout);
-        const cp = await run(composeArgv("cp", tmpFile, "step-webui:/opt/step-webui/data/root_ca.crt"));
+        const cp = await run(composeArgv("cp", tmpFile, "certharbor:/opt/certharbor/data/root_ca.crt"));
         expect(cp.code, `docker compose cp failed: ${cp.stderr}`).toBe(0);
       } finally {
         await fs.rm(tmpDir, { recursive: true, force: true });

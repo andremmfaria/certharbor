@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"time"
 
-	"step-webui/models"
+	"certharbor/models"
 )
 
 // InitPasswordResetSchema creates the password_reset_tokens table and its indexes

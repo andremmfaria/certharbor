@@ -8,7 +8,7 @@ import {
   cumulativeLog,
   exec,
   logs,
-  resetStepWebUIVolumes,
+  resetCertharborVolumes,
   run,
   upStack,
   waitHealthy,
@@ -19,7 +19,7 @@ import { probeTLS } from "../../helpers/openssl";
 
 // Three cases share one CA identity (Section 3.1's teardown table): tearing
 // down step-ca-data between them would recompute the fingerprint and defeat
-// E2E-BOOT-05's "wrong but well-formed" precondition. Only step-webui's own
+// E2E-BOOT-05's "wrong but well-formed" precondition. Only certharbor's own
 // volumes are reset between cases.
 test.describe.serial("bootstrap: fingerprint scenario", () => {
   test.beforeAll(async () => {
@@ -41,9 +41,9 @@ test.describe.serial("bootstrap: fingerprint scenario", () => {
 
     setEnvKeys({ UI_TLS_MODE: "stepca", CA_FINGERPRINT: fingerprint, CA_ROOT_CERT_PEM: undefined });
     await upStack();
-    await waitHealthy("step-webui", 180_000);
+    await waitHealthy("certharbor", 180_000);
 
-    const log = await logs("step-webui");
+    const log = await logs("certharbor");
     const iFetching = log.indexOf("fetching root CA certificate via CA_FINGERPRINT");
     const iFetched = log.indexOf("root CA certificate fetched and verified");
     const iIssued = log.indexOf("UI leaf certificate obtained");
@@ -54,13 +54,13 @@ test.describe.serial("bootstrap: fingerprint scenario", () => {
     expect(iFetched, "missing 'root CA certificate fetched and verified'").toBeGreaterThan(iFetching);
     expect(iIssued, "missing 'UI leaf certificate obtained'").toBeGreaterThan(iFetched);
 
-    const rootStat = await exec("step-webui", "test", "-s", "/opt/step-webui/data/root_ca.crt");
+    const rootStat = await exec("certharbor", "test", "-s", "/opt/certharbor/data/root_ca.crt");
     expect(rootStat.code, "root cert missing or empty at the writable path").toBe(0);
 
     const cert = await probeTLS(await backendAddress());
     expect(cert.selfSigned, `issuer ${cert.issuer} should differ from subject ${cert.subject} for a step-ca-issued leaf`).toBe(false);
 
-    const whichStep = await exec("step-webui", "which", "step");
+    const whichStep = await exec("certharbor", "which", "step");
     expect(whichStep.code, "the step binary must not be present in the runtime image").not.toBe(0);
 
     const grep = await run(["grep", "-cE", "(^|[^-[:alnum:]])step +(ca|certificate|version|crypto)([^-[:alnum:]]|$)", "backend/entrypoint.sh"]);
@@ -70,17 +70,17 @@ test.describe.serial("bootstrap: fingerprint scenario", () => {
   test("E2E-BOOT-05: wrong CA_FINGERPRINT exhausts the root fetch and is reported distinctly", async () => {
     test.setTimeout(5 * 60_000);
 
-    await captureBeforeRecreate("step-webui");
+    await captureBeforeRecreate("certharbor");
     await composeOrThrow("down");
-    await resetStepWebUIVolumes();
+    await resetCertharborVolumes();
     await composeOrThrow("up", "-d", "--wait", "step-ca");
 
     setEnvKeys({ UI_TLS_MODE: "stepca", CA_FINGERPRINT: "0".repeat(64), CA_ROOT_CERT_PEM: undefined });
     await upStack();
 
-    const fetching = await waitForLogLine("step-webui", "fetching root CA certificate via CA_FINGERPRINT", { timeoutMs: 90_000 });
+    const fetching = await waitForLogLine("certharbor", "fetching root CA certificate via CA_FINGERPRINT", { timeoutMs: 90_000 });
     const exhausted = await waitForLogLine(
-      "step-webui",
+      "certharbor",
       "could not fetch root CA certificate after retries, continuing without it",
       { timeoutMs: 90_000 },
     );
@@ -91,7 +91,7 @@ test.describe.serial("bootstrap: fingerprint scenario", () => {
     const [caPs, caHealth, rootStat, ready, login] = await Promise.all([
       compose("ps", "--format", "json", "step-ca"),
       exec("step-ca", "curl", "-sk", "https://localhost:9443/health"),
-      exec("step-webui", "test", "-e", "/opt/step-webui/data/root_ca.crt"),
+      exec("certharbor", "test", "-e", "/opt/certharbor/data/root_ca.crt"),
       run(["curl", "-sk", `https://${backend}/ready`]),
       run(["curl", "-sk", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "5", `https://${backend}/login`]),
     ]);
@@ -107,9 +107,9 @@ test.describe.serial("bootstrap: fingerprint scenario", () => {
   test("E2E-BOOT-06: CA_ROOT_CERT_PEM inline root provisioning", async () => {
     test.setTimeout(5 * 60_000);
 
-    await captureBeforeRecreate("step-webui");
+    await captureBeforeRecreate("certharbor");
     await composeOrThrow("down");
-    await resetStepWebUIVolumes();
+    await resetCertharborVolumes();
     await composeOrThrow("up", "-d", "--wait", "step-ca");
 
     const rootPEM = await exec("step-ca", "cat", "/home/step/certs/root_ca.crt");
@@ -118,19 +118,19 @@ test.describe.serial("bootstrap: fingerprint scenario", () => {
 
     setEnvKeys({ UI_TLS_MODE: "stepca", CA_FINGERPRINT: undefined, CA_ROOT_CERT_PEM: rootPEM.stdout });
     await upStack();
-    await waitHealthy("step-webui", 180_000);
+    await waitHealthy("certharbor", 180_000);
 
-    const log = await logs("step-webui");
+    const log = await logs("certharbor");
     expect(log).toContain("wrote root CA certificate from CA_ROOT_CERT_PEM");
     expect(countExact(log, "fetching root CA certificate via CA_FINGERPRINT")).toBe(0);
 
     // Positive control: E2E-BOOT-01 produced that line earlier in this same
     // job, under the same override. Without this, a harness wired to always
     // report zero matches would pass the assertion above for the wrong reason.
-    const cumulative = await cumulativeLog("step-webui");
+    const cumulative = await cumulativeLog("certharbor");
     expect(countExact(cumulative, "fetching root CA certificate via CA_FINGERPRINT")).toBeGreaterThanOrEqual(1);
 
-    const written = await exec("step-webui", "cat", "/opt/step-webui/data/root_ca.crt");
+    const written = await exec("certharbor", "cat", "/opt/certharbor/data/root_ca.crt");
     expect(written.stdout.trim()).toBe(rootPEM.stdout.trim());
 
     expect(log).toContain("UI leaf certificate obtained");

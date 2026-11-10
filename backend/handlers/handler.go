@@ -13,17 +13,17 @@ import (
 	"sync"
 	"time"
 
-	"step-webui/config"
-	"step-webui/middleware"
-	"step-webui/models"
-	"step-webui/security"
-	"step-webui/stepca"
+	"certharbor/config"
+	"certharbor/middleware"
+	"certharbor/models"
+	"certharbor/security"
+	"certharbor/stepca"
 
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gorilla/sessions"
 	"golang.org/x/oauth2"
 
-	appdb "step-webui/db"
+	appdb "certharbor/db"
 )
 
 // StartedAt records the time the server process started (set in main).
@@ -100,7 +100,7 @@ func (h *Handler) Cfg() *config.Config { return h.cfg }
 
 // UserLoader adapts db.GetUserByID to middleware.UserLoader. It lives here
 // rather than in api/ so that package can enforce a role without importing
-// step-webui/models, which Section 2's depguard allowlist forbids.
+// certharbor/models, which Section 2's depguard allowlist forbids.
 func (h *Handler) UserLoader() middleware.UserLoader {
 	return func(id int) (*models.User, error) { return appdb.GetUserByID(h.db, id) }
 }

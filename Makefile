@@ -26,7 +26,7 @@ setup: ## Bootstrap a fresh install: copy .env.example and generate secrets/
 	@# Copy .env if absent
 	@if [ ! -f .env ]; then \
 		cp .env.example .env; \
-		echo "  created  .env (from .env.example, edit HOST_IP, WEB_HOSTNAME, UI_HTTPS_PORT, PROVISIONER, TZ, STEPWEBUI_ADMIN_PASSWORD)"; \
+		echo "  created  .env (from .env.example, edit HOST_IP, WEB_HOSTNAME, UI_HTTPS_PORT, PROVISIONER, TZ, CERTHARBOR_ADMIN_PASSWORD)"; \
 	else \
 		echo "  skipped  .env already exists"; \
 	fi
@@ -36,7 +36,7 @@ setup: ## Bootstrap a fresh install: copy .env.example and generate secrets/
 	@# Secret files are 644, not 600: plain (non-Swarm) `docker compose`
 	@# bind-mounts file-based secrets preserving the host file's own
 	@# owner/mode, it does not remap them to root:root/0444 the way Swarm
-	@# secrets do. step-webui's container runs as a non-root uid (10001), so a
+	@# secrets do. certharbor's container runs as a non-root uid (10001), so a
 	@# 600 file owned by the host user is unreadable inside the container;
 	@# host-level protection against *other host users* still comes from
 	@# $(SECRETS_DIR) itself being 700.
@@ -66,7 +66,7 @@ setup: ## Bootstrap a fresh install: copy .env.example and generate secrets/
 	fi
 	@echo ""
 	@echo "Next steps:"
-	@echo "  1. Edit .env, set HOST_IP, WEB_HOSTNAME, UI_HTTPS_PORT, PROVISIONER, TZ, STEPWEBUI_ADMIN_PASSWORD"
+	@echo "  1. Edit .env, set HOST_IP, WEB_HOSTNAME, UI_HTTPS_PORT, PROVISIONER, TZ, CERTHARBOR_ADMIN_PASSWORD"
 	@echo "  2. make up"
 	@echo ""
 	@echo "To regenerate secrets (existing deployment): make setup FORCE=1"
@@ -110,11 +110,11 @@ backup: ## Dump the database and named volumes into backups/<timestamp>/
 	\
 	echo "  dumping PostgreSQL …"; \
 	$(COMPOSE) exec -T postgres \
-		pg_dump -U stepwebui stepwebui > $$DIR/postgres-stepwebui.sql || true; \
+		pg_dump -U certharbor certharbor > $$DIR/postgres-certharbor.sql || true; \
 	\
 	echo "  archiving named volumes …"; \
-	for VOL in postgres-data step-ca-data step-webui-certs step-webui-ssl step-webui-web-ssl step-webui-data step-webui-uploads; do \
-		MOUNT=$$(docker volume inspect step-ca-webui_$$VOL \
+	for VOL in postgres-data step-ca-data certharbor-certs certharbor-ssl certharbor-web-ssl certharbor-data certharbor-uploads; do \
+		MOUNT=$$(docker volume inspect certharbor_$$VOL \
 			--format '{{.Mountpoint}}' 2>/dev/null || true); \
 		if [ -n "$$MOUNT" ] && [ -d "$$MOUNT" ]; then \
 			tar -czf $$DIR/volumes/$$VOL.tgz -C $$MOUNT . && \
@@ -125,7 +125,7 @@ backup: ## Dump the database and named volumes into backups/<timestamp>/
 	echo "  writing manifest …"; \
 	( \
 		printf '{\n'; \
-		printf '  "format": "step-ca-webui-makefile-backup-v1",\n'; \
+		printf '  "format": "certharbor-makefile-backup-v1",\n'; \
 		printf '  "created_at": "%s",\n' "$$(date -Is)"; \
 		printf '  "components": [\n'; \
 		FIRST=1; \
@@ -185,7 +185,7 @@ hooks: ## Register the openapi.json merge driver in this clone's git config
 .PHONY: client
 client: ## Generate, build and pack the TS client to clients/ts/dist/client.tgz
 	cd $(CLIENT_DIR) && npm ci && npm pack --pack-destination dist
-	mv $(CLIENT_DIR)/dist/andremmfaria-step-ca-webui-client-*.tgz $(CLIENT_DIR)/dist/client.tgz
+	mv $(CLIENT_DIR)/dist/andremmfaria-certharbor-client-*.tgz $(CLIENT_DIR)/dist/client.tgz
 
 .PHONY: frontend-install
 frontend-install: ## Install the SPA's deps, then the packed client (run make client first)
@@ -245,22 +245,22 @@ e2e-bootstrap: ## Run one bootstrap scenario: make e2e-bootstrap SCENARIO=finger
 # Both rate limiters are process-local maps, so a restart clears them, turning
 # a multi-minute real-time wait into ~20-30s back to healthy.
 .PHONY: e2e-restart-ui
-e2e-restart-ui: ## Restart step-webui, clearing both process-local rate limiters
-	$(COMPOSE) restart step-webui
-	$(COMPOSE) up -d --wait step-webui
+e2e-restart-ui: ## Restart certharbor, clearing both process-local rate limiters
+	$(COMPOSE) restart certharbor
+	$(COMPOSE) up -d --wait certharbor
 
-# nginx mounts step-webui-web-ssl, so it must go before that volume can, and
+# nginx mounts certharbor-web-ssl, so it must go before that volume can, and
 # the final up brings it back once the backend has re-issued both leaves.
 .PHONY: e2e-reset-ssl
 e2e-reset-ssl: ## Remove both leaf volumes (backend and nginx), leaving users and CA state
-	$(COMPOSE) rm -sf step-webui-web step-webui
-	docker volume rm $(E2E_PROJECT)_step-webui-ssl $(E2E_PROJECT)_step-webui-web-ssl
+	$(COMPOSE) rm -sf certharbor-web certharbor
+	docker volume rm $(E2E_PROJECT)_certharbor-ssl $(E2E_PROJECT)_certharbor-web-ssl
 	$(COMPOSE) up -d --wait
 
 .PHONY: e2e-seed-history
 e2e-seed-history: ## Insert N synthetic cert_history rows: make e2e-seed-history N=25
 	@test -n "$(N)" || { echo "usage: make e2e-seed-history N=<count>"; exit 2; }
-	$(COMPOSE) exec -T postgres psql -v ON_ERROR_STOP=1 -U stepwebui -d stepwebui -c \
+	$(COMPOSE) exec -T postgres psql -v ON_ERROR_STOP=1 -U certharbor -d certharbor -c \
 		"INSERT INTO cert_history (action, cert_name, domain, details, username, role) \
 		 SELECT 'issue', 'e2e-seed-' || g, 'seed' || g || '.e2e.invalid', 'synthetic row seeded by make e2e-seed-history', 'e2e-seed', 'admin' \
 		 FROM generate_series(1, $(N)) AS g;"
@@ -297,7 +297,7 @@ config-keys-check: ## Assert every web-origin key has a docs/configuration.md ro
 	./scripts/check-config-keys.sh
 
 .PHONY: backend-port-check
-backend-port-check: ## Assert no compose file, base or override, publishes a host port for step-webui
+backend-port-check: ## Assert no compose file, base or override, publishes a host port for certharbor
 	./scripts/check-backend-port.sh
 
 .PHONY: preview
@@ -312,30 +312,30 @@ preview: backend-port-check ## Build both images, run all four containers health
 # (Linux, not Docker Desktop). Plain HTTP on localhost, hence SESSION_SECURE
 # off and no __Host- prefix in this mode.
 .PHONY: dev
-dev: ## Start postgres, step-ca and step-webui as already built (--wait, no --build), then Vite with hot reload on the host
-	SESSION_SECURE=$${SESSION_SECURE:-false} $(COMPOSE) up -d --wait postgres step-ca step-webui
-	cd $(WEB_DIR) && DEV_BACKEND_URL="https://$$(docker inspect -f '{{with index .NetworkSettings.Networks "step-network"}}{{.IPAddress}}{{end}}' step-webui):8443" npm run dev
+dev: ## Start postgres, step-ca and certharbor as already built (--wait, no --build), then Vite with hot reload on the host
+	SESSION_SECURE=$${SESSION_SECURE:-false} $(COMPOSE) up -d --wait postgres step-ca certharbor
+	cd $(WEB_DIR) && DEV_BACKEND_URL="https://$$(docker inspect -f '{{with index .NetworkSettings.Networks "step-network"}}{{.IPAddress}}{{end}}' certharbor):8443" npm run dev
 
 .PHONY: up-backend
-up-backend: ## Rebuild and start postgres, step-ca and step-webui only
-	$(COMPOSE) up -d --build --wait postgres step-ca step-webui
+up-backend: ## Rebuild and start postgres, step-ca and certharbor only
+	$(COMPOSE) up -d --build --wait postgres step-ca certharbor
 
 .PHONY: up-web
-up-web: ## Rebuild and restart step-webui-web alone against the running backend
-	$(COMPOSE) up -d --build --wait --no-deps step-webui-web
+up-web: ## Rebuild and restart certharbor-web alone against the running backend
+	$(COMPOSE) up -d --build --wait --no-deps certharbor-web
 
 .PHONY: logs-ui
-logs-ui: ## Stream step-webui's logs (Ctrl-C to stop)
-	$(COMPOSE) logs -f step-webui
+logs-ui: ## Stream certharbor's logs (Ctrl-C to stop)
+	$(COMPOSE) logs -f certharbor
 
 .PHONY: logs-web
-logs-web: ## Stream step-webui-web's logs (Ctrl-C to stop)
-	$(COMPOSE) logs -f step-webui-web
+logs-web: ## Stream certharbor-web's logs (Ctrl-C to stop)
+	$(COMPOSE) logs -f certharbor-web
 
 .PHONY: nginx-test
-nginx-test: ## Run nginx -t inside the running step-webui-web
-	$(COMPOSE) exec step-webui-web nginx -t
+nginx-test: ## Run nginx -t inside the running certharbor-web
+	$(COMPOSE) exec certharbor-web nginx -t
 
 .PHONY: web-reload
-web-reload: ## Validate and reload nginx in the running step-webui-web, no restart
-	$(COMPOSE) exec step-webui-web sh -c 'nginx -t && nginx -s reload'
+web-reload: ## Validate and reload nginx in the running certharbor-web, no restart
+	$(COMPOSE) exec certharbor-web sh -c 'nginx -t && nginx -s reload'

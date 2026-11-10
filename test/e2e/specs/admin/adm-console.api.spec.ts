@@ -87,7 +87,7 @@ test("E2E-ADM-04: the OS diagnostic commands still run", async ({ admin }) => {
   }
 
   expect(results.get("postgres.ready")!.output).toContain("accepting connections");
-  // USER stepwebui is uid 10001 (Dockerfile:48). Nothing else about these outputs
+  // USER certharbor is uid 10001 (Dockerfile:48). Nothing else about these outputs
   // is asserted: "sane output" for a date or a process list has no falsifiable
   // form, and openssl.version reports a base image this project does not build.
   expect(results.get("system.identity")!.output).toContain("10001");

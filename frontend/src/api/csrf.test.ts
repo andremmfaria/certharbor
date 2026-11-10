@@ -3,15 +3,15 @@ import { CSRF_COOKIE_NAMES, readCookie, readCsrf } from './csrf'
 
 describe('readCsrf', () => {
   it('reads the prefixed cookie when SESSION_SECURE is on', () => {
-    expect(readCsrf('__Host-step-webui-csrf=secure-token; theme=dark')).toBe('secure-token')
+    expect(readCsrf('__Host-certharbor-csrf=secure-token; theme=dark')).toBe('secure-token')
   })
 
   it('reads the bare cookie when SESSION_SECURE is off', () => {
-    expect(readCsrf('theme=dark; step-webui-csrf=bare-token')).toBe('bare-token')
+    expect(readCsrf('theme=dark; certharbor-csrf=bare-token')).toBe('bare-token')
   })
 
   it('prefers the prefixed cookie when both exist', () => {
-    expect(readCsrf('step-webui-csrf=tossed; __Host-step-webui-csrf=real')).toBe('real')
+    expect(readCsrf('certharbor-csrf=tossed; __Host-certharbor-csrf=real')).toBe('real')
   })
 
   it('returns undefined when neither exists', () => {
@@ -20,17 +20,17 @@ describe('readCsrf', () => {
   })
 
   it('does not match a cookie whose name merely ends with a probed name', () => {
-    expect(readCsrf('evil-step-webui-csrf=x')).toBeUndefined()
+    expect(readCsrf('evil-certharbor-csrf=x')).toBeUndefined()
   })
 
   it('probes the prefixed name first', () => {
-    expect(CSRF_COOKIE_NAMES[0]).toBe('__Host-step-webui-csrf')
+    expect(CSRF_COOKIE_NAMES[0]).toBe('__Host-certharbor-csrf')
   })
 
   it('reads document.cookie by default', () => {
-    document.cookie = 'step-webui-csrf=from-document'
+    document.cookie = 'certharbor-csrf=from-document'
     expect(readCsrf()).toBe('from-document')
-    document.cookie = 'step-webui-csrf=; Max-Age=0'
+    document.cookie = 'certharbor-csrf=; Max-Age=0'
   })
 })
 

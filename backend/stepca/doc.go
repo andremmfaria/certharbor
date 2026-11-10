@@ -1,5 +1,5 @@
 // Package stepca wraps github.com/smallstep/certificates/ca (pinned v0.30.2)
-// behind the small CA interface consumed by step-webui's handlers, replacing the
+// behind the small CA interface consumed by certharbor's handlers, replacing the
 // former step/step-ca CLI subprocess calls (handlers/stepcli.go, deleted).
 //
 // # Phase 0 spike findings (re-confirmed against the v0.30.2 module source,

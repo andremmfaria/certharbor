@@ -47,7 +47,7 @@ func methodNotAllowed(w http.ResponseWriter, r *http.Request) {
 
 // problemTypeBase namespaces the machine-readable type URIs (5.2). The SPA
 // switches on these, so they are part of the contract rather than decoration.
-const problemTypeBase = "https://step-ca-webui/errors/"
+const problemTypeBase = "https://certharbor/errors/"
 
 // writeCSRFProblem answers a CSRF mismatch with 403 and a distinguishable
 // type, so the SPA can re-fetch a token and retry rather than logging the user

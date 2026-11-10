@@ -19,10 +19,10 @@ import (
 	"strings"
 	"time"
 
-	"step-webui/models"
+	"certharbor/models"
 
 	"github.com/go-chi/chi/v5"
-	appdb "step-webui/db"
+	appdb "certharbor/db"
 )
 
 // CertDetail holds parsed certificate metadata for the detail view.

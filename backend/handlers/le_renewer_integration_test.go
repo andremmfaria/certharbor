@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"step-webui/config"
+	"certharbor/config"
 
-	appdb "step-webui/db"
+	appdb "certharbor/db"
 )
 
 // openRenewerTestDB opens the integration Postgres, creates the schemas
@@ -22,7 +22,7 @@ func openRenewerTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	dsn := os.Getenv("INTEGRATION_DB_DSN")
 	if dsn == "" {
-		dsn = "postgres://stepwebui_test:stepwebui_test@localhost:5432/stepwebui_test?sslmode=disable"
+		dsn = "postgres://certharbor_test:certharbor_test@localhost:5432/certharbor_test?sslmode=disable"
 	}
 	conn, err := appdb.Connect(dsn)
 	if err != nil {

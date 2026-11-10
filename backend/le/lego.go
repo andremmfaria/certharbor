@@ -35,9 +35,9 @@ var issueMu sync.Mutex
 // LE path and URL constants.
 const (
 	// LEDirectory is the root directory for ACME certificate storage.
-	LEDirectory    = "/opt/step-webui/le-certs"
-	LEAccountFile  = "/opt/step-webui/le-certs/account.json"
-	LEKeyFile      = "/opt/step-webui/le-certs/account.key"
+	LEDirectory    = "/opt/certharbor/le-certs"
+	LEAccountFile  = "/opt/certharbor/le-certs/account.json"
+	LEKeyFile      = "/opt/certharbor/le-certs/account.key"
 	LEProductionCA = "https://acme-v02.api.letsencrypt.org/directory"
 	LEStagingCA    = "https://acme-staging-v02.api.letsencrypt.org/directory"
 )

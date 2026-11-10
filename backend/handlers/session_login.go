@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"step-webui/models"
-	"step-webui/security"
+	"certharbor/models"
+	"certharbor/security"
 )
 
 // LoginOutcome is the result of one credential or MFA submission. The API

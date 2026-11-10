@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	appdb "step-webui/db"
+	appdb "certharbor/db"
 )
 
 // SecurityLog renders the authentication and security event log page.

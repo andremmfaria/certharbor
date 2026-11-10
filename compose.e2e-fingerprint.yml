@@ -9,11 +9,11 @@
 # step-ca-data component from the backup bundle, so E2E-HLTH-06 and E2E-BAK-01
 # must not run against this stack (Section 2.7.1).
 services:
-  step-webui:
+  certharbor:
     volumes: !override
-      - step-webui-certs:/opt/step-webui/certs
-      - step-webui-ssl:/opt/step-webui/ssl
-      - step-webui-data:/opt/step-webui/data
-      - step-webui-uploads:/opt/step-webui/uploads
+      - certharbor-certs:/opt/certharbor/certs
+      - certharbor-ssl:/opt/certharbor/ssl
+      - certharbor-data:/opt/certharbor/data
+      - certharbor-uploads:/opt/certharbor/uploads
     environment:
-      ROOT_CERT: /opt/step-webui/data/root_ca.crt
+      ROOT_CERT: /opt/certharbor/data/root_ca.crt
