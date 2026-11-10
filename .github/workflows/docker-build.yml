@@ -26,12 +26,12 @@ jobs:
           - name: backend
             context: ./backend
             file: ./backend/Dockerfile
-            image: ghcr.io/andremmfaria/certharbor-control
+            image: ghcr.io/certharbor/certharbor-control
             scope: e2e-backend
           - name: frontend
             context: .
             file: ./frontend/Dockerfile
-            image: ghcr.io/andremmfaria/certharbor-console
+            image: ghcr.io/certharbor/certharbor-console
             scope: e2e-frontend
 
     steps:
