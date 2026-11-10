@@ -145,6 +145,44 @@ services:
       retries: 10
       start_period: 20s
 
+  # ─── Certharbor delivery worker (Go) ────────────────────────────────────
+  # certharbor-delivery (plans/distribution.md): reconciles certharbor's
+  # certificate inventory against external delivery targets (AWS ACM in the
+  # MVP). No published port and NO entry in `ports:` at all — unlike
+  # certharbor-control it has no HTTP listener whatsoever, so there is
+  # nothing to publish. It is the only plane that ever loads AWS
+  # credentials (Section 2); certharbor-control and certharbor-console never
+  # see them. Debug with `docker compose exec`.
+  certharbor-delivery:
+    build:
+      context: ./backend
+      dockerfile: cmd/certharbor-delivery/Dockerfile
+    image: "${DELIVERY_IMAGE:-certharbor-delivery:${IMAGE_TAG:-local}}"
+    container_name: certharbor-delivery
+    restart: unless-stopped
+    secrets:
+      - postgres_password
+    environment:
+      TZ: "${TZ:-UTC}"
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: certharbor
+      POSTGRES_DB: certharbor
+      DELIVERY_TICK_INTERVAL: "${DELIVERY_TICK_INTERVAL:-5m}"
+      DELIVERY_ALERT_AFTER_FAILURES: "${DELIVERY_ALERT_AFTER_FAILURES:-3}"
+      # Standard AWS SDK credential chain (env/role/profile). Nothing here
+      # hardcodes a secret: these are optional overrides for the env leg of
+      # that chain; an IAM role (e.g. ECS task role / instance profile) is
+      # the expected production path and needs none of them set.
+      AWS_REGION: "${AWS_REGION:-}"
+      AWS_PROFILE: "${AWS_PROFILE:-}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - step-net
+
   # ─── Certharbor origin (nginx) ─────────────────────────────────────────
   # Terminates TLS for WEB_HOSTNAME, serves the SPA and proxies the backend.
   # Its healthcheck is the image's own.
