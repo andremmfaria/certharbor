@@ -136,6 +136,17 @@ func (h *Handler) initOIDC() {
 	slog.Info("OIDC enabled", "issuer", h.cfg.OIDCIssuerURL)
 }
 
+// SetCAClient injects a CA client, bypassing stepca.New. Tests are the only
+// caller: it is how Phase 4's issue/renew/revoke integration tests exercise
+// their success path without a real step-ca, the same seam SetAuthStore
+// gives the login tests.
+func (h *Handler) SetCAClient(c stepca.CA) {
+	h.caMu.Lock()
+	defer h.caMu.Unlock()
+	h.ca = c
+	h.caErr = nil
+}
+
 // caClient lazily constructs and caches the CA client on first successful
 // call. Unlike initOIDC, construction failure is never cached, the next
 // call retries from scratch, because step-ca may not have produced its
