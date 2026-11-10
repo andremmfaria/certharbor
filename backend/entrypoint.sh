@@ -2,7 +2,7 @@
 set -e
 
 echo "======================================="
-echo "  Step-CA WebUI (Go), starting up"
+echo "  Certharbor (Go), starting up"
 echo "======================================="
 
 # ─── Secret-file helpers ──────────────────────────────────────────────────
@@ -40,8 +40,8 @@ read_secret_file PROVISIONER_PASSWORD "${PROVISIONER_PASSWORD_FILE:-/run/secrets
 if [ -z "${DATABASE_URL:-}" ]; then
   _pg_host="${POSTGRES_HOST:-postgres}"
   _pg_port="${POSTGRES_PORT:-5432}"
-  _pg_user="${POSTGRES_USER:-stepwebui}"
-  _pg_db="${POSTGRES_DB:-stepwebui}"
+  _pg_user="${POSTGRES_USER:-certharbor}"
+  _pg_db="${POSTGRES_DB:-certharbor}"
   if [ -z "${POSTGRES_PASSWORD:-}" ]; then
     echo "[!] Neither DATABASE_URL nor POSTGRES_PASSWORD/POSTGRES_PASSWORD_FILE is set."
     echo "[!] Cannot construct the database connection string, aborting."
@@ -87,7 +87,7 @@ echo "[*] CA readiness is now reported via /ready, not blocking startup on Step-
 # The Go app reads this file per-issuance (stepca.Client.IssueCertificate);
 # establishing it here means it's ready before the app's own in-process TLS
 # bootstrap (main.go) needs it for UI_TLS_MODE=stepca.
-PASSWORD_FILE="${PASSWORD_FILE:-/opt/step-webui/data/provisioner_password}"
+PASSWORD_FILE="${PASSWORD_FILE:-/opt/certharbor/data/provisioner_password}"
 if [ -f "$PASSWORD_FILE" ]; then
   echo "[*] Provisioner password file found"
 elif [ -n "${PROVISIONER_PASSWORD:-}" ]; then
@@ -101,13 +101,13 @@ else
 fi
 export PASSWORD_FILE
 
-echo "[*] Starting Step-CA WebUI on port ${PORT:-8443}"
-# Seed initial admin password from STEPWEBUI_ADMIN_PASSWORD if provided.
+echo "[*] Starting Certharbor on port ${PORT:-8443}"
+# Seed initial admin password from CERTHARBOR_ADMIN_PASSWORD if provided.
 # The Go app reads this on first boot when no admin user exists.
-if [ -n "${STEPWEBUI_ADMIN_PASSWORD:-}" ]; then
-  echo "[*] STEPWEBUI_ADMIN_PASSWORD detected, will seed first admin with it"
-  export STEPWEBUI_ADMIN_PASSWORD
+if [ -n "${CERTHARBOR_ADMIN_PASSWORD:-}" ]; then
+  echo "[*] CERTHARBOR_ADMIN_PASSWORD detected, will seed first admin with it"
+  export CERTHARBOR_ADMIN_PASSWORD
 fi
 
 
-exec /opt/step-webui/step-webui
+exec /opt/certharbor/certharbor

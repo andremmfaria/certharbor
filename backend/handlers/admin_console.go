@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"step-webui/config"
-	"step-webui/stepca"
+	"certharbor/config"
+	"certharbor/stepca"
 
-	appdb "step-webui/db"
+	appdb "certharbor/db"
 )
 
 const (
@@ -57,8 +57,8 @@ func pgIsReadyArgs(dsn string) []string {
 	const (
 		defaultHost   = "postgres"
 		defaultPort   = "5432"
-		defaultUser   = "stepwebui"
-		defaultDBName = "stepwebui"
+		defaultUser   = "certharbor"
+		defaultDBName = "certharbor"
 	)
 
 	host, port, user, dbname := defaultHost, defaultPort, defaultUser, defaultDBName
@@ -96,7 +96,7 @@ func adminConsoleCommands(cfg *config.Config) []adminConsoleCommand {
 		{
 			ID:          "system.date",
 			Label:       "Date & time",
-			Description: "Current time inside the step-webui container",
+			Description: "Current time inside the certharbor container",
 			Name:        "date",
 		},
 		{
@@ -116,7 +116,7 @@ func adminConsoleCommands(cfg *config.Config) []adminConsoleCommand {
 			Label:       "Disk usage",
 			Description: "Free space for application and CA directories",
 			Name:        "df",
-			Args:        []string{"-h", "/opt/step-webui", "/home/step"},
+			Args:        []string{"-h", "/opt/certharbor", "/home/step"},
 		},
 		{
 			ID:          "system.processes",
@@ -127,14 +127,14 @@ func adminConsoleCommands(cfg *config.Config) []adminConsoleCommand {
 		{
 			ID:          "app.files",
 			Label:       "Application directory",
-			Description: "Top-level listing of /opt/step-webui",
+			Description: "Top-level listing of /opt/certharbor",
 			Name:        "ls",
-			Args:        []string{"-la", "/opt/step-webui"},
+			Args:        []string{"-la", "/opt/certharbor"},
 		},
 		{
 			ID:          "app.version",
-			Label:       "step-webui version",
-			Description: "step-webui build info and pinned certificates-library version",
+			Label:       "certharbor version",
+			Description: "certharbor build info and pinned certificates-library version",
 			Native:      true,
 			NativeFn:    appVersionNativeFn,
 		},
@@ -162,7 +162,7 @@ func adminConsoleCommands(cfg *config.Config) []adminConsoleCommand {
 	}
 }
 
-// appVersionNativeFn reports step-webui's own version/build metadata plus the
+// appVersionNativeFn reports certharbor's own version/build metadata plus the
 // pinned smallstep/certificates library version, replacing "step version"'s
 // former exec.CommandContext("step", "version") call.
 func appVersionNativeFn(_ context.Context, _ stepca.CA) (string, error) {
@@ -176,7 +176,7 @@ func appVersionNativeFn(_ context.Context, _ stepca.CA) (string, error) {
 		}
 	}
 	return fmt.Sprintf(
-		"step-webui %s (build %s, commit %s)\nsmallstep/certificates %s",
+		"certharbor %s (build %s, commit %s)\nsmallstep/certificates %s",
 		Version, BuildDate, GitCommit, libVersion,
 	), nil
 }
@@ -282,7 +282,7 @@ func runAdminConsoleCommand(ctx context.Context, c *adminConsoleCommand, ca step
 
 	//nolint:gosec // command name+args come from a fixed server-side allowlist; user only supplies an id
 	cmd := exec.CommandContext(cctx, c.Name, c.Args...)
-	cmd.Dir = "/opt/step-webui"
+	cmd.Dir = "/opt/certharbor"
 
 	out, err := cmd.CombinedOutput()
 	duration := time.Since(start).Round(time.Millisecond)

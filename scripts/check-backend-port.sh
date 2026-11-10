@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# step-webui-web is the one public origin. A host port on step-webui is a
+# certharbor-console is the one public origin. A host port on certharbor-control is a
 # second path to the backend with no rate limit, no body ceiling and a peer
 # outside the trusted-proxy list, so the same request would record a different
 # client depending on which way it came in. Nothing breaks when one is added,
@@ -20,29 +20,37 @@ static_check() {
     local args=(-f docker-compose.yml)
     [[ "$f" == docker-compose.yml ]] || args+=(-f "$f")
     local ports
-    ports=$(docker compose "${args[@]}" config --format json --no-interpolate | jq -c '.services["step-webui"].ports // empty')
+    ports=$(docker compose "${args[@]}" config --format json --no-interpolate | jq -c '.services["certharbor-control"].ports // empty')
     if [[ -n "$ports" ]]; then
-      echo "$f: step-webui publishes $ports; publish on step-webui-web only"
+      echo "$f: certharbor-control publishes $ports; publish on certharbor-console only"
+      status=1
+    fi
+    # certharbor-delivery has no HTTP listener at all (plans/distribution.md
+    # Section 2), so it must never carry a ports: entry either.
+    local delivery_ports
+    delivery_ports=$(docker compose "${args[@]}" config --format json --no-interpolate | jq -c '.services["certharbor-delivery"].ports // empty')
+    if [[ -n "$delivery_ports" ]]; then
+      echo "$f: certharbor-delivery publishes $delivery_ports; it has no HTTP listener and must publish nothing"
       status=1
     fi
   done
   if [[ $status -eq 0 ]]; then
-    echo "backend port: no compose file publishes a host port for step-webui (${#files[@]} checked)"
+    echo "backend port: no compose file publishes a host port for certharbor-control or certharbor-delivery (${#files[@]} checked)"
   fi
 }
 
 running_check() {
   local bindings
-  bindings=$(docker inspect -f '{{json .NetworkSettings.Ports}}' step-webui | jq -c '[.[]? | select(. != null) | .[]]')
+  bindings=$(docker inspect -f '{{json .NetworkSettings.Ports}}' certharbor-control | jq -c '[.[]? | select(. != null) | .[]]')
   if [[ "$bindings" != "[]" ]]; then
-    echo "step-webui: running with host port bindings $bindings"
+    echo "certharbor-control: running with host port bindings $bindings"
     status=1
   fi
 
   local cfg host port
   cfg=$(docker compose config --format json)
-  host=$(jq -r '.services["step-webui-web"].environment.WEB_HOSTNAME' <<<"$cfg")
-  port=$(jq -r '.services["step-webui-web"].ports[0].published' <<<"$cfg")
+  host=$(jq -r '.services["certharbor-console"].environment.WEB_HOSTNAME' <<<"$cfg")
+  port=$(jq -r '.services["certharbor-console"].ports[0].published' <<<"$cfg")
   # The origin refuses any SNI but WEB_HOSTNAME, so the name is pinned to
   # loopback rather than resolved.
   origin() { curl -sk --max-time 10 --resolve "$host:$port:127.0.0.1" "$@"; }
@@ -61,7 +69,7 @@ running_check() {
     status=1
   fi
   if [[ $status -eq 0 ]]; then
-    echo "preview: step-webui has no host binding, and https://$host:$port serves the SPA under /app/, the server-rendered pages and the API"
+    echo "preview: certharbor-control has no host binding, and https://$host:$port serves the SPA under /app/, the server-rendered pages and the API"
   fi
 }
 

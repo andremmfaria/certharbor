@@ -8,7 +8,7 @@ The backend runs only in its container: running the Go binary on the host would 
 
 ```bash
 make up            # build both images and start all four containers
-make dev           # postgres, step-ca and step-webui as already built, then Vite on :5173
+make dev           # postgres, step-ca and certharbor-control as already built, then Vite on :5173
 make preview       # build both images, run the full stack healthy, smoke-test the origin
 ```
 
@@ -50,11 +50,11 @@ go test -tags=integration -race -count=1 ./db/...
 
 | Project | Matches | Notes |
 |---|---|---|
-| `api` | `*.api.spec.ts` | Runs as a container on the compose network. Dials nginx at `BASE_URL` (default `https://step-webui-web:8443`), and the backend directly at `BACKEND_URL` (default `https://step-webui:8443`) only where a test must bypass the origin, the health tier for one |
+| `api` | `*.api.spec.ts` | Runs as a container on the compose network. Dials nginx at `BASE_URL` (default `https://certharbor-console:8443`), and the backend directly at `BACKEND_URL` (default `https://certharbor-control:8443`) only where a test must bypass the origin, the health tier for one |
 | `ui` | `*.ui.spec.ts` | Same network, drives a real Chromium via Playwright against `BASE_URL` |
 | `infra` | `*.infra.spec.ts` | Runs on the host, brings up its own stack without nginx and dials the backend at its `step-network` address (`backendAddress()` in `helpers/compose.ts`), since the backend publishes no host port. Five spec files under `specs/boot/` cover E2E-BOOT-01 to -07 and -09 (see below). `make e2e-bootstrap` runs `--project=infra` filtered to whichever IDs the chosen `SCENARIO` names |
 
-nginx refuses a TLS handshake for any name but `WEB_HOSTNAME`, so an in-network run needs `WEB_HOSTNAME=step-webui-web` in `.env`, which is what `e2e.yml` writes.
+nginx refuses a TLS handshake for any name but `WEB_HOSTNAME`, so an in-network run needs `WEB_HOSTNAME=certharbor-console` in `.env`, which is what `e2e.yml` writes.
 
 `.github/workflows/e2e.yml`'s `image` job builds the backend and frontend images on separate cache scopes (`e2e-backend`, `e2e-frontend`), asserts neither contains Node, and ships both in one `docker save | gzip` artifact. `e2e-main` loads them, materialises the Playwright-plus-docker-CLI harness image from its layer cache, brings up `docker-compose.yml` plus `compose.e2e-image.yml`, asserts the backend has no host binding, and runs the `api` project and then the `ui` project's `specs/spa/` files. The rest of the `ui` project runs locally via `make e2e-main` (which runs `api` then `ui`).
 
@@ -66,15 +66,15 @@ Several compose overlays exist purely to reach test scenarios the stock stack ca
 |---|---|---|
 | `compose.e2e-fatals.yml` | Turns off `restart: unless-stopped` so an intended crash stays exited and its exit code can be read | `scenario.sh` (`fatals`) |
 | `compose.e2e-fingerprint.yml` | Drops the read-only `step-ca-data` mount so `CA_FINGERPRINT`'s fetch path is actually exercised | `scenario.sh` (`fingerprint`) |
-| `compose.e2e-image.yml` | Runs both `step-webui` and `step-webui-web` from the images the CI `image` job already built, instead of `up -d --build` | `e2e.yml`, and `scenario.sh` when `E2E_USE_PREBUILT_IMAGE=1` |
-| `compose.e2e-noweb.yml` | Gives `step-webui-web` a profile nothing enables, so nginx never exists for the `infra` tier | `scenario.sh`, every scenario |
-| `compose.e2e-nodeps.yml` | Lets `step-webui` start against a stopped step-ca or postgres | `scenario.sh` (`ca-down`, `fatals`) |
+| `compose.e2e-image.yml` | Runs both `certharbor-control` and `certharbor-console` from the images the CI `image` job already built, instead of `up -d --build` | `e2e.yml`, and `scenario.sh` when `E2E_USE_PREBUILT_IMAGE=1` |
+| `compose.e2e-noweb.yml` | Gives `certharbor-console` a profile nothing enables, so nginx never exists for the `infra` tier | `scenario.sh`, every scenario |
+| `compose.e2e-nodeps.yml` | Lets `certharbor-control` start against a stopped step-ca or postgres | `scenario.sh` (`ca-down`, `fatals`) |
 | `compose.e2e-config.yml` | Passes `USE_HTTPS` and `ALLOWED_DOMAIN_SUFFIXES` through, neither of which the stock compose file wires up | the nightly `oidc-mail` leg ([plans/e2e-tests.md](../plans/e2e-tests.md), section 2.7.1), not `scenario.sh` |
 | `compose.e2e-le.yml` | A local ACME server (pebble) for the Let's Encrypt leg | the nightly `oidc-mail` leg |
 | `compose.e2e-mail.yml` | A mail catcher for reset-link and notification tests | the nightly `oidc-mail` leg |
 | `compose.e2e-oidc.yml` | A mock OIDC IdP, with `OIDC_*` defaults pointing the backend at it and the redirect URI on nginx's origin | the nightly `oidc-mail` leg |
 
-`make nginx-lint` tests the nginx config without compose: it builds the `nginx-fixture` target of `frontend/Dockerfile` (the real config and entrypoint over the placeholder bundle in `frontend/nginx-lint/fixture-dist/`, no Node stage), runs it against a stub upstream with throwaway certificates on a throwaway network, and asserts the proxied prefixes, the `/app/` fallback, the legacy passthrough with its forgery table, the `PHASE9-DELETE` markers, the header set, the cache policy, the failure documents and the entrypoint's modes, with a 60-second budget measured after the image build. `make proxy-routes-check` asserts nginx's proxy location and the Vite dev proxy both derive from `frontend/proxy-prefixes.json` and that the SPA base agrees across `vite.config.ts`, nginx, the image and the entrypoint. `make config-keys-check` asserts every web-origin key has a row in the configuration reference, and `make backend-port-check` that no compose file publishes a host port for `step-webui`.
+`make nginx-lint` tests the nginx config without compose: it builds the `nginx-fixture` target of `frontend/Dockerfile` (the real config and entrypoint over the placeholder bundle in `frontend/nginx-lint/fixture-dist/`, no Node stage), runs it against a stub upstream with throwaway certificates on a throwaway network, and asserts the proxied prefixes, the `/app/` fallback, the legacy passthrough with its forgery table, the `PHASE9-DELETE` markers, the header set, the cache policy, the failure documents and the entrypoint's modes, with a 60-second budget measured after the image build. `make proxy-routes-check` asserts nginx's proxy location and the Vite dev proxy both derive from `frontend/proxy-prefixes.json` and that the SPA base agrees across `vite.config.ts`, nginx, the image and the entrypoint. `make config-keys-check` asserts every web-origin key has a row in the configuration reference, and `make backend-port-check` that no compose file publishes a host port for `certharbor-control`.
 
 The migration plan ([plans/frontend-backend-split.md](../plans/frontend-backend-split.md), section 10) describes the e2e suite as **active**, not paused. Four `ui` spec files assert against the server-rendered markup the migration eventually deletes and will need rewriting or retiring once that markup changes.
 
@@ -130,7 +130,7 @@ There is no markdown linter wired into CI (no markdownlint config or job exists 
 
 ```
 .
-├── docker-compose.yml         # 4 services: postgres, step-ca, step-webui, step-webui-web
+├── docker-compose.yml         # 4 services: postgres, step-ca, certharbor-control, certharbor-console
 ├── compose.e2e-*.yml          # e2e-only overlays, see above
 ├── .dockerignore              # for root-context builds (frontend/Dockerfile)
 ├── .env.example               # configuration template
@@ -138,7 +138,7 @@ There is no markdown linter wired into CI (no markdownlint config or job exists 
 ├── secrets/                   # generated by `make setup`, not committed
 ├── assets/                    # logo.svg, used by README.md
 ├── scripts/
-│   ├── check-backend-port.sh  # asserts step-webui publishes no host port, statically or running
+│   ├── check-backend-port.sh  # asserts certharbor-control publishes no host port, statically or running
 │   ├── check-config-keys.sh   # asserts each web-origin key has a configuration row
 │   ├── check-proxy-routes.sh  # asserts nginx and Vite derive from one prefix list and one SPA base
 │   ├── client-version.sh      # derives the TS client's published version
@@ -149,7 +149,7 @@ There is no markdown linter wired into CI (no markdownlint config or job exists 
 ├── docs/                      # this documentation set
 ├── plans/                     # frontend-backend-split.md and its companions
 ├── clients/ts/                # generated TypeScript client package
-├── frontend/                  # React SPA, nginx config and the step-webui-web image
+├── frontend/                  # React SPA, nginx config and the certharbor-console image
 ├── test/e2e/                  # Playwright suite
 ├── LICENSE                    # MIT
 ├── README.md                  # short index

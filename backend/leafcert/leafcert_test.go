@@ -83,7 +83,7 @@ func TestRenewalDueAndOverdue(t *testing.T) {
 }
 
 func TestFallbackMarker(t *testing.T) {
-	if got := FallbackMarker("/opt/step-webui/ssl/server.crt"); got != "/opt/step-webui/ssl/.fallback" {
+	if got := FallbackMarker("/opt/certharbor/ssl/server.crt"); got != "/opt/certharbor/ssl/.fallback" {
 		t.Errorf("FallbackMarker = %q", got)
 	}
 }

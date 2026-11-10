@@ -6,8 +6,8 @@
 package api
 
 import (
-	"step-webui/db"
-	"step-webui/models"
+	"certharbor/db"
+	"certharbor/models"
 )
 
 func fixtureMustBeRejected(d any) (*models.User, error) {

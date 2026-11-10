@@ -147,7 +147,7 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
-          tags: step-ca-webui-${{ matrix.name }}:ci
+          tags: certharbor-${{ matrix.name }}:ci
           push: false
           load: true
           cache-from: type=gha,scope=${{ matrix.scope }}
@@ -155,7 +155,7 @@ jobs:
       - name: Run Trivy (image)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: step-ca-webui-${{ matrix.name }}:ci
+          image-ref: certharbor-${{ matrix.name }}:ci
           format: sarif
           output: trivy-image.sarif
           exit-code: "0"

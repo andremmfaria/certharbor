@@ -4,7 +4,7 @@ Phase 2 of `plans/frontend-backend-split.md` asks for a real two-commit proof th
 
 ## What is being proven
 
-D8 and 7.6 make one claim: the `frontend` job's provenance assertion is what stops a stale client from going green. Without it, the frontend job could install a client from an npm cache, a previously published version, or a lockfile edit, and pass against a contract the Go code does not implement. The assertion is `node -p "require('@andremmfaria/step-ca-webui-client/package.json').version"`, checked for the commit's short sha.
+D8 and 7.6 make one claim: the `frontend` job's provenance assertion is what stops a stale client from going green. Without it, the frontend job could install a client from an npm cache, a previously published version, or a lockfile edit, and pass against a contract the Go code does not implement. The assertion is `node -p "require('@andremmfaria/certharbor-client/package.json').version"`, checked for the commit's short sha.
 
 To prove the assertion is load-bearing rather than decorative, `scripts/client-version.sh` was deliberately regressed to stop appending the sha suffix, on a short-lived branch, `proof/contract-negative`, never merged into main. Both commits were run through `ci.yml` via `workflow_dispatch` against that branch, since a push to a branch other than `main` does not trigger `ci.yml`.
 
@@ -12,7 +12,7 @@ To prove the assertion is load-bearing rather than decorative, `scripts/client-v
 
 Commit `af2e482b2f5bb82f6a17329a8fa4f53cbc9ee1da`, "proof(red): drop the commit sha from the derived client version", removed the `-sha.<short-sha>` suffix from the derived version.
 
-Run: https://github.com/andremmfaria/step-ca-webui/actions/runs/42227297269
+Run: https://github.com/andremmfaria/certharbor/actions/runs/42227297269
 
 Result: `frontend` and `ci-gate` failed. Every other job, including `client` itself, stayed green, because nothing in the client job's own steps validates the shape of the version it packs. The frontend job's failure line:
 
@@ -26,7 +26,7 @@ This is the exact failure mode D8 warns about, produced on demand rather than by
 
 Commit `f19e57a675f1ce1989bac6bf67a0ec453f4b8e66`, "proof(green): restore the commit sha in the derived client version", reverted the regression.
 
-Run: https://github.com/andremmfaria/step-ca-webui/actions/runs/42227729715
+Run: https://github.com/andremmfaria/certharbor/actions/runs/42227729715
 
 Result: every job, including `frontend` and `ci-gate`, passed.
 

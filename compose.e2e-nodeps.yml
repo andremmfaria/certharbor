@@ -1,7 +1,7 @@
-# Lets step-webui start against a stopped step-ca or postgres, which the base
+# Lets certharbor start against a stopped step-ca or postgres, which the base
 # file's service_healthy conditions forbid. !reset clears the key (compose
 # >= v2.24); a plain `depends_on:` would merge. Where the pinned compose
-# predates !reset, the scenario driver falls back to `up --no-deps step-webui`.
+# predates !reset, the scenario driver falls back to `up --no-deps certharbor`.
 services:
-  step-webui:
+  certharbor-control:
     depends_on: !reset null

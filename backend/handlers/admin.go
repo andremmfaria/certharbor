@@ -1,4 +1,4 @@
-// Package handlers implements the HTTP handler layer for the Step-CA WebUI.
+// Package handlers implements the HTTP handler layer for the Certharbor.
 package handlers
 
 import (

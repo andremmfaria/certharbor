@@ -36,7 +36,7 @@ linters:
             - "**/apitypes/**"
           allow:
             - $gostd
-            - step-webui/apitypes
+            - certharbor/apitypes
         # api/ describes and enforces the contract; the row types belong to
         # handlers, which is what keeps a database type from reaching a DTO.
         api:
@@ -44,9 +44,9 @@ linters:
             - "**/api/*.go"
             - "!**/api/*_test.go"
           deny:
-            - pkg: step-webui/models
+            - pkg: certharbor/models
               desc: "api/ must not name a database row type; DTOs live in apitypes and handlers own the rows (Section 2)"
-            - pkg: step-webui/db
+            - pkg: certharbor/db
               desc: "api/ must not reach the database directly; go through handlers (Section 2)"
     gomodguard_v2:
       blocked:
@@ -90,4 +90,4 @@ formatters:
     gofumpt:
       # module-path tells gofumpt which import prefix is "local" so it can
       # produce the three-group layout (stdlib | external | local).
-      module-path: step-webui
+      module-path: certharbor

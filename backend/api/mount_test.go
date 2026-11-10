@@ -2,7 +2,6 @@ package api_test
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/gob"
 	"encoding/json"
 	"io"
@@ -13,11 +12,12 @@ import (
 	"testing"
 	"time"
 
-	humaapi "step-webui/api"
-	"step-webui/config"
-	"step-webui/handlers"
-	appmw "step-webui/middleware"
-	"step-webui/models"
+	humaapi "certharbor/api"
+	"certharbor/config"
+	"certharbor/handlers"
+	appmw "certharbor/middleware"
+	"certharbor/models"
+	"certharbor/security"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/sessions"
@@ -40,9 +40,11 @@ func newTestServer(t *testing.T) *httptest.Server {
 // when auth is non-nil, a stand-in for the database the login flow reads.
 func newTestServerWith(t *testing.T, cfg *config.Config, auth handlers.AuthStore) *httptest.Server {
 	t.Helper()
-	hashKey := sha256.Sum256([]byte("phase0-spike-test-key-not-for-prod!"))
-	blockKey := sha256.Sum256([]byte("phase0-spike-test-key-not-for-prod!_block"))
-	store := sessions.NewCookieStore(hashKey[:], blockKey[:16])
+	hashKey, blockKey, err := security.DeriveSessionKeys("phase0-spike-test-key-not-for-prod!")
+	if err != nil {
+		t.Fatalf("DeriveSessionKeys: %v", err)
+	}
+	store := sessions.NewCookieStore(hashKey, blockKey)
 	store.Options = &sessions.Options{
 		Path:     "/",
 		MaxAge:   28800,
@@ -72,7 +74,7 @@ func newTestServerWith(t *testing.T, cfg *config.Config, auth handlers.AuthStore
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		http.SetCookie(w, &http.Cookie{Name: "step-webui-csrf", Value: testCSRFToken, Path: "/"}) //nolint:gosec // G124: the readable CSRF cookie is deliberately not HttpOnly (5.4), and this test server is plain HTTP
+		http.SetCookie(w, &http.Cookie{Name: "certharbor-csrf", Value: testCSRFToken, Path: "/"}) //nolint:gosec // G124: the readable CSRF cookie is deliberately not HttpOnly (5.4), and this test server is plain HTTP
 	})
 
 	loader := appmw.UserLoader(stubUserLoader)
@@ -181,12 +183,12 @@ func TestSession_AnonymousRoundTrip(t *testing.T) {
 	if first.body["state"] != "anonymous" {
 		t.Fatalf("first call: state = %v, want anonymous", first.body["state"])
 	}
-	firstCSRF := cookieValue(first.cookies, "step-webui-csrf")
+	firstCSRF := cookieValue(first.cookies, "certharbor-csrf")
 	if firstCSRF == "" {
-		t.Fatal("first call: step-webui-csrf cookie not set")
+		t.Fatal("first call: certharbor-csrf cookie not set")
 	}
-	if cookieValue(first.cookies, "step-webui") == "" { // plain HTTP test store, so no __Host- prefix (D6)
-		t.Fatal("first call: step-webui session cookie not set")
+	if cookieValue(first.cookies, "certharbor") == "" { // plain HTTP test store, so no __Host- prefix (D6)
+		t.Fatal("first call: certharbor session cookie not set")
 	}
 
 	second := doGet(t, client, srv.URL+"/api/v1/session")
@@ -196,7 +198,7 @@ func TestSession_AnonymousRoundTrip(t *testing.T) {
 	if second.body["state"] != "anonymous" {
 		t.Fatalf("second call: state = %v, want anonymous", second.body["state"])
 	}
-	secondCSRF := cookieValue(second.cookies, "step-webui-csrf")
+	secondCSRF := cookieValue(second.cookies, "certharbor-csrf")
 	if secondCSRF != firstCSRF {
 		t.Fatalf("csrf token changed across requests: first=%q second=%q, session write did not round-trip", firstCSRF, secondCSRF)
 	}
@@ -251,7 +253,7 @@ func TestSpikeBlob_Downloads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadAll: %v", err)
 	}
-	if string(body) != "step-ca-webui phase 0 spike blob\n" {
+	if string(body) != "certharbor phase 0 spike blob\n" {
 		t.Fatalf("body = %q", body)
 	}
 }

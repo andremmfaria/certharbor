@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"step-webui/config"
+	"certharbor/config"
 
 	"github.com/smallstep/certificates/api"
 	"github.com/smallstep/certificates/authority/provisioner"

@@ -44,6 +44,9 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
+          config: |
+            paths-ignore:
+              - test/e2e
 
       - name: Build
         if: matrix.language == 'go'

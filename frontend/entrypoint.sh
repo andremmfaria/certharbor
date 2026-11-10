@@ -1,5 +1,5 @@
 #!/bin/sh
-# Entrypoint for step-webui-web. It replaces the stock nginx entrypoint instead
+# Entrypoint for certharbor-console. It replaces the stock nginx entrypoint instead
 # of adding a /docker-entrypoint.d script because it must stay running as the
 # parent of nginx: it forwards the stop signal so nginx drains rather than
 # dies, and it runs the certificate reload watcher beside it. The stock
@@ -7,15 +7,15 @@
 # own envsubst rendering.
 set -eu
 
-SSL_DIR=/etc/step-webui/ssl
+SSL_DIR=/etc/certharbor/ssl
 CERT="$SSL_DIR/web.crt"
 KEY="$SSL_DIR/web.key"
 ROOT="$SSL_DIR/root_ca.crt"
-TEMPLATE=/etc/step-webui/nginx.conf.template
-WAITING_TEMPLATE=/etc/step-webui/nginx.waiting.conf.template
+TEMPLATE=/etc/certharbor/nginx.conf.template
+WAITING_TEMPLATE=/etc/certharbor/nginx.waiting.conf.template
 NGINX_CONF=/etc/nginx/nginx.conf
 HSTS_CONF=/etc/nginx/conf.d/hsts.conf
-DOC_HEADERS_TEMPLATE=/etc/step-webui/doc-headers.conf.template
+DOC_HEADERS_TEMPLATE=/etc/certharbor/doc-headers.conf.template
 DOC_HEADERS_CONF=/etc/nginx/conf.d/doc-headers.conf
 # PHASE9-DELETE: /usr/share/nginx/html/index.html once the SPA owns the root.
 INDEX_HTML=/usr/share/nginx/html/app/index.html
@@ -26,7 +26,7 @@ STATE=serving
 APPLIED=
 
 log() {
-	printf 'step-webui-web: %s\n' "$*" >&2
+	printf 'certharbor-console: %s\n' "$*" >&2
 }
 
 # missing prints the space-separated subset of its arguments that are absent
@@ -43,7 +43,7 @@ missing() {
 # survive.
 render() {
 	# shellcheck disable=SC2016 # the single quotes are the point: envsubst gets the names, not values
-	envsubst '${WEB_HOSTNAME} ${WEB_RESOLVER} ${WEB_MISSING} ${WEB_CSP_SCRIPT_HASHES} ${WEB_CSP_STYLE_HASHES}' <"$1" >"$2.tmp"
+	envsubst '${WEB_HOSTNAME} ${WEB_RESOLVER} ${WEB_RATE_LIMIT} ${WEB_RATE_BURST} ${WEB_MISSING} ${WEB_CSP_SCRIPT_HASHES} ${WEB_CSP_STYLE_HASHES}' <"$1" >"$2.tmp"
 	mv "$2.tmp" "$2"
 }
 
@@ -168,6 +168,11 @@ wait_for_certs() {
 	log "still missing after ${WEB_CERT_WAIT_SECONDS}s: $_m. Serving 503 naming it until it arrives"
 	WEB_MISSING=$_m
 	export WEB_MISSING
+	# Made here, never at build time: a key baked into the image is the same key
+	# in every deployment.
+	openssl req -x509 -nodes -newkey ec -pkeyopt ec_paramgen_curve:P-256 -days 30 \
+		-subj "/CN=certharbor-console waiting for its certificate" \
+		-keyout /etc/certharbor/ephemeral/waiting.key -out /etc/certharbor/ephemeral/waiting.crt 2>/dev/null
 	render "$WAITING_TEMPLATE" "$NGINX_CONF"
 	STATE=waiting
 }
@@ -183,7 +188,9 @@ main() {
 	: "${WEB_RESOLVER:=127.0.0.11}"
 	: "${WEB_CERT_WAIT_SECONDS:=120}"
 	: "${WEB_RELOAD_INTERVAL:=60}"
-	export WEB_HOSTNAME="${WEB_HOSTNAME:-}" WEB_RESOLVER WEB_MISSING=
+	: "${WEB_RATE_LIMIT:=20r/s}"
+	: "${WEB_RATE_BURST:=40}"
+	export WEB_HOSTNAME="${WEB_HOSTNAME:-}" WEB_RESOLVER WEB_RATE_LIMIT WEB_RATE_BURST WEB_MISSING=
 
 	if [ -z "$WEB_HOSTNAME" ]; then
 		log "WEB_HOSTNAME is required: it is the server_name and the name browsers check on web.crt"

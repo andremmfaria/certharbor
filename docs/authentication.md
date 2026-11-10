@@ -2,7 +2,7 @@
 
 Local login, OIDC SSO, session and CSRF cookie behaviour, two-factor authentication, and password reset.
 
-Step-CA WebUI supports local username/password login and OIDC SSO. Both can be active at once. Roles (`viewer`, `manager`, `admin`) are described in [docs/architecture.md](architecture.md#roles).
+Certharbor supports local username/password login and OIDC SSO. Both can be active at once. Roles (`viewer`, `manager`, `admin`) are described in [docs/architecture.md](architecture.md#roles).
 
 ## Local login
 
@@ -20,7 +20,7 @@ TOTP 2FA (below) applies to local accounts only. SSO users rely on their IdP's o
 
 Set `OIDC_ENABLED=true` to activate SSO. The implementation is authorization code + PKCE, and validates state, nonce, and the ID token signature against the issuer's JWKS.
 
-**This repository's stock `docker-compose.yml` does not wire any `OIDC_*` variable, or `LOCAL_LOGIN_ENABLED`, into the `step-webui` container.** Setting them in `.env` has no effect until you add the matching `environment:` lines to the `step-webui` service yourself, `compose.e2e-oidc.yml` (used by CI against a mock IdP) is a working example of the full key list. See [docs/configuration.md](configuration.md#oidc-sso) for the complete variable table and defaults.
+**This repository's stock `docker-compose.yml` does not wire any `OIDC_*` variable, or `LOCAL_LOGIN_ENABLED`, into the `certharbor` container.** Setting them in `.env` has no effect until you add the matching `environment:` lines to the `certharbor` service yourself, `compose.e2e-oidc.yml` (used by CI against a mock IdP) is a working example of the full key list. See [docs/configuration.md](configuration.md#oidc-sso) for the complete variable table and defaults.
 
 **Routes registered when `OIDC_ENABLED=true`** (`backend/main.go`):
 
@@ -59,9 +59,9 @@ Cookie names carry the `__Host-` prefix whenever `SESSION_SECURE` is true (the d
 
 | Cookie | Base name | Served name (SESSION_SECURE=true) | `SameSite` |
 |---|---|---|---|
-| Session | `step-webui` | `__Host-step-webui` | `Strict` |
-| CSRF (readable) | `step-webui-csrf` | `__Host-step-webui-csrf` | `Strict` |
-| OIDC round-trip state | `step-webui-oidc` | `__Host-step-webui-oidc` | `Lax` (must survive the cross-site redirect back from the IdP) |
+| Session | `certharbor` | `__Host-certharbor` | `Strict` |
+| CSRF (readable) | `certharbor-csrf` | `__Host-certharbor-csrf` | `Strict` |
+| OIDC round-trip state | `certharbor-oidc` | `__Host-certharbor-oidc` | `Lax` (must survive the cross-site redirect back from the IdP) |
 
 The session cookie is `HttpOnly`. The CSRF cookie is deliberately not, so client-side JavaScript can read it and echo it back as a request header on POST/PUT/DELETE.
 

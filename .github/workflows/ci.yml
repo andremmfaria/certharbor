@@ -87,9 +87,9 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: stepwebui_test
-          POSTGRES_PASSWORD: stepwebui_test
-          POSTGRES_DB: stepwebui_test
+          POSTGRES_USER: certharbor_test
+          POSTGRES_PASSWORD: certharbor_test
+          POSTGRES_DB: certharbor_test
         ports:
           - 5432:5432
         options: >-
@@ -114,8 +114,8 @@ jobs:
       - name: Run integration tests
         run: go test -tags=integration -race -count=1 ./db/...
         env:
-          INTEGRATION_DB_DSN: postgres://stepwebui_test:stepwebui_test@localhost:5432/stepwebui_test?sslmode=disable
-          STEPWEBUI_ADMIN_PASSWORD: IntegrationTest123!
+          INTEGRATION_DB_DSN: postgres://certharbor_test:certharbor_test@localhost:5432/certharbor_test?sslmode=disable
+          CERTHARBOR_ADMIN_PASSWORD: IntegrationTest123!
 
   client:
     name: Client package
@@ -191,7 +191,7 @@ jobs:
         working-directory: clients/ts
         run: |
           npm pack --pack-destination dist
-          mv dist/andremmfaria-step-ca-webui-client-*.tgz dist/client.tgz
+          mv dist/andremmfaria-certharbor-client-*.tgz dist/client.tgz
 
       - name: Upload the packed client
         uses: actions/upload-artifact@v4.6.2
@@ -207,7 +207,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          if npm view "@andremmfaria/step-ca-webui-client@$VERSION" version >/dev/null 2>&1; then
+          if npm view "@andremmfaria/certharbor-client@$VERSION" version >/dev/null 2>&1; then
             echo "already published at $VERSION, publish is idempotent"
           else
             npm publish ./dist/client.tgz
@@ -245,7 +245,7 @@ jobs:
       - name: Provenance, the installed client matches this commit
         run: |
           SHORT_SHA=$(git rev-parse --short HEAD)
-          VERSION=$(node -p "require('@andremmfaria/step-ca-webui-client/package.json').version")
+          VERSION=$(node -p "require('@andremmfaria/certharbor-client/package.json').version")
           case "$VERSION" in
             *"$SHORT_SHA") echo "installed client $VERSION carries commit $SHORT_SHA" ;;
             *) echo "::error::installed client version $VERSION does not contain commit $SHORT_SHA"; exit 1 ;;
@@ -283,7 +283,7 @@ jobs:
         run: make backend-port-check
 
       - name: The artifact collector covers the origin
-        run: grep -qE '^for svc in .*step-webui-web' test/e2e/collect.sh
+        run: grep -qE '^for svc in .*certharbor-console' test/e2e/collect.sh
 
       - name: nginx-lint
         run: make nginx-lint
@@ -362,8 +362,8 @@ jobs:
           mkdir -p /tmp/contract-negative
           cd /tmp/contract-negative
           npm init -y >/dev/null
-          npm install --no-save "$GITHUB_WORKSPACE"/clients/ts/dist/andremmfaria-step-ca-webui-client-*.tgz
-          VERSION=$(node -p "require('@andremmfaria/step-ca-webui-client/package.json').version")
+          npm install --no-save "$GITHUB_WORKSPACE"/clients/ts/dist/andremmfaria-certharbor-client-*.tgz
+          VERSION=$(node -p "require('@andremmfaria/certharbor-client/package.json').version")
           case "$VERSION" in
             *"$SHORT_SHA") echo "::error::a client missing the commit sha was accepted ($VERSION)"; exit 1 ;;
             *) echo "correctly rejected: $VERSION does not contain $SHORT_SHA" ;;

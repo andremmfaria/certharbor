@@ -5,7 +5,7 @@
  * and cleans up the legacy localStorage key.
  */
 (function () {
-  try { localStorage.removeItem('step-webui-theme'); } catch (e) { /* ignore */ }
+  try { localStorage.removeItem('certharbor-theme'); } catch (e) { /* ignore */ }
   var t = document.documentElement.getAttribute('data-theme');
   if (t === 'auto') {
     var mq = window.matchMedia('(prefers-color-scheme: dark)');

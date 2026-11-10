@@ -1,4 +1,4 @@
-import { client } from '@andremmfaria/step-ca-webui-client/client'
+import { client } from '@andremmfaria/certharbor-client/client'
 
 export type FakeSessionState = 'anonymous' | 'pendingMfa' | 'authenticated'
 
@@ -80,7 +80,7 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
     const key = `${method} ${url.pathname}`
     switch (key) {
       case 'GET /api/v1/session':
-        document.cookie = `step-webui-csrf=${state.csrfCookie}`
+        document.cookie = `certharbor-csrf=${state.csrfCookie}`
         return json(sessionBody())
       case 'GET /api/v1/config':
         return json({
@@ -108,7 +108,7 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
             401,
             'Unauthorized',
             'No sign-in is waiting for a code.',
-            'https://step-ca-webui/errors/mfa-expired',
+            'https://certharbor/errors/mfa-expired',
           )
         }
         const submitted = body as { code: string; codeType: 'totp' | 'recovery' }

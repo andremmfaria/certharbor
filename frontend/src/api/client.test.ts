@@ -1,4 +1,4 @@
-import { getSession, createSession } from '@andremmfaria/step-ca-webui-client'
+import { getSession, createSession } from '@andremmfaria/certharbor-client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AUTH_ENDPOINTS, isAuthEndpoint } from './authEndpoints'
 import { csrfRequestInterceptor, installClient, unauthorizedResponseInterceptor } from './client'
@@ -98,7 +98,7 @@ describe('installed on the generated client', () => {
   })
   afterEach(() => {
     eject()
-    document.cookie = 'step-webui-csrf=; Max-Age=0'
+    document.cookie = 'certharbor-csrf=; Max-Age=0'
   })
 
   it('attaches the cookie to a mutation and not to a read', async () => {
@@ -130,12 +130,12 @@ describe('installed on the generated client', () => {
   it('redirects when an ordinary operation answers 401', async () => {
     eject = installClient(handlers)
     installFakeApi()
-    const { client } = await import('@andremmfaria/step-ca-webui-client/client')
+    const { client } = await import('@andremmfaria/certharbor-client/client')
     client.setConfig({
       fetch: () => Promise.resolve(new Response(JSON.stringify({ status: 401 }), { status: 401 })),
     })
 
-    const { getStatus } = await import('@andremmfaria/step-ca-webui-client')
+    const { getStatus } = await import('@andremmfaria/certharbor-client')
     await getStatus()
 
     expect(handlers.clearCache).toHaveBeenCalledTimes(1)
