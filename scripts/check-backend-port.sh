@@ -25,9 +25,17 @@ static_check() {
       echo "$f: certharbor-control publishes $ports; publish on certharbor-console only"
       status=1
     fi
+    # certharbor-delivery has no HTTP listener at all (plans/distribution.md
+    # Section 2), so it must never carry a ports: entry either.
+    local delivery_ports
+    delivery_ports=$(docker compose "${args[@]}" config --format json --no-interpolate | jq -c '.services["certharbor-delivery"].ports // empty')
+    if [[ -n "$delivery_ports" ]]; then
+      echo "$f: certharbor-delivery publishes $delivery_ports; it has no HTTP listener and must publish nothing"
+      status=1
+    fi
   done
   if [[ $status -eq 0 ]]; then
-    echo "backend port: no compose file publishes a host port for certharbor-control (${#files[@]} checked)"
+    echo "backend port: no compose file publishes a host port for certharbor-control or certharbor-delivery (${#files[@]} checked)"
   fi
 }
 
