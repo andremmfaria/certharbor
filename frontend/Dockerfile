@@ -3,38 +3,76 @@
 # backend/openapi/openapi.json. The COPYs are narrow and in dependency order so
 # a backend-only commit does not invalidate npm ci or the Vite build.
 
-# ── Stage 1: client and SPA build ────────────────────────────────────────────
-FROM node:26-alpine3.23 AS build
+# CLIENT_SOURCE selects the client-source stage below: "local" (default)
+# builds the client from source in-image, "registry" installs the real
+# published @andremmfaria/certharbor-client at an exact version. Must be
+# declared before any FROM that references it.
+ARG CLIENT_SOURCE=local
+
+# ── Client source: local build (default, unchanged behavior) ────────────────
+# Builds the client from source and installs it into a throwaway npm project
+# so the final build stage can COPY --from it the same way regardless of
+# CLIENT_SOURCE. The in-image client is exempt from the commit-sha provenance
+# check and carries the -dev fallback version (D8): there is no git history
+# here.
+FROM node:26-alpine3.23 AS client-source-local
 
 WORKDIR /src
-
-COPY frontend/package.json frontend/package-lock.json frontend/
-COPY clients/ts/package.json clients/ts/package-lock.json clients/ts/
-WORKDIR /src/clients/ts
-RUN npm ci
-WORKDIR /src/frontend
-RUN npm ci
-WORKDIR /src
-
 COPY VERSION ./
 COPY backend/openapi/openapi.json backend/openapi/openapi.json
 COPY clients/ts/ clients/ts/
-# The in-image client is exempt from the commit-sha provenance check and
-# carries the -dev fallback version (D8): there is no git history here.
 WORKDIR /src/clients/ts
-RUN npm run generate && npm run build \
+RUN npm ci \
+ && npm run generate && npm run build \
  && npm version "$(tr -d '[:space:]' < ../../VERSION)-dev" --no-git-tag-version --allow-same-version \
  && npm pack --pack-destination dist \
  && mv dist/andremmfaria-certharbor-client-*.tgz dist/client.tgz
+WORKDIR /client-pkg
+RUN npm init -y >/dev/null \
+ && npm install --no-save /src/clients/ts/dist/client.tgz
 
+# ── Client source: registry install (release builds) ────────────────────────
+# Installs the real published package at an exact, caller-supplied version.
+# CLIENT_VERSION must be the <VERSION file content>-sha.<short-sha> string
+# scripts/client-version.sh produces for the commit being tagged. The npm
+# token is read from a BuildKit secret mount so it never lands in an image
+# layer or the build cache in plaintext; the .npmrc that references it is
+# removed again within the same RUN before the layer is committed.
+FROM node:26-alpine3.23 AS client-source-registry
+
+ARG CLIENT_VERSION
+ARG NPM_REGISTRY_URL=https://npm.pkg.github.com
+WORKDIR /client-pkg
+RUN npm init -y >/dev/null
+RUN --mount=type=secret,id=npm_token \
+    REGISTRY_HOST="${NPM_REGISTRY_URL#https://}" && \
+    printf '@andremmfaria:registry=%s\n//%s/:_authToken=%s\n' \
+      "$NPM_REGISTRY_URL" "$REGISTRY_HOST" "$(cat /run/secrets/npm_token)" > .npmrc && \
+    npm install --save-exact "@andremmfaria/certharbor-client@${CLIENT_VERSION}" --registry="$NPM_REGISTRY_URL" && \
+    rm -f .npmrc
+
+# ── Client source selection ───────────────────────────────────────────────────
+FROM client-source-${CLIENT_SOURCE} AS client-source
+
+# ── Stage: SPA build ───────────────────────────────────────────────────────────
+FROM node:26-alpine3.23 AS build
+
+WORKDIR /src
+COPY frontend/package.json frontend/package-lock.json frontend/
+WORKDIR /src/frontend
+RUN npm ci
+WORKDIR /src
+COPY backend/openapi/openapi.json backend/openapi/openapi.json
 COPY frontend/ /src/frontend/
 WORKDIR /src/frontend
+# Either client-source stage produces the installed package at the same
+# path, so this COPY is identical regardless of CLIENT_SOURCE.
+COPY --from=client-source /client-pkg/node_modules/@andremmfaria ./node_modules/@andremmfaria
 # CONTRACT_SHA defaults to the digest of the spec the client was generated
 # from; a skew test overrides it to force a mismatch (5.10).
 ARG CONTRACT_SHA=""
 SHELL ["/bin/ash", "-o", "pipefail", "-c"]
-RUN npm install --no-save ../clients/ts/dist/client.tgz \
- && CONTRACT_SHA="${CONTRACT_SHA:-$(sha256sum ../backend/openapi/openapi.json | cut -d' ' -f1)}" npm run build
+RUN CONTRACT_SHA="${CONTRACT_SHA:-$(sha256sum ../backend/openapi/openapi.json | cut -d' ' -f1)}" npm run build
 
 # ── Stage 2: nginx with the config, no SPA ───────────────────────────────────
 # Pinned to a minor. The master process must run as root: it reads web.key,
