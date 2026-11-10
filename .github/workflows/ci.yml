@@ -59,7 +59,7 @@ jobs:
           COVERPROFILE: coverage.out
 
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: coverage-${{ github.run_id }}
@@ -194,7 +194,7 @@ jobs:
           mv dist/andremmfaria-certharbor-client-*.tgz dist/client.tgz
 
       - name: Upload the packed client
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: ts-client
           path: clients/ts/dist/client.tgz
