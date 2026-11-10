@@ -19,9 +19,15 @@ DELETE /api/v1/session     auth=public   role=-       tag=session     csrf=optio
 GET  /api/v1/certificates  auth=required role=viewer  tag=certificates csrf=no  ratelimit=no templateRouteRetired=false
 GET  /api/v1/certificates/{id} auth=required role=viewer  tag=certificates csrf=no  ratelimit=no templateRouteRetired=false
 GET  /api/v1/certificates/options auth=required role=manager tag=certificates csrf=no  ratelimit=no templateRouteRetired=false
+GET  /api/v1/certificates/import-candidates auth=required role=manager tag=certificates csrf=no  ratelimit=no templateRouteRetired=false
 GET  /api/v1/config        auth=public   role=-       tag=system      csrf=no  ratelimit=no templateRouteRetired=true
 GET  /api/v1/session       auth=optional role=-       tag=session     csrf=no  ratelimit=no templateRouteRetired=true
 GET  /api/v1/status        auth=required role=viewer  tag=dashboard   csrf=no  ratelimit=no templateRouteRetired=false
 POST /api/v1/_spike/upload auth=required role=manager tag=system      csrf=yes ratelimit=no templateRouteRetired=true
+POST /api/v1/certificates  auth=required role=manager tag=certificates csrf=yes ratelimit=no templateRouteRetired=false
+POST /api/v1/certificates/import/paths auth=required role=manager tag=certificates csrf=yes ratelimit=no templateRouteRetired=false
+POST /api/v1/certificates/import/upload auth=required role=manager tag=certificates csrf=yes ratelimit=no templateRouteRetired=false
+POST /api/v1/certificates/{id}/renew auth=required role=manager tag=certificates csrf=yes ratelimit=no templateRouteRetired=false
+POST /api/v1/certificates/{id}/revoke auth=required role=admin tag=certificates csrf=yes ratelimit=no templateRouteRetired=false
 POST /api/v1/session       auth=public   role=-       tag=session     csrf=yes ratelimit=yes templateRouteRetired=false
 POST /api/v1/session/mfa   auth=public   role=-       tag=session     csrf=yes ratelimit=yes templateRouteRetired=false

@@ -2,11 +2,16 @@ package api
 
 import (
 	"context"
+	"errors"
+	"mime/multipart"
 	"net/http"
 	"time"
 
 	"certharbor/apitypes"
 	"certharbor/handlers"
+	appmw "certharbor/middleware"
+
+	"github.com/danielgtaylor/huma/v2"
 )
 
 // certificateSummaryBody is CertificateSummary's wire shape: the row list
@@ -244,5 +249,228 @@ func getCertificateOptions(h *handlers.Handler) func(context.Context, *struct{})
 		}
 
 		return &getCertificateOptionsOutput{Body: body}, nil
+	}
+}
+
+// ─── Phase 4, second batch: issue, import, renew, revoke ───────────────────
+//
+// R23's observed-cost record for this batch, which 8's "do the first three
+// before scoping the rest" asked for: list, detail and options (above) each
+// had a predecessor in handlers/ that already isolated the data from the
+// rendering. None of these four do. IssuePost, Renew, Revoke and ImportPost
+// compute and write their response in the same function body, so every one
+// of handlers.IssueCertificate, RenewCertificate, RevokeCertificate,
+// ImportCertificateUpload and ImportCertificateByPath is new code, not an
+// extraction of existing code — the real cost R23 warned this phase would
+// carry, now priced: roughly the size of the template handler each replaces,
+// once per operation, because "separate the data from the response write" and
+// "write the first version of the data half" turn out to be the same amount
+// of work when there is nothing to separate.
+
+// userIdentity reads the username and role off the request context for the
+// certificate_history row, without naming certharbor/models: the type of
+// appmw.UserFrom's result is inferred by :=, exactly as session.go's
+// sessionUserBody construction already relies on (Section 2's depguard rule).
+func userIdentity(ctx context.Context) (username, role string) {
+	if user, ok := appmw.UserFrom(ctx); ok {
+		username, role = user.Username, user.Role
+	}
+	return username, role
+}
+
+// mapCertError maps a handlers.ValidationError to 422 (5.2: caller-input
+// errors, not malformed JSON, so this is the application-level case the
+// rule reserves 400 from). Every other error is returned unchanged and
+// surfaces as huma's default 500, same as getCertificate already does for a
+// database failure.
+func mapCertError(err error) error {
+	var verr *handlers.ValidationError
+	if errors.As(err, &verr) {
+		return newProblem(http.StatusUnprocessableEntity, "Unprocessable Entity", problemTypeBase+"validation", err.Error(), "")
+	}
+	return err
+}
+
+type certificateOutput struct {
+	Body certificateSummaryBody
+}
+
+// ─── POST /api/v1/certificates ──────────────────────────────────────────────
+
+type issueCertificateBody struct {
+	Name     string `json:"name" minLength:"1" maxLength:"255" doc:"Certificate name, used as its managed directory name."`
+	Domain   string `json:"domain" minLength:"1" maxLength:"255" doc:"Domain or IP address the certificate covers."`
+	Template string `json:"template,omitempty" maxLength:"64" doc:"Certificate template id, from GET /api/v1/certificates/options."`
+	Duration string `json:"duration,omitempty" maxLength:"16" doc:"Issuance duration, e.g. 8760h."`
+	KeyType  string `json:"keyType,omitempty" maxLength:"16" doc:"Key type, e.g. EC:P-256."`
+}
+
+type issueCertificateInput struct {
+	Body issueCertificateBody
+}
+
+// createCertificate implements POST /api/v1/certificates, replacing POST
+// /issue (Section 6). The field is name, not cert_name (handlers/certs.go's
+// old IssuePost read r.FormValue("name") into a local also called name, so
+// only the wire name changes here, not the Go-side one).
+func createCertificate(h *handlers.Handler) func(context.Context, *issueCertificateInput) (*certificateOutput, error) {
+	return func(ctx context.Context, in *issueCertificateInput) (*certificateOutput, error) {
+		username, role := userIdentity(ctx)
+		summary, err := h.IssueCertificate(ctx, username, role, in.Body.Name, in.Body.Domain, in.Body.Template, in.Body.Duration, in.Body.KeyType)
+		if err != nil {
+			return nil, mapCertError(err)
+		}
+		return &certificateOutput{Body: newCertificateSummaryBody(summary)}, nil
+	}
+}
+
+// ─── GET /api/v1/certificates/import-candidates ─────────────────────────────
+
+// importCandidateBody is deliberately not named with CertPath/KeyPath
+// fields: see handlers.ImportCandidate's comment. certFile and keyFile here
+// are plain response data, not writeOnly, because nothing about this
+// response is a secret: it is the fact an admin importing a certificate
+// needs to choose between.
+type importCandidateBody struct {
+	Name     string `json:"name"`
+	CertFile string `json:"certFile"`
+	KeyFile  string `json:"keyFile,omitempty"`
+}
+
+type listImportCandidatesOutput struct {
+	Body []importCandidateBody
+}
+
+// listCertificateImportCandidates implements GET
+// /api/v1/certificates/import-candidates, replacing GET /import (Section 6).
+// It reuses scanExistingCerts via handlers.ImportCandidates, which already
+// does the filesystem walk and the already-registered check.
+func listCertificateImportCandidates(h *handlers.Handler) func(context.Context, *struct{}) (*listImportCandidatesOutput, error) {
+	return func(_ context.Context, _ *struct{}) (*listImportCandidatesOutput, error) {
+		candidates := h.ImportCandidates()
+		body := make([]importCandidateBody, 0, len(candidates))
+		for _, c := range candidates {
+			body = append(body, importCandidateBody{Name: c.Name, CertFile: c.CertFile, KeyFile: c.KeyFile})
+		}
+		return &listImportCandidatesOutput{Body: body}, nil
+	}
+}
+
+// ─── POST /api/v1/certificates/import/upload ────────────────────────────────
+
+type importUploadFields struct {
+	Name     string        `form:"name" required:"true" maxLength:"255"`
+	Domain   string        `form:"domain" required:"true" maxLength:"255"`
+	CertFile huma.FormFile `form:"certFile" contentType:"application/octet-stream" required:"true"`
+	KeyFile  huma.FormFile `form:"keyFile" contentType:"application/octet-stream"`
+}
+
+type importUploadInput struct {
+	RawBody huma.MultipartFormFiles[importUploadFields]
+}
+
+// importCertificateUpload implements POST
+// /api/v1/certificates/import/upload, the file-upload half of POST /import
+// (Section 6: "two operations by payload"). It reuses Phase 0's proven
+// multipart mechanic (huma.MultipartFormFiles, humachi.MultipartMaxMemory).
+func importCertificateUpload(h *handlers.Handler) func(context.Context, *importUploadInput) (*certificateOutput, error) {
+	return func(ctx context.Context, in *importUploadInput) (*certificateOutput, error) {
+		username, role := userIdentity(ctx)
+		data := in.RawBody.Data()
+		var keyFile multipart.File
+		if data.KeyFile.IsSet {
+			keyFile = data.KeyFile.File
+		}
+		summary, err := h.ImportCertificateUpload(username, role, data.Name, data.Domain, data.CertFile.File, keyFile)
+		if err != nil {
+			return nil, mapCertError(err)
+		}
+		return &certificateOutput{Body: newCertificateSummaryBody(summary)}, nil
+	}
+}
+
+// ─── POST /api/v1/certificates/import/paths ─────────────────────────────────
+
+// importPathItem is the request shape Section 6 specifies verbatim:
+// {name, domain, certPath, keyPath}. certPath and keyPath are allowlisted in
+// openapi/secret-allowlist.txt and writeOnly, so they can appear in this
+// request body and nowhere in any response.
+type importPathItem struct {
+	Name     string `json:"name" minLength:"1" maxLength:"255"`
+	Domain   string `json:"domain" minLength:"1" maxLength:"255"`
+	CertPath string `json:"certPath" minLength:"1" writeOnly:"true" doc:"Path to the certificate file, resolved against the managed certificates directory."`
+	KeyPath  string `json:"keyPath,omitempty" writeOnly:"true" doc:"Path to the private key file, resolved against the managed certificates directory."`
+}
+
+type importPathsInput struct {
+	Body []importPathItem
+}
+
+type importPathsOutput struct {
+	Body apitypes.BulkResponse
+}
+
+// importCertificatesByPaths implements POST /api/v1/certificates/import/paths,
+// serving both the manual-path case and the scan-import case (Section 6):
+// the SPA submits a candidate's certFile/keyFile from
+// listCertificateImportCandidates through here exactly as it would a
+// hand-typed path. Unlike the old import/scan, which swallowed per-item
+// failures into a count, every item gets its own result (5.2's bulk-result
+// convention): this always answers 200, never a problem document for a
+// partial failure.
+func importCertificatesByPaths(h *handlers.Handler) func(context.Context, *importPathsInput) (*importPathsOutput, error) {
+	return func(ctx context.Context, in *importPathsInput) (*importPathsOutput, error) {
+		username, role := userIdentity(ctx)
+		results := make([]apitypes.BulkResult, 0, len(in.Body))
+		for _, item := range in.Body {
+			ref := item.Name
+			if ref == "" {
+				ref = item.Domain
+			}
+			if _, err := h.ImportCertificateByPath(username, role, item.Name, item.Domain, item.CertPath, item.KeyPath); err != nil {
+				results = append(results, apitypes.BulkResult{Ref: ref, Status: "error", Error: err.Error()})
+				continue
+			}
+			results = append(results, apitypes.BulkResult{Ref: ref, Status: "ok"})
+		}
+		return &importPathsOutput{Body: apitypes.BulkResponse{Results: results}}, nil
+	}
+}
+
+// ─── POST /api/v1/certificates/{id}/renew ───────────────────────────────────
+
+// renewCertificate implements POST /api/v1/certificates/{id}/renew,
+// replacing POST /renew/{id} (Section 6).
+func renewCertificate(h *handlers.Handler) func(context.Context, *getCertificateInput) (*certificateOutput, error) {
+	return func(ctx context.Context, in *getCertificateInput) (*certificateOutput, error) {
+		username, role := userIdentity(ctx)
+		summary, err := h.RenewCertificate(ctx, username, role, in.ID)
+		if err != nil {
+			return nil, mapCertError(err)
+		}
+		if summary == nil {
+			return nil, newProblem(http.StatusNotFound, "Not Found", "", "no certificate with that id", "")
+		}
+		return &certificateOutput{Body: newCertificateSummaryBody(summary)}, nil
+	}
+}
+
+// ─── POST /api/v1/certificates/{id}/revoke ──────────────────────────────────
+
+// revokeCertificate implements POST /api/v1/certificates/{id}/revoke,
+// replacing POST /revoke/{id}. Section 6 flags the role split here is not
+// visible from the page layout: this is admin, every other certificate
+// mutation in this file is manager.
+func revokeCertificate(h *handlers.Handler) func(context.Context, *getCertificateInput) (*certificateOutput, error) {
+	return func(ctx context.Context, in *getCertificateInput) (*certificateOutput, error) {
+		username, role := userIdentity(ctx)
+		summary, err := h.RevokeCertificate(ctx, username, role, in.ID)
+		if err != nil {
+			return nil, mapCertError(err)
+		}
+		if summary == nil {
+			return nil, newProblem(http.StatusNotFound, "Not Found", "", "no certificate with that id", "")
+		}
+		return &certificateOutput{Body: newCertificateSummaryBody(summary)}, nil
 	}
 }

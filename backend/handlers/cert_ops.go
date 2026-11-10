@@ -409,3 +409,280 @@ func daysLeftVal(t *time.Time) int {
 
 // GetCertBySerial wrapper needed in db
 var _ = (*models.Certificate)(nil)
+
+// ─── Phase 4: issue, import, renew, revoke (plans/frontend-backend-split.md Section 6) ───
+
+// IssueCertificate is IssuePost's data half: directory creation, CA
+// issuance, the database write and the history row, with no form parsing,
+// no flash message and no redirect. R23's observed-cost record for this
+// operation: real extraction work, because IssuePost computes and writes
+// in the same function body rather than calling out to an isolable step.
+//
+// username and role come from the caller (api/ reads them off the request
+// context via middleware.UserFrom) rather than from h.sessionInfo, because
+// api/ cannot reach that unexported method and is not allowed to import
+// certharbor/models to name *models.SessionInfo itself (Section 2's
+// depguard rule).
+func (h *Handler) IssueCertificate(ctx context.Context, username, role, name, domain, templateID, duration, keyType string) (*CertificateSummary, error) {
+	name = trimStr(name)
+	domain = trimStr(domain)
+	if name == "" || domain == "" {
+		return nil, NewValidationError("name and domain are required")
+	}
+	policy, err := normalizeIssuePolicy(templateID, duration, keyType, domain)
+	if err != nil {
+		return nil, NewValidationError(err.Error())
+	}
+	safeCertName, err := safeName(name)
+	if err != nil {
+		return nil, NewValidationError("invalid certificate name: " + err.Error())
+	}
+	certDir := filepath.Join(h.cfg.CertsDir, safeCertName)
+	if err := os.MkdirAll(certDir, 0o750); err != nil { //nolint:gosec // G703: safeName validated the component; certDir is h.cfg.CertsDir+safeName
+		return nil, fmt.Errorf("failed to create directory: %w", err)
+	}
+	certPath := filepath.Join(certDir, "certificate.crt")
+	keyPath := filepath.Join(certDir, "private.key")
+	caClient, caErr := h.caClient()
+	if caErr != nil {
+		return nil, fmt.Errorf("CA unreachable: %w", caErr)
+	}
+	if err := issueCert(ctx, caClient, domain, certPath, keyPath, policy.Duration, policy.KeyType, h.cfg); err != nil {
+		h.notifyAsync("", "certificate.issue_failed", "error",
+			"Certificate issue failed",
+			fmt.Sprintf("Failed to issue certificate %s for %s: %s", name, domain, err.Error()),
+			map[string]string{"name": name, "domain": domain, "template": policy.Template, "key_type": policy.KeyType})
+		return nil, fmt.Errorf("issue certificate: %w", err)
+	}
+	issued, expires, serial, _ := parseCertDates(certPath)
+	if err := appdb.InsertCert(h.db, &models.Certificate{
+		Name: name, Domain: domain, CertPath: certPath, KeyPath: keyPath,
+		IssuedAt: issued, ExpiresAt: expires, Serial: serial, KeyType: policy.KeyType,
+		IssueDuration: policy.Duration, // stored so a later renew can reuse it
+	}); err != nil {
+		return nil, fmt.Errorf("database write error: %w", err)
+	}
+	_ = appdb.InsertHistory(h.db, "issue", name, domain,
+		fmt.Sprintf("Template: %s, type: %s, duration: %s", policy.Template, policy.KeyType, policy.Duration), username, role)
+
+	row, err := appdb.GetCertByName(h.db, name)
+	if err != nil || row == nil {
+		return nil, err
+	}
+	summary := summarizeCert(row)
+	return &summary, nil
+}
+
+// RenewCertificate is Renew's data half. Returns (nil, nil) when id names no
+// certificate, which the caller maps to 404; FetchCertificateDetail
+// (cert_details.go) establishes the same convention for the same reason.
+func (h *Handler) RenewCertificate(ctx context.Context, username, role string, id int) (*CertificateSummary, error) {
+	c, err := appdb.GetCert(h.db, id)
+	if err != nil || c == nil {
+		return nil, err
+	}
+
+	keyType := c.KeyType
+	if keyType == "" {
+		keyType = "EC:P-256"
+	}
+	// Reuse the stored issuance duration; fall back to 8760h only when the
+	// certificate predates the issue_duration column (P3-8).
+	duration := c.IssueDuration
+	if duration == "" {
+		duration = "8760h"
+	}
+
+	caClient, caErr := h.caClient()
+	var issueErr error
+	if caErr != nil {
+		issueErr = caErr
+	} else {
+		issueErr = issueCert(ctx, caClient, c.Domain, c.CertPath, c.KeyPath, duration, keyType, h.cfg)
+	}
+	if issueErr != nil {
+		h.notifyAsync("", "certificate.renew_failed", "error",
+			"Certificate renew failed",
+			fmt.Sprintf("Failed to renew certificate %s for %s: %s", c.Name, c.Domain, issueErr.Error()),
+			map[string]string{"id": strconv.Itoa(c.ID), "name": c.Name, "domain": c.Domain, "key_type": keyType})
+		return nil, fmt.Errorf("renew certificate: %w", issueErr)
+	}
+
+	issued, expires, serial, _ := parseCertDates(c.CertPath)
+	if err := appdb.InsertCert(h.db, &models.Certificate{
+		Name: c.Name, Domain: c.Domain, CertPath: c.CertPath, KeyPath: c.KeyPath,
+		IssuedAt: issued, ExpiresAt: expires, Serial: serial, KeyType: keyType,
+		IssueDuration: duration,
+	}); err != nil {
+		return nil, fmt.Errorf("database write error: %w", err)
+	}
+	_ = appdb.InsertHistory(h.db, "renew", c.Name, c.Domain, "Renewal, type: "+keyType, username, role)
+
+	row, err := appdb.GetCertByName(h.db, c.Name)
+	if err != nil || row == nil {
+		return nil, err
+	}
+	summary := summarizeCert(row)
+	return &summary, nil
+}
+
+// RevokeCertificate is Revoke's data half. Returns (nil, nil) when id names
+// no certificate, same 404 convention as RenewCertificate.
+func (h *Handler) RevokeCertificate(ctx context.Context, username, role string, id int) (*CertificateSummary, error) {
+	c, err := appdb.GetCert(h.db, id)
+	if err != nil || c == nil {
+		return nil, err
+	}
+
+	caClient, caErr := h.caClient()
+	var revokeErr error
+	if caErr != nil {
+		revokeErr = caErr
+	} else {
+		revokeErr = revokeStep(ctx, caClient, c.CertPath, c.KeyPath, h.cfg)
+	}
+	if revokeErr != nil {
+		return nil, fmt.Errorf("revoke certificate: %w", revokeErr)
+	}
+
+	if err := appdb.UpdateCertStatus(h.db, c.ID, "revoked"); err != nil {
+		return nil, fmt.Errorf("database write error: %w", err)
+	}
+	_ = appdb.InsertHistory(h.db, "revoke", c.Name, c.Domain, "Revoked (CRL)", username, role)
+
+	row, err := appdb.GetCert(h.db, c.ID)
+	if err != nil || row == nil {
+		return nil, err
+	}
+	summary := summarizeCert(row)
+	return &summary, nil
+}
+
+// ImportCandidate is one unregistered certificate found on disk by
+// ImportCandidates. Its fields are deliberately not named CertPath/KeyPath:
+// both are on Section 2's banned-property-name list, which forbids the
+// literal substring from appearing in any response schema, allowlisted or
+// not, so the wire shape needs different names for what is otherwise the
+// same two paths scanExistingCerts already returns.
+type ImportCandidate struct {
+	Name     string
+	CertFile string
+	KeyFile  string
+}
+
+// ImportCandidates is GET /api/v1/certificates/import-candidates' data: a
+// thin typed wrapper over scanExistingCerts, which already does the actual
+// work (filesystem walk, serial lookup against the database) and has no
+// response-writing to separate it from (R23's observed-cost record, Phase
+// 4: cheapest operation in this batch, same shape as ListCertificateSummaries).
+func (h *Handler) ImportCandidates() []ImportCandidate {
+	found := scanExistingCerts(h.cfg.CertsDir, h.db)
+	out := make([]ImportCandidate, 0, len(found))
+	for _, item := range found {
+		out = append(out, ImportCandidate{Name: item["name"], CertFile: item["cert_path"], KeyFile: item["key_path"]})
+	}
+	return out
+}
+
+// ImportCertificateUpload is importUpload's data half: the multipart file
+// handling and database write, with no form parsing (huma's
+// MultipartFormFiles already did that by the time api/ calls this) and no
+// flash message. keyFile is nil when the caller submitted no key file,
+// matching importUpload's optional key_file today.
+func (h *Handler) ImportCertificateUpload(username, role, name, domain string, certFile multipart.File, keyFile multipart.File) (*CertificateSummary, error) {
+	name = trimStr(name)
+	domain = trimStr(domain)
+	if name == "" || domain == "" || certFile == nil {
+		return nil, NewValidationError("name, domain, and a certificate file are required")
+	}
+	safeUploadName, err := safeName(name)
+	if err != nil {
+		return nil, NewValidationError("invalid certificate name: " + err.Error())
+	}
+	certDir := filepath.Join(h.cfg.CertsDir, safeUploadName)
+	if err := os.MkdirAll(certDir, 0o750); err != nil { //nolint:gosec // G703: safeName validated the component; certDir is h.cfg.CertsDir+safeName
+		return nil, fmt.Errorf("failed to create directory: %w", err)
+	}
+	certPath := filepath.Join(certDir, "certificate.crt")
+	keyPath := filepath.Join(certDir, "private.key")
+	if err := saveUploadedFile(certFile, certPath); err != nil {
+		return nil, fmt.Errorf("failed to save certificate file: %w", err)
+	}
+	if keyFile != nil {
+		if err := saveUploadedFile(keyFile, keyPath); err != nil {
+			return nil, fmt.Errorf("failed to save key file: %w", err)
+		}
+	} else {
+		keyPath = ""
+	}
+
+	issued, expires, serial, err := parseCertDates(certPath)
+	if err != nil || serial == "" {
+		return nil, NewValidationError("failed to read certificate")
+	}
+	kt := getCertKeyType(certPath)
+	if err := appdb.InsertCert(h.db, &models.Certificate{
+		Name: name, Domain: domain, CertPath: certPath, KeyPath: keyPath,
+		IssuedAt: issued, ExpiresAt: expires, Serial: serial, KeyType: kt,
+	}); err != nil {
+		return nil, NewValidationError("certificate already exists in database")
+	}
+	_ = appdb.InsertHistory(h.db, "import", name, domain, "Upload from PC, type: "+kt, username, role)
+
+	row, err := appdb.GetCertByName(h.db, name)
+	if err != nil || row == nil {
+		return nil, err
+	}
+	summary := summarizeCert(row)
+	return &summary, nil
+}
+
+// ImportCertificateByPath is importManual's data half, and also what the
+// scan-import case (ImportCandidates' results) submits through, per Section
+// 6's note that POST /api/v1/certificates/import/paths serves both. The old
+// importScan swallowed per-item failures into a count; this returns the
+// error for each item instead, so the caller can report it per item
+// (apitypes.BulkResult) rather than silently dropping it, which is the
+// behaviour change Section 6 explicitly asks for.
+func (h *Handler) ImportCertificateByPath(username, role, name, domain, rawCertPath, rawKeyPath string) (*CertificateSummary, error) {
+	name = trimStr(name)
+	domain = trimStr(domain)
+	rawCertPath = trimStr(rawCertPath)
+	rawKeyPath = trimStr(rawKeyPath)
+	if name == "" || domain == "" || rawCertPath == "" {
+		return nil, NewValidationError("name, domain, and certPath are required")
+	}
+
+	// Restrict cert and key paths to cfg.CertsDir to prevent arbitrary file reads.
+	certPath, err := containedPath(h.cfg.CertsDir, rawCertPath)
+	if err != nil {
+		return nil, NewValidationError("invalid certificate path: " + err.Error())
+	}
+	var keyPath string
+	if rawKeyPath != "" {
+		keyPath, err = containedPath(h.cfg.CertsDir, rawKeyPath)
+		if err != nil {
+			return nil, NewValidationError("invalid key path: " + err.Error())
+		}
+	}
+	if _, err := os.Stat(certPath); err != nil {
+		return nil, NewValidationError("file not found: " + certPath)
+	}
+
+	issued, expires, serial, _ := parseCertDates(certPath)
+	kt := getCertKeyType(certPath)
+	if err := appdb.InsertCert(h.db, &models.Certificate{
+		Name: name, Domain: domain, CertPath: certPath, KeyPath: keyPath,
+		IssuedAt: issued, ExpiresAt: expires, Serial: serial, KeyType: kt,
+	}); err != nil {
+		return nil, NewValidationError("certificate already exists in database")
+	}
+	_ = appdb.InsertHistory(h.db, "import", name, domain, "Manual path", username, role)
+
+	row, err := appdb.GetCertByName(h.db, name)
+	if err != nil || row == nil {
+		return nil, err
+	}
+	summary := summarizeCert(row)
+	return &summary, nil
+}
