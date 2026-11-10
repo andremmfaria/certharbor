@@ -4,6 +4,7 @@ import operationsByTag from 'virtual:operation-tags'
 export const TAGS = [
   'session',
   'certificates',
+  'ca',
   'acme',
   'provisioners',
   'security',
