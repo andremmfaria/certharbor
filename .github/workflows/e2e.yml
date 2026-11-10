@@ -60,7 +60,7 @@ jobs:
         run: docker save certharbor-control:e2e certharbor-console:e2e | gzip -1 > e2e-images.tar.gz
 
       - name: Upload the application images
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: e2e-images
           path: e2e-images.tar.gz
@@ -174,7 +174,7 @@ jobs:
 
       - name: Upload artifacts
         if: always()
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: e2e-main-${{ github.run_attempt }}
           path: |
