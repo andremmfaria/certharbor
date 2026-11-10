@@ -9,11 +9,11 @@
 # step-ca-data component from the backup bundle, so E2E-HLTH-06 and E2E-BAK-01
 # must not run against this stack (Section 2.7.1).
 services:
-  certharbor:
+  certharbor-control:
     volumes: !override
-      - certharbor-certs:/opt/certharbor/certs
-      - certharbor-ssl:/opt/certharbor/ssl
-      - certharbor-data:/opt/certharbor/data
-      - certharbor-uploads:/opt/certharbor/uploads
+      - certharbor-control-certs:/opt/certharbor/certs
+      - certharbor-control-ssl:/opt/certharbor/ssl
+      - certharbor-control-data:/opt/certharbor/data
+      - certharbor-control-uploads:/opt/certharbor/uploads
     environment:
       ROOT_CERT: /opt/certharbor/data/root_ca.crt

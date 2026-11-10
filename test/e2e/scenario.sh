@@ -69,13 +69,13 @@ fi
 
 # Both containers read the mounted secrets as their own non-root uid, which is
 # never the checkout's owner. Mode 600 denies them (step-ca is uid 1000,
-# certharbor 10001) and the CA never finishes booting.
+# certharbor-control 10001) and the CA never finishes booting.
 chmod 644 "$repo_root"/secrets/* 2>/dev/null || true
 
-# compose.e2e-noweb.yml hides certharbor-web from every compose call the specs
+# compose.e2e-noweb.yml hides certharbor-console from every compose call the specs
 # make, so an origin left running by an earlier main-suite stack in the same
 # project would survive their `down -v`, holding step-network and its volume.
-docker compose -f "$repo_root/docker-compose.yml" --env-file "$env_file" rm -sf certharbor-web >/dev/null
+docker compose -f "$repo_root/docker-compose.yml" --env-file "$env_file" rm -sf certharbor-console >/dev/null
 
 export E2E_COMPOSE_OVERRIDES="$overrides"
 export E2E_ENV_FILE="$env_file"

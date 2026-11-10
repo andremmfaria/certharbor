@@ -61,14 +61,14 @@ services:
     networks:
       - step-net
 
-  certharbor:
+  certharbor-control:
     environment:
       OIDC_ENABLED:       "${OIDC_ENABLED:-true}"
       OIDC_ISSUER_URL:    "${OIDC_ISSUER_URL:-http://mock-oidc:8080/default}"
       OIDC_CLIENT_ID:     "${OIDC_CLIENT_ID:-certharbor-e2e}"
       OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-certharbor-e2e-secret}"
       # The published origin, which the browser reaches the callback through.
-      OIDC_REDIRECT_URL:  "${OIDC_REDIRECT_URL:-https://certharbor-web:8443/auth/oidc/callback}"
+      OIDC_REDIRECT_URL:  "${OIDC_REDIRECT_URL:-https://certharbor-console:8443/auth/oidc/callback}"
       OIDC_GROUP_CLAIM:   "${OIDC_GROUP_CLAIM:-groups}"
       OIDC_GROUP_ADMIN:   "${OIDC_GROUP_ADMIN:-e2e-admins}"
       OIDC_GROUP_MANAGER: "${OIDC_GROUP_MANAGER:-e2e-managers}"

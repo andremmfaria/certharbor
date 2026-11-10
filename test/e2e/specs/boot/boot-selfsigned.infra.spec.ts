@@ -11,7 +11,7 @@ test("E2E-BOOT-04: UI_TLS_MODE=self-signed generates a self-signed leaf", async 
   // so config.Load's own self-signed default is unreachable through compose.
   setEnvKeys({ UI_TLS_MODE: "self-signed" });
   await upStack();
-  await waitHealthy("certharbor", 180_000);
+  await waitHealthy("certharbor-control", 180_000);
 
   const cert = await probeTLS(await backendAddress());
   expect(cert.selfSigned, `issuer ${cert.issuer} should equal subject ${cert.subject}`).toBe(true);
@@ -20,7 +20,7 @@ test("E2E-BOOT-04: UI_TLS_MODE=self-signed generates a self-signed leaf", async 
   const tenYearsMs = 10 * 365 * 24 * 60 * 60 * 1000;
   expect(Math.abs(validityMs(cert) - tenYearsMs)).toBeLessThan(24 * 60 * 60 * 1000);
 
-  const log = await logs("certharbor");
+  const log = await logs("certharbor-control");
   // Self-signed is also the terminal state of every failure path: without
   // these two counts this test would pass against a completely dead
   // bootstrap block.

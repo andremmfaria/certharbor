@@ -138,6 +138,6 @@ export async function assertKeyPairs(certPEM: string, keyPEM: string): Promise<v
 
 /** Whether the issued material exists on the container's own filesystem. */
 export async function certFileExists(name: string): Promise<boolean> {
-  const res = await exec("certharbor", "test", "-s", `/opt/certharbor/certs/${name}/certificate.crt`);
+  const res = await exec("certharbor-control", "test", "-s", `/opt/certharbor/certs/${name}/certificate.crt`);
   return res.code === 0;
 }

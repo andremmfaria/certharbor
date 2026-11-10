@@ -283,7 +283,7 @@ jobs:
         run: make backend-port-check
 
       - name: The artifact collector covers the origin
-        run: grep -qE '^for svc in .*certharbor-web' test/e2e/collect.sh
+        run: grep -qE '^for svc in .*certharbor-console' test/e2e/collect.sh
 
       - name: nginx-lint
         run: make nginx-lint

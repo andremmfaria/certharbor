@@ -49,7 +49,7 @@ http {
   limit_conn_zone $binary_remote_addr zone=perip:10m;
   limit_req_zone $binary_remote_addr zone=api:10m rate=${WEB_RATE_LIMIT};
 
-  # A variable proxy_pass re-resolves certharbor per request, so a recreated
+  # A variable proxy_pass re-resolves certharbor-control per request, so a recreated
   # backend container is followed without restarting nginx. It also means no
   # upstream block and no upstream keepalive, and that is what keeps request
   # smuggling unreachable: desync needs a reused connection. Adding an upstream
@@ -123,13 +123,13 @@ http {
       client_max_body_size 8m;
       # Stream a backup bundle instead of spooling it to disk first.
       proxy_buffering off;
-      set $backend "certharbor:8443";
+      set $backend "certharbor-control:8443";
       # $request_uri is mandatory: with a variable, proxy_pass drops the URI.
       proxy_pass https://$backend$request_uri;
       proxy_ssl_trusted_certificate /etc/certharbor/ssl/root_ca.crt;
       proxy_ssl_verify on;
       proxy_ssl_verify_depth 2;
-      proxy_ssl_name certharbor;
+      proxy_ssl_name certharbor-control;
       proxy_ssl_server_name on;
       proxy_ssl_protocols TLSv1.2 TLSv1.3;
       # nginx's own 502/504 (backend down, unresolvable, or failing TLS
@@ -150,12 +150,12 @@ http {
       proxy_hide_header X-Content-Type-Options;
       client_max_body_size 8m;
       proxy_buffering off;
-      set $backend "certharbor:8443";
+      set $backend "certharbor-control:8443";
       proxy_pass https://$backend$request_uri;
       proxy_ssl_trusted_certificate /etc/certharbor/ssl/root_ca.crt;
       proxy_ssl_verify on;
       proxy_ssl_verify_depth 2;
-      proxy_ssl_name certharbor;
+      proxy_ssl_name certharbor-control;
       proxy_ssl_server_name on;
       proxy_ssl_protocols TLSv1.2 TLSv1.3;
       error_page 502 503 504 = @apidown;

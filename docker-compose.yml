@@ -55,22 +55,22 @@ services:
       start_period: 15s
 
   # ─── Certharbor backend (Go) ────────────────────────────────────────────
-  # No published port: certharbor-web is the one public origin, and a second
+  # No published port: certharbor-console is the one public origin, and a second
   # path straight to the backend would bypass its rate limit, its body ceiling
   # and the trusted-proxy identity. Debug with `docker compose exec`.
-  certharbor:
+  certharbor-control:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: "${BACKEND_IMAGE:-certharbor-backend:${IMAGE_TAG:-local}}"
-    container_name: certharbor
+    image: "${BACKEND_IMAGE:-certharbor-control:${IMAGE_TAG:-local}}"
+    container_name: certharbor-control
     restart: unless-stopped
     volumes:
-      - certharbor-certs:/opt/certharbor/certs
-      - certharbor-ssl:/opt/certharbor/ssl
-      - certharbor-web-ssl:/opt/certharbor/web-ssl
-      - certharbor-data:/opt/certharbor/data
-      - certharbor-uploads:/opt/certharbor/uploads
+      - certharbor-control-certs:/opt/certharbor/certs
+      - certharbor-control-ssl:/opt/certharbor/ssl
+      - certharbor-console-ssl:/opt/certharbor/web-ssl
+      - certharbor-control-data:/opt/certharbor/data
+      - certharbor-control-uploads:/opt/certharbor/uploads
       - step-ca-data:/home/step:ro
     secrets:
       - postgres_password
@@ -97,11 +97,11 @@ services:
       CA_FINGERPRINT:   "${CA_FINGERPRINT:-}"
       CA_ROOT_CERT_PEM: "${CA_ROOT_CERT_PEM:-}"
       # nginx's proxy_ssl_name: the backend leaf must carry this name.
-      UI_HOSTNAME:      "${UI_HOSTNAME:-certharbor}"
+      UI_HOSTNAME:      "${UI_HOSTNAME:-certharbor-control}"
       UI_CERT_DURATION: "${UI_CERT_DURATION:-8760h}"
       WEB_TLS_MODE:     "${WEB_TLS_MODE:-stepca}"
       WEB_HOSTNAME:     "${WEB_HOSTNAME:-}"
-      WEB_UPSTREAM_HOST: "${WEB_UPSTREAM_HOST:-certharbor-web}"
+      WEB_UPSTREAM_HOST: "${WEB_UPSTREAM_HOST:-certharbor-console}"
       PROVISIONER_PASSWORD_FILE: /run/secrets/ca_password
       SECRET_KEY_FILE:  /run/secrets/secret_key
       SESSION_SECURE:   "${SESSION_SECURE:-true}"
@@ -148,12 +148,12 @@ services:
   # ─── Certharbor origin (nginx) ─────────────────────────────────────────
   # Terminates TLS for WEB_HOSTNAME, serves the SPA and proxies the backend.
   # Its healthcheck is the image's own.
-  certharbor-web:
+  certharbor-console:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-    image: "${WEB_IMAGE:-certharbor-web:${IMAGE_TAG:-local}}"
-    container_name: certharbor-web
+    image: "${WEB_IMAGE:-certharbor-console:${IMAGE_TAG:-local}}"
+    container_name: certharbor-console
     restart: unless-stopped
     init: true
     environment:
@@ -165,14 +165,14 @@ services:
       WEB_RELOAD_INTERVAL: "${WEB_RELOAD_INTERVAL:-60}"
       WEB_RATE_LIMIT:      "${WEB_RATE_LIMIT:-20r/s}"
       WEB_RATE_BURST:      "${WEB_RATE_BURST:-40}"
-    # The only certificate-bearing mount. certharbor-ssl holds the backend's
+    # The only certificate-bearing mount. certharbor-control-ssl holds the backend's
     # private key and step-ca-data the CA's, and neither is mounted here.
     volumes:
-      - certharbor-web-ssl:/etc/certharbor/ssl:ro
+      - certharbor-console-ssl:/etc/certharbor/ssl:ro
     ports:
       - "${UI_HTTPS_PORT:-443}:8443"
     depends_on:
-      certharbor:
+      certharbor-control:
         condition: service_healthy
     networks:
       - step-net
@@ -198,11 +198,11 @@ secrets:
 volumes:
   postgres-data:
   step-ca-data:
-  certharbor-certs:
-  certharbor-ssl:
-  certharbor-web-ssl:
-  certharbor-data:
-  certharbor-uploads:
+  certharbor-control-certs:
+  certharbor-control-ssl:
+  certharbor-console-ssl:
+  certharbor-control-data:
+  certharbor-control-uploads:
 
 # ─── Networks ──────────────────────────────────────────────────────────────
 networks:

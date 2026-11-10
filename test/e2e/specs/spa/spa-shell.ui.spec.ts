@@ -182,7 +182,7 @@ test.describe.serial("the SPA through the origin", () => {
   // Last in the file: it stops the backend, and restores it before returning.
   test("E2E-SPA-03: with the backend stopped the API answers problem+json and the SPA renders the unavailable state", async ({ page }) => {
     test.setTimeout(4 * 60_000);
-    await composeOrThrow("stop", "certharbor");
+    await composeOrThrow("stop", "certharbor-control");
     try {
       const res = await page.context().request.get(`${BASE_URL}/api/v1/session`);
       expect(res.status()).toBe(503);
@@ -194,7 +194,7 @@ test.describe.serial("the SPA through the origin", () => {
       await expect(page.getByTestId("page-login")).toHaveCount(0);
       await expect(page.getByLabel("Password")).toHaveCount(0);
     } finally {
-      await composeOrThrow("start", "certharbor");
+      await composeOrThrow("start", "certharbor-control");
       await waitOriginHealthy();
     }
   });

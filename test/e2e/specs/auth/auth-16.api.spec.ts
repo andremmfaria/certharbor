@@ -13,7 +13,7 @@ import { disposableName, expect, test } from "../../fixtures/test";
 test.describe("E2E-AUTH-16: the default role applies, and a disabled sync does not revert a change", () => {
   test.skip(!FLAGS.oidc, "E2E_OIDC_ENABLED is unset: no mock IdP on the network");
 
-  // Recreating certharbor twice is minutes of stack time rather than test time.
+  // Recreating certharbor-control twice is minutes of stack time rather than test time.
   test.describe.configure({ timeout: 10 * 60_000 });
 
   test("E2E-AUTH-16: an unmapped subject gets the default role and keeps a manual promotion", async ({
@@ -27,7 +27,7 @@ test.describe("E2E-AUTH-16: the default role applies, and a disabled sync does n
     // whose sync is still disabled.
     let syncDisabled = false;
     try {
-      await recreate("certharbor", { OIDC_DEFAULT_ROLE: "viewer", OIDC_SYNC_ROLE: "true" });
+      await recreate("certharbor-control", { OIDC_DEFAULT_ROLE: "viewer", OIDC_SYNC_ROLE: "true" });
 
       // ── The default role applies where no group maps ─────────────────────
       const first = await oidcLogin(subject, {
@@ -57,7 +57,7 @@ test.describe("E2E-AUTH-16: the default role applies, and a disabled sync does n
       // A restart would not apply the change: the value is read at startup, so
       // the container has to be recreated.
       syncDisabled = true;
-      await recreate("certharbor", { OIDC_DEFAULT_ROLE: "viewer", OIDC_SYNC_ROLE: "false" });
+      await recreate("certharbor-control", { OIDC_DEFAULT_ROLE: "viewer", OIDC_SYNC_ROLE: "false" });
 
       const second = await oidcLogin(subject, {
         groups: ["a-group-nothing-maps"],
@@ -74,7 +74,7 @@ test.describe("E2E-AUTH-16: the default role applies, and a disabled sync does n
       ).toBe("manager");
     } finally {
       if (syncDisabled) {
-        await recreate("certharbor", { OIDC_DEFAULT_ROLE: "viewer", OIDC_SYNC_ROLE: "true" });
+        await recreate("certharbor-control", { OIDC_DEFAULT_ROLE: "viewer", OIDC_SYNC_ROLE: "true" });
       }
     }
   });

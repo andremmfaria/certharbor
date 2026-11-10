@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# certharbor-web is the one public origin. A host port on certharbor is a
+# certharbor-console is the one public origin. A host port on certharbor-control is a
 # second path to the backend with no rate limit, no body ceiling and a peer
 # outside the trusted-proxy list, so the same request would record a different
 # client depending on which way it came in. Nothing breaks when one is added,
@@ -20,29 +20,29 @@ static_check() {
     local args=(-f docker-compose.yml)
     [[ "$f" == docker-compose.yml ]] || args+=(-f "$f")
     local ports
-    ports=$(docker compose "${args[@]}" config --format json --no-interpolate | jq -c '.services["certharbor"].ports // empty')
+    ports=$(docker compose "${args[@]}" config --format json --no-interpolate | jq -c '.services["certharbor-control"].ports // empty')
     if [[ -n "$ports" ]]; then
-      echo "$f: certharbor publishes $ports; publish on certharbor-web only"
+      echo "$f: certharbor-control publishes $ports; publish on certharbor-console only"
       status=1
     fi
   done
   if [[ $status -eq 0 ]]; then
-    echo "backend port: no compose file publishes a host port for certharbor (${#files[@]} checked)"
+    echo "backend port: no compose file publishes a host port for certharbor-control (${#files[@]} checked)"
   fi
 }
 
 running_check() {
   local bindings
-  bindings=$(docker inspect -f '{{json .NetworkSettings.Ports}}' certharbor | jq -c '[.[]? | select(. != null) | .[]]')
+  bindings=$(docker inspect -f '{{json .NetworkSettings.Ports}}' certharbor-control | jq -c '[.[]? | select(. != null) | .[]]')
   if [[ "$bindings" != "[]" ]]; then
-    echo "certharbor: running with host port bindings $bindings"
+    echo "certharbor-control: running with host port bindings $bindings"
     status=1
   fi
 
   local cfg host port
   cfg=$(docker compose config --format json)
-  host=$(jq -r '.services["certharbor-web"].environment.WEB_HOSTNAME' <<<"$cfg")
-  port=$(jq -r '.services["certharbor-web"].ports[0].published' <<<"$cfg")
+  host=$(jq -r '.services["certharbor-console"].environment.WEB_HOSTNAME' <<<"$cfg")
+  port=$(jq -r '.services["certharbor-console"].ports[0].published' <<<"$cfg")
   # The origin refuses any SNI but WEB_HOSTNAME, so the name is pinned to
   # loopback rather than resolved.
   origin() { curl -sk --max-time 10 --resolve "$host:$port:127.0.0.1" "$@"; }
@@ -61,7 +61,7 @@ running_check() {
     status=1
   fi
   if [[ $status -eq 0 ]]; then
-    echo "preview: certharbor has no host binding, and https://$host:$port serves the SPA under /app/, the server-rendered pages and the API"
+    echo "preview: certharbor-control has no host binding, and https://$host:$port serves the SPA under /app/, the server-rendered pages and the API"
   fi
 }
 

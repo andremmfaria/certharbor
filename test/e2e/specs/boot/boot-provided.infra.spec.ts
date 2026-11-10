@@ -11,14 +11,14 @@ test("E2E-BOOT-03: UI_TLS_MODE=provided leaves an operator certificate untouched
 
   await composeOrThrow("down", "-v");
   await composeOrThrow("up", "-d", "--wait", "postgres", "step-ca");
-  // Creating, not starting, certharbor makes compose create its volumes, so
+  // Creating, not starting, certharbor-control makes compose create its volumes, so
   // the `down -v` of every later scenario removes the seeded one again.
-  const created = await run(composeArgv("create", ...upFlags(), "certharbor"), { timeoutMs: 5 * 60_000 });
-  expect(created.code, `docker compose create certharbor failed: ${created.stderr}`).toBe(0);
+  const created = await run(composeArgv("create", ...upFlags(), "certharbor-control"), { timeoutMs: 5 * 60_000 });
+  expect(created.code, `docker compose create certharbor-control failed: ${created.stderr}`).toBe(0);
 
   // Generated on the harness, not inside the runtime image (uid 10001 cannot
   // apk add), then copied into the named volume by a throwaway container so
-  // it is in place before certharbor's first start, "provided" never writes
+  // it is in place before certharbor-control's first start, "provided" never writes
   // anything, so nothing else would put it there.
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "e2e-boot03-"));
   try {
@@ -30,7 +30,7 @@ test("E2E-BOOT-03: UI_TLS_MODE=provided leaves an operator certificate untouched
     const seededPEM = await fs.readFile(path.join(tmpDir, "server.crt"), "utf8");
     const seededCert = await parsePEM(seededPEM);
 
-    const vol = `${projectName()}_certharbor-ssl`;
+    const vol = `${projectName()}_certharbor-control-ssl`;
     const seed = await run([
       "docker", "run", "--rm",
       "-v", `${vol}:/ssl`,
@@ -45,7 +45,7 @@ test("E2E-BOOT-03: UI_TLS_MODE=provided leaves an operator certificate untouched
 
     setEnvKeys({ UI_TLS_MODE: "provided" });
     await upStack();
-    await waitHealthy("certharbor", 180_000);
+    await waitHealthy("certharbor-control", 180_000);
 
     const served = await probeTLS(await backendAddress());
     expect(served.subject).toBe(seededCert.subject);
@@ -57,12 +57,12 @@ test("E2E-BOOT-03: UI_TLS_MODE=provided leaves an operator certificate untouched
     // just as well if the whole bootstrap block had been deleted.
     setEnvKeys({ UI_TLS_MODE: "stepca" });
     await upStack();
-    await waitHealthy("certharbor", 180_000);
+    await waitHealthy("certharbor-control", 180_000);
 
     const reissued = await probeTLS(await backendAddress());
     expect(reissued.subject).not.toBe(served.subject);
     expect(reissued.sha256).not.toBe(served.sha256);
-    expect(await logs("certharbor")).toContain("UI leaf certificate obtained");
+    expect(await logs("certharbor-control")).toContain("UI leaf certificate obtained");
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
   }
