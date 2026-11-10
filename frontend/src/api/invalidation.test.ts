@@ -1,4 +1,4 @@
-import { getConfigQueryKey, getSessionQueryKey } from '@andremmfaria/certharbor-client/react-query'
+import { getConfigQueryKey, getSessionQueryKey } from '@certharbor/client/react-query'
 import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
 import spec from '../../../backend/openapi/openapi.json'

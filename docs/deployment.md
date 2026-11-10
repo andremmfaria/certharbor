@@ -13,7 +13,7 @@ This page intentionally does not give CPU/RAM/disk sizing numbers or a supported
 ## Quick start
 
 ```bash
-git clone https://github.com/andremmfaria/certharbor.git
+git clone https://github.com/certharbor/certharbor.git
 cd certharbor
 make setup   # copies .env.example → .env and generates secrets/
 ```
@@ -63,8 +63,8 @@ Two images, built by `.github/workflows/docker-build.yml` as a matrix:
 
 | Image | Built from |
 |---|---|
-| `ghcr.io/andremmfaria/certharbor-control` | `backend/Dockerfile`, context `./backend` |
-| `ghcr.io/andremmfaria/certharbor-console` | `frontend/Dockerfile`, context `.` |
+| `ghcr.io/certharbor/certharbor-control` | `backend/Dockerfile`, context `./backend` |
+| `ghcr.io/certharbor/certharbor-console` | `frontend/Dockerfile`, context `.` |
 
 | Trigger | Pushed? | Tags |
 |---|---|---|
@@ -80,8 +80,8 @@ Both are built for `linux/amd64` only, `docker-build.yml` sets no `platforms:` i
 `frontend/Dockerfile` builds the TypeScript client from the committed `backend/openapi/openapi.json` and then the SPA in a `node:24-alpine3.23` stage, and copies the bundle into `nginx:1.29-alpine` at `/usr/share/nginx/html/app/`. The runtime image contains no Node. Its nginx master runs as root because it reads `web.key`, which the backend writes `0600` as uid `10001`. The root `.dockerignore` keeps `secrets/`, `.env`, `backups/` and every `node_modules/` out of that build context.
 
 ```bash
-docker pull ghcr.io/andremmfaria/certharbor-control:main
-docker pull ghcr.io/andremmfaria/certharbor-console:main
+docker pull ghcr.io/certharbor/certharbor-control:main
+docker pull ghcr.io/certharbor/certharbor-console:main
 ```
 
 To build locally without pushing:

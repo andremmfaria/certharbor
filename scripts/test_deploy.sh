@@ -9,14 +9,14 @@
 #   4. Reports ✓/✗ for each check, prints relevant logs on failure
 #
 # Run on a clean VM (preferably one that has NEVER had the project before):
-#   curl -fsSL https://raw.githubusercontent.com/andremmfaria/certharbor/main/scripts/test_deploy.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/certharbor/certharbor/main/scripts/test_deploy.sh | bash
 # Or:
-#   wget -O- https://raw.githubusercontent.com/andremmfaria/certharbor/main/scripts/test_deploy.sh | bash
+#   wget -O- https://raw.githubusercontent.com/certharbor/certharbor/main/scripts/test_deploy.sh | bash
 # ──────────────────────────────────────────────────────────────────────────────
 
 set -uo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/andremmfaria/certharbor.git}"
+REPO_URL="${REPO_URL:-https://github.com/certharbor/certharbor.git}"
 BRANCH="${BRANCH:-main}"
 TARGET_DIR="${TARGET_DIR:-/opt/certharbor-test}"
 

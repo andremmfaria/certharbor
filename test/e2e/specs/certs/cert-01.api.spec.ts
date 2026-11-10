@@ -4,7 +4,7 @@ import {
   getCertificateKey,
   getCertificateOptions,
   listCertificates,
-} from "@andremmfaria/certharbor-client";
+} from "@certharbor/client";
 import { logs } from "../../helpers/compose.js";
 import { ApiSession, authedClient, blobText } from "../../helpers/apiClient.js";
 import { assertKeyPairs, dnsNames, expectedKey, keyDetails } from "../../helpers/certs.js";

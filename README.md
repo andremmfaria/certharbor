@@ -29,7 +29,7 @@ A small-team-friendly web UI on top of `smallstep/step-ca`. No SaaS, no telemetr
 ## Quick Start
 
 ```bash
-git clone https://github.com/andremmfaria/certharbor.git
+git clone https://github.com/certharbor/certharbor.git
 cd certharbor
 make setup   # copies .env.example → .env and generates secrets/
 # edit .env: set HOST_IP, WEB_HOSTNAME, UI_HTTPS_PORT, PROVISIONER, TZ, and CERTHARBOR_ADMIN_PASSWORD

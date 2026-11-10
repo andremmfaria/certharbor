@@ -1,5 +1,5 @@
-import { client } from "@andremmfaria/certharbor-client/client";
-import { createSession, getSession } from "@andremmfaria/certharbor-client";
+import { client } from "@certharbor/client/client";
+import { createSession, getSession } from "@certharbor/client";
 import { BASE_URL } from "./env.js";
 import { Credentials, Role } from "./session.js";
 import { adminCredentials, authed as authedForm, ensureUser, FIXTURE_USERS } from "../fixtures/test.js";

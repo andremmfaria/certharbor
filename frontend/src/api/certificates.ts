@@ -4,7 +4,7 @@ import {
   getCaRoot,
   getCertificateCertificate,
   getCertificateKey,
-} from '@andremmfaria/certharbor-client'
+} from '@certharbor/client'
 import {
   createCertificateMutation,
   getCaOptions,
@@ -16,7 +16,7 @@ import {
   listCertificatesOptions,
   renewCertificateMutation,
   revokeCertificateMutation,
-} from '@andremmfaria/certharbor-client/react-query'
+} from '@certharbor/client/react-query'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ListParams } from '../hooks/useListParams'
 import { downloadBlob } from './downloadBlob'

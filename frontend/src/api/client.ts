@@ -1,4 +1,4 @@
-import { client } from '@andremmfaria/certharbor-client/client'
+import { client } from '@certharbor/client/client'
 import { isAuthEndpoint } from './authEndpoints'
 import { readCsrf } from './csrf'
 import { recordSessionExpiry, SESSION_EXPIRES_HEADER } from './sessionExpiry'
