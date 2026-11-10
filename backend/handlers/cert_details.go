@@ -74,6 +74,28 @@ func (h *Handler) CertificateDetails(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "certificate_detail", data)
 }
 
+// FetchCertificateDetail is the data half of CertificateDetails (the HTML
+// route) and getCertificate, its Phase 4 JSON port: fetch-by-id plus the
+// parsed x509 detail and validation checks, with no response writing.
+//
+// CertificateDetails already called buildCertDetail as a step separate from
+// h.render, so this extraction only had to factor out the "fetch or treat as
+// missing" wrapper around appdb.GetCert, not the parse logic itself (R23's
+// observed-cost record, Phase 4: cheap for this operation because the
+// template handler was already most of the way there). It returns a
+// CertificateSummary rather than *models.Certificate because api/ is not
+// allowed to import certharbor/models (Section 2's depguard rule), and
+// (nil, nil, nil, nil) when no certificate with that id exists.
+func (h *Handler) FetchCertificateDetail(id int) (*CertificateSummary, *CertDetail, []CertValidation, error) {
+	c, err := appdb.GetCert(h.db, id)
+	if err != nil || c == nil {
+		return nil, nil, nil, err
+	}
+	detail, validations := h.buildCertDetail(c)
+	summary := summarizeCert(c)
+	return &summary, detail, validations, nil
+}
+
 func (h *Handler) buildCertDetail(c *models.Certificate) (*CertDetail, []CertValidation) {
 	var checks []CertValidation
 	add := func(name, status, detail string) {

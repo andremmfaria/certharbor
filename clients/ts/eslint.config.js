@@ -22,4 +22,15 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'off',
     },
   },
+  {
+    // hey-api's infinite-query plugin emits @ts-ignore (not @ts-expect-error)
+    // in generated pagination helpers for any paginated list operation
+    // (listCertificates is the first). Generated code only, never
+    // hand-written: scoping the exception to *.gen.ts keeps ban-ts-comment
+    // enforced everywhere else.
+    files: ['**/*.gen.ts'],
+    rules: {
+      '@typescript-eslint/ban-ts-comment': 'off',
+    },
+  },
 );

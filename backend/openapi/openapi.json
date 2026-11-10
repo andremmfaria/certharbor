@@ -1,6 +1,309 @@
 {
   "components": {
     "schemas": {
+      "CertDurationOptionBody": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "type": "object"
+      },
+      "CertKeyTypeOptionBody": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "type": "object"
+      },
+      "CertProvisionerOptionBody": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ],
+        "type": "object"
+      },
+      "CertTemplateOptionBody": {
+        "additionalProperties": false,
+        "properties": {
+          "defaultDuration": {
+            "type": "string"
+          },
+          "defaultKeyType": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "description",
+          "defaultDuration",
+          "defaultKeyType"
+        ],
+        "type": "object"
+      },
+      "CertValidationBody": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "warn",
+              "err"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "CertificateDetailBody": {
+        "additionalProperties": false,
+        "properties": {
+          "daysLeft": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "dnsNames": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "extKeyUsage": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "fingerprintSha1": {
+            "type": "string"
+          },
+          "fingerprintSha256": {
+            "type": "string"
+          },
+          "ipAddresses": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "keyUsage": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "notAfter": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "notBefore": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "publicKey": {
+            "type": "string"
+          },
+          "serialHex": {
+            "type": "string"
+          },
+          "signatureAlgorithm": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "validations": {
+            "items": {
+              "$ref": "#/components/schemas/CertValidationBody"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "validations"
+        ],
+        "type": "object"
+      },
+      "CertificateOptionsBody": {
+        "additionalProperties": false,
+        "properties": {
+          "allowedDomainSuffixes": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "defaultTemplate": {
+            "type": "string"
+          },
+          "durations": {
+            "items": {
+              "$ref": "#/components/schemas/CertDurationOptionBody"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "keyTypes": {
+            "items": {
+              "$ref": "#/components/schemas/CertKeyTypeOptionBody"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "provisioners": {
+            "items": {
+              "$ref": "#/components/schemas/CertProvisionerOptionBody"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "templates": {
+            "items": {
+              "$ref": "#/components/schemas/CertTemplateOptionBody"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "templates",
+          "keyTypes",
+          "durations",
+          "provisioners",
+          "allowedDomainSuffixes",
+          "defaultTemplate"
+        ],
+        "type": "object"
+      },
+      "CertificateSummaryBody": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "expiryStatus": {
+            "enum": [
+              "ok",
+              "warning",
+              "expired"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "issuedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "keyType": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "serial": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "domain",
+          "status",
+          "keyType",
+          "serial",
+          "expiryStatus"
+        ],
+        "type": "object"
+      },
       "ConfigBody": {
         "additionalProperties": false,
         "properties": {
@@ -144,6 +447,53 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "PageCertificateSummaryBody": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CertificateSummaryBody"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "page": {
+            "description": "1-based page number",
+            "format": "int64",
+            "type": "integer"
+          },
+          "pageSize": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "description": "null when the server declined to count",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "totalPages": {
+            "description": "null whenever total is null",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total",
+          "totalPages"
+        ],
         "type": "object"
       },
       "SessionBody": {
@@ -403,6 +753,183 @@
           "system"
         ],
         "x-required-role": "manager"
+      }
+    },
+    "/api/v1/certificates": {
+      "get": {
+        "operationId": "listCertificates",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "default": 1,
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "default": 25,
+              "format": "int64",
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Case-insensitive substring match against name and domain.",
+            "explode": false,
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "description": "Case-insensitive substring match against name and domain.",
+              "maxLength": 255,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Certificate status filter, e.g. active or revoked.",
+            "explode": false,
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "description": "Certificate status filter, e.g. active or revoked.",
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageCertificateSummaryBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "viewer"
+            ]
+          }
+        ],
+        "summary": "List certificates",
+        "tags": [
+          "certificates"
+        ],
+        "x-required-role": "viewer"
+      }
+    },
+    "/api/v1/certificates/options": {
+      "get": {
+        "operationId": "getCertificateOptions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateOptionsBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "manager"
+            ]
+          }
+        ],
+        "summary": "Get certificate issuance options",
+        "tags": [
+          "certificates"
+        ],
+        "x-required-role": "manager"
+      }
+    },
+    "/api/v1/certificates/{id}": {
+      "get": {
+        "operationId": "getCertificate",
+        "parameters": [
+          {
+            "description": "Certificate id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Certificate id.",
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateDetailBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "viewer"
+            ]
+          }
+        ],
+        "summary": "Fetch one certificate",
+        "tags": [
+          "certificates"
+        ],
+        "x-required-role": "viewer"
       }
     },
     "/api/v1/config": {

@@ -74,6 +74,138 @@ var allowedIssueKeyTypes = map[string]bool{
 	"EC:P-256": true, "EC:P-384": true, "RSA:2048": true, "RSA:4096": true,
 }
 
+// issueTemplateOrder is issueTemplates' keys in the order templates/issue.html
+// lays its template cards out, since a Go map has none of its own.
+var issueTemplateOrder = []string{"server", "internal", "wildcard", "client"}
+
+// issueTemplateCopy is the label and description templates/issue.html hands
+// each template card. GET /api/v1/certificates/options is the first place
+// this has a Go-side home: today it exists only as literal HTML strings and
+// the hidden `data-*` attributes static/js reads back off the DOM, computed
+// nowhere (R23's observed-cost record, Phase 4: this operation has no
+// predecessor to extract from, unlike list and detail).
+var issueTemplateCopy = map[string]struct{ Label, Description string }{
+	"server":   {"Server TLS", "Standard HTTPS/service certificate, 1 year"},
+	"internal": {"Internal service", "Internal service, up to 10 years"},
+	"wildcard": {"Wildcard", "Wildcard names only, e.g. *.example.com"},
+	"client":   {"Client identity", "Client identity for mTLS/VPN scenarios"},
+}
+
+// keyTypeOrder and keyTypeCopy are allowedIssueKeyTypes' entries, labelled as
+// templates/issue.html's key-type cards label them.
+var keyTypeOrder = []string{"EC:P-256", "EC:P-384", "RSA:2048", "RSA:4096"}
+
+var keyTypeCopy = map[string]struct{ Label, Note string }{
+	"EC:P-256": {"EC P-256", "Elliptic curve, 256-bit (recommended)"},
+	"EC:P-384": {"EC P-384", "Elliptic curve, 384-bit (enhanced)"},
+	"RSA:2048": {"RSA 2048", "Compatibility (classic)"},
+	"RSA:4096": {"RSA 4096", "Maximum security (slow)"},
+}
+
+// durationOrder and durationCopy label allowedIssueDurations' entries.
+var durationOrder = []string{"720h", "4380h", "8760h", "87600h"}
+
+var durationCopy = map[string]string{
+	"720h":   "30 days",
+	"4380h":  "6 months",
+	"8760h":  "1 year",
+	"87600h": "10 years",
+}
+
+// CertTemplateOption is one selectable certificate template in
+// CertIssueOptions. It, CertKeyTypeOption, CertDurationOption and
+// CertProvisionerOption are CertIssueOptions' rows. Plain data, no json
+// tags: backend/api owns the wire shape (D3 rule 3) and converts.
+type CertTemplateOption struct {
+	ID              string
+	Label           string
+	Description     string
+	DefaultDuration string
+	DefaultKeyType  string
+}
+
+// CertKeyTypeOption is one selectable key-type choice in CertIssueOptions.
+type CertKeyTypeOption struct {
+	ID    string
+	Label string
+	Note  string
+}
+
+// CertDurationOption is one selectable issuance-duration choice in CertIssueOptions.
+type CertDurationOption struct {
+	ID    string
+	Label string
+}
+
+// CertProvisionerOption is one selectable step-ca provisioner in CertIssueOptions.
+type CertProvisionerOption struct {
+	Name string
+	Type string
+}
+
+// CertIssueOptions is GET /api/v1/certificates/options' data: everything the
+// issuance form needs to render, computed server-side instead of hardcoded
+// in templates/issue.html and static/js/issue.js. Per D3 rule 1 none of this
+// reaches a schema (no enum, no maximum, no default): it is response data a
+// client reads, same as the rest of this struct.
+type CertIssueOptions struct {
+	Templates             []CertTemplateOption
+	KeyTypes              []CertKeyTypeOption
+	Durations             []CertDurationOption
+	Provisioners          []CertProvisionerOption
+	AllowedDomainSuffixes []string
+	DefaultTemplate       string
+}
+
+// CertificateIssueOptions computes CertIssueOptions. IssueGet, the template
+// route it replaces, computes nothing at all today: it renders a static
+// form and leaves every choice hardcoded in HTML and JS, so this function
+// has no predecessor to extract from (R23's observed-cost record, Phase 4).
+// Provisioners degrades to an empty list on a CA error, matching
+// Provisioners' (the template handler for GET /provisioners) existing
+// behaviour rather than failing the whole response over a CA hiccup.
+func (h *Handler) CertificateIssueOptions(ctx context.Context) CertIssueOptions {
+	templates := make([]CertTemplateOption, 0, len(issueTemplateOrder))
+	for _, id := range issueTemplateOrder {
+		policy := issueTemplates[id]
+		info := issueTemplateCopy[id]
+		templates = append(templates, CertTemplateOption{
+			ID: id, Label: info.Label, Description: info.Description,
+			DefaultDuration: policy.Duration, DefaultKeyType: policy.KeyType,
+		})
+	}
+
+	keyTypes := make([]CertKeyTypeOption, 0, len(keyTypeOrder))
+	for _, id := range keyTypeOrder {
+		info := keyTypeCopy[id]
+		keyTypes = append(keyTypes, CertKeyTypeOption{ID: id, Label: info.Label, Note: info.Note})
+	}
+
+	durations := make([]CertDurationOption, 0, len(durationOrder))
+	for _, id := range durationOrder {
+		durations = append(durations, CertDurationOption{ID: id, Label: durationCopy[id]})
+	}
+
+	var provisioners []CertProvisionerOption
+	if caClient, err := h.caClient(); err == nil {
+		if list, err := caClient.Provisioners(ctx); err == nil {
+			provisioners = make([]CertProvisionerOption, 0, len(list))
+			for _, p := range list {
+				provisioners = append(provisioners, CertProvisionerOption{Name: p.Name, Type: p.Type})
+			}
+		}
+	}
+
+	return CertIssueOptions{
+		Templates:             templates,
+		KeyTypes:              keyTypes,
+		Durations:             durations,
+		Provisioners:          provisioners,
+		AllowedDomainSuffixes: append([]string{}, h.cfg.AllowedDomainSuffixes...),
+		DefaultTemplate:       "server",
+	}
+}
+
 func normalizeIssuePolicy(template, duration, keyType, domain string) (IssuePolicy, error) {
 	template = strings.TrimSpace(strings.ToLower(template))
 	if template == "" {

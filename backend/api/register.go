@@ -89,4 +89,32 @@ func Register(humaAPI huma.API, h *handlers.Handler) {
 		Tags:        []string{"system"},
 		Summary:     "Phase 0 spike: multipart upload mechanic",
 	}), postSpikeUpload)
+
+	// Phase 4, first three operations (plans/frontend-backend-split.md
+	// Section 8): list, detail and options. The remaining certificate
+	// operations follow once the observed cost of this first three is
+	// recorded (R23).
+	huma.Register(humaAPI, roleOp("viewer", huma.Operation{
+		OperationID: "listCertificates",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/certificates",
+		Tags:        []string{"certificates"},
+		Summary:     "List certificates",
+	}), listCertificates(h))
+
+	huma.Register(humaAPI, roleOp("viewer", huma.Operation{
+		OperationID: "getCertificate",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/certificates/{id}",
+		Tags:        []string{"certificates"},
+		Summary:     "Fetch one certificate",
+	}), getCertificate(h))
+
+	huma.Register(humaAPI, roleOp("manager", huma.Operation{
+		OperationID: "getCertificateOptions",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/certificates/options",
+		Tags:        []string{"certificates"},
+		Summary:     "Get certificate issuance options",
+	}), getCertificateOptions(h))
 }
