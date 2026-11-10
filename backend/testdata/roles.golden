@@ -18,8 +18,14 @@ GET  /api/v1/_spike/blob   auth=required role=viewer  tag=system      csrf=no  r
 DELETE /api/v1/session     auth=public   role=-       tag=session     csrf=optional ratelimit=no templateRouteRetired=false
 GET  /api/v1/certificates  auth=required role=viewer  tag=certificates csrf=no  ratelimit=no templateRouteRetired=false
 GET  /api/v1/certificates/{id} auth=required role=viewer  tag=certificates csrf=no  ratelimit=no templateRouteRetired=false
+GET  /api/v1/certificates/{id}/certificate auth=required role=manager tag=certificates csrf=no  ratelimit=no templateRouteRetired=false
+GET  /api/v1/certificates/{id}/key auth=required role=manager tag=certificates csrf=no  ratelimit=no templateRouteRetired=false
 GET  /api/v1/certificates/options auth=required role=manager tag=certificates csrf=no  ratelimit=no templateRouteRetired=false
 GET  /api/v1/certificates/import-candidates auth=required role=manager tag=certificates csrf=no  ratelimit=no templateRouteRetired=false
+GET  /api/v1/ca            auth=required role=viewer  tag=ca          csrf=no  ratelimit=no templateRouteRetired=true
+GET  /api/v1/ca/root       auth=required role=admin   tag=ca          csrf=no  ratelimit=no templateRouteRetired=false
+GET  /api/v1/ca/intermediate auth=required role=admin   tag=ca          csrf=no  ratelimit=no templateRouteRetired=false
+GET  /api/v1/ca/chain      auth=required role=admin   tag=ca          csrf=no  ratelimit=no templateRouteRetired=false
 GET  /api/v1/config        auth=public   role=-       tag=system      csrf=no  ratelimit=no templateRouteRetired=true
 GET  /api/v1/session       auth=optional role=-       tag=session     csrf=no  ratelimit=no templateRouteRetired=true
 GET  /api/v1/status        auth=required role=viewer  tag=dashboard   csrf=no  ratelimit=no templateRouteRetired=false

@@ -42,6 +42,34 @@
         ],
         "type": "object"
       },
+      "CaInfoBody": {
+        "additionalProperties": false,
+        "properties": {
+          "fingerprintSha256": {
+            "type": "string"
+          },
+          "notAfter": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "notBefore": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "reachable": {
+            "type": "boolean"
+          },
+          "subject": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "fingerprintSha256",
+          "reachable"
+        ],
+        "type": "object"
+      },
       "CertDurationOptionBody": {
         "additionalProperties": false,
         "properties": {
@@ -884,6 +912,204 @@
         "x-required-role": "manager"
       }
     },
+    "/api/v1/ca": {
+      "get": {
+        "operationId": "getCA",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaInfoBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "viewer"
+            ]
+          }
+        ],
+        "summary": "Get the certificate authority's subject, fingerprint, validity and reachability",
+        "tags": [
+          "ca"
+        ],
+        "x-required-role": "viewer"
+      }
+    },
+    "/api/v1/ca/chain": {
+      "get": {
+        "operationId": "getCAChain",
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "contentMediaType": "application/octet-stream",
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The intermediate certificate followed by the root certificate, PEM-encoded.",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Download the full certificate chain (intermediate followed by root)",
+        "tags": [
+          "ca"
+        ],
+        "x-required-role": "admin"
+      }
+    },
+    "/api/v1/ca/intermediate": {
+      "get": {
+        "operationId": "getCAIntermediate",
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "contentMediaType": "application/octet-stream",
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The intermediate CA's PEM-encoded certificate.",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Download the intermediate CA certificate",
+        "tags": [
+          "ca"
+        ],
+        "x-required-role": "admin"
+      }
+    },
+    "/api/v1/ca/root": {
+      "get": {
+        "operationId": "getCARoot",
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "contentMediaType": "application/octet-stream",
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The root CA's PEM-encoded certificate.",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Download the root CA certificate",
+        "tags": [
+          "ca"
+        ],
+        "x-required-role": "admin"
+      }
+    },
     "/api/v1/certificates": {
       "get": {
         "operationId": "listCertificates",
@@ -1296,6 +1522,138 @@
           "certificates"
         ],
         "x-required-role": "viewer"
+      }
+    },
+    "/api/v1/certificates/{id}/certificate": {
+      "get": {
+        "operationId": "getCertificateCertificate",
+        "parameters": [
+          {
+            "description": "Certificate id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Certificate id.",
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "contentMediaType": "application/octet-stream",
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The certificate's PEM-encoded certificate file.",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "manager"
+            ]
+          }
+        ],
+        "summary": "Download a certificate's certificate file",
+        "tags": [
+          "certificates"
+        ],
+        "x-required-role": "manager"
+      }
+    },
+    "/api/v1/certificates/{id}/key": {
+      "get": {
+        "operationId": "getCertificateKey",
+        "parameters": [
+          {
+            "description": "Certificate id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Certificate id.",
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "contentMediaType": "application/octet-stream",
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The certificate's PEM-encoded private key file.",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "manager"
+            ]
+          }
+        ],
+        "summary": "Download a certificate's private key file",
+        "tags": [
+          "certificates"
+        ],
+        "x-required-role": "manager"
       }
     },
     "/api/v1/certificates/{id}/renew": {
