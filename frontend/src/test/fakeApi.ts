@@ -8,6 +8,18 @@ export interface FakeUser {
   role: string
 }
 
+export interface FakeCertificate {
+  id: number
+  name: string
+  domain: string
+  status: string
+  keyType: string
+  serial: string
+  expiryStatus: string
+  issuedAt: string
+  expiresAt: string
+}
+
 export interface FakeApiState {
   session: FakeSessionState
   user: FakeUser
@@ -21,6 +33,8 @@ export interface FakeApiState {
   recoveryCode: string
   mfaRequired: boolean
   csrfCookie: string
+  certificates: FakeCertificate[]
+  importCandidates: { name: string; certFile: string; keyFile?: string }[]
 }
 
 export interface RecordedCall {
@@ -53,9 +67,24 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
     recoveryCode: 'RECOVERY-CODE',
     mfaRequired: false,
     csrfCookie: 'csrf-token',
+    certificates: [
+      {
+        id: 1,
+        name: 'example',
+        domain: 'example.test',
+        status: 'active',
+        keyType: 'EC:P-256',
+        serial: 'AA:BB:CC',
+        expiryStatus: 'ok',
+        issuedAt: '2026-01-01T00:00:00Z',
+        expiresAt: '2027-01-01T00:00:00Z',
+      },
+    ],
+    importCandidates: [{ name: 'orphan', certFile: 'orphan.crt', keyFile: 'orphan.key' }],
     ...overrides,
   }
   const calls: RecordedCall[] = []
+  let nextCertId = Math.max(0, ...state.certificates.map((c) => c.id)) + 1
 
   const sessionBody = () => ({
     state: state.session,
@@ -67,7 +96,10 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
     const url = new URL(request.url)
     const method = request.method
     const text = method === 'GET' || method === 'DELETE' ? '' : await request.clone().text()
-    const body: unknown = text ? JSON.parse(text) : undefined
+    // Multipart bodies (file uploads) are not JSON; they are read via
+    // request.formData() by the handler that needs them, not parsed here.
+    const isJsonBody = text && !request.headers.get('Content-Type')?.includes('multipart/form-data')
+    const body: unknown = isJsonBody ? JSON.parse(text) : undefined
     calls.push({ method, path: url.pathname, csrf: request.headers.get('X-CSRF-Token'), body })
 
     if (state.down === 'network') throw new TypeError('Failed to fetch')
@@ -121,9 +153,134 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
       case 'DELETE /api/v1/session':
         state.session = 'anonymous'
         return new Response(null, { status: 204 })
+      case 'GET /api/v1/ca':
+        return json({
+          subject: 'CN=Fake Root CA',
+          fingerprintSha256: 'ff:ee:dd',
+          notBefore: '2026-01-01T00:00:00Z',
+          notAfter: '2036-01-01T00:00:00Z',
+          reachable: true,
+        })
+      case 'GET /api/v1/ca/root':
+      case 'GET /api/v1/ca/intermediate':
+      case 'GET /api/v1/ca/chain':
+        return new Response('fake-pem-bytes', {
+          status: 200,
+          headers: { 'Content-Type': 'application/x-pem-file' },
+        })
+      case 'GET /api/v1/certificates': {
+        const q = (url.searchParams.get('q') ?? '').toLowerCase()
+        const statusFilter = url.searchParams.get('status') ?? undefined
+        const items = state.certificates.filter(
+          (c) =>
+            (!q || c.name.toLowerCase().includes(q) || c.domain.toLowerCase().includes(q)) &&
+            (!statusFilter || c.status === statusFilter),
+        )
+        return json({ items, page: 1, pageSize: 25, total: items.length, totalPages: 1 })
+      }
+      case 'POST /api/v1/certificates': {
+        const created = body as { name: string; domain: string; keyType?: string }
+        const cert: FakeCertificate = {
+          id: nextCertId++,
+          name: created.name,
+          domain: created.domain,
+          status: 'active',
+          keyType: created.keyType || 'EC:P-256',
+          serial: 'NEW:SERIAL',
+          expiryStatus: 'ok',
+          issuedAt: new Date().toISOString(),
+          expiresAt: new Date().toISOString(),
+        }
+        state.certificates.push(cert)
+        return json(cert, 201)
+      }
+      case 'GET /api/v1/certificates/options':
+        return json({
+          templates: [
+            {
+              id: 'server',
+              label: 'Server',
+              description: 'Server cert',
+              defaultDuration: '8760h',
+              defaultKeyType: 'EC:P-256',
+            },
+          ],
+          keyTypes: [{ id: 'EC:P-256', label: 'EC P-256' }],
+          durations: [{ id: '8760h', label: '1 year' }],
+          provisioners: [],
+          allowedDomainSuffixes: [],
+          defaultTemplate: 'server',
+        })
+      case 'GET /api/v1/certificates/import-candidates':
+        return json(state.importCandidates)
+      case 'POST /api/v1/certificates/import/paths': {
+        const items = body as { name: string; domain: string; certPath: string }[]
+        return json({ results: items.map((i) => ({ ref: i.name, status: 'ok' as const })) })
+      }
+      case 'POST /api/v1/certificates/import/upload': {
+        const form = await request.formData()
+        const name = String(form.get('name') ?? 'uploaded')
+        const domain = String(form.get('domain') ?? '')
+        const cert: FakeCertificate = {
+          id: nextCertId++,
+          name,
+          domain,
+          status: 'active',
+          keyType: 'EC:P-256',
+          serial: 'UPLOAD:SERIAL',
+          expiryStatus: 'ok',
+          issuedAt: new Date().toISOString(),
+          expiresAt: new Date().toISOString(),
+        }
+        state.certificates.push(cert)
+        return json(cert, 201)
+      }
       default:
-        return problem(404, 'Not Found', 'no operation matches this path')
+        break
     }
+
+    const idMatch = /^\/api\/v1\/certificates\/(\d+)(\/(certificate|key|renew|revoke))?$/.exec(url.pathname)
+    if (idMatch) {
+      const id = Number(idMatch[1])
+      const action = idMatch[3]
+      const cert = state.certificates.find((c) => c.id === id)
+      if (!cert) return problem(404, 'Not Found', 'no such certificate')
+      if (method === 'GET' && !action) {
+        return json({
+          daysLeft: 300,
+          dnsNames: [cert.domain],
+          extKeyUsage: ['serverAuth'],
+          fingerprintSha1: 'sha1:fake',
+          fingerprintSha256: 'sha256:fake',
+          ipAddresses: [],
+          issuer: 'CN=Fake Root CA',
+          keyUsage: ['digitalSignature'],
+          notAfter: cert.expiresAt,
+          notBefore: cert.issuedAt,
+          publicKey: 'fake-public-key',
+          serialHex: cert.serial,
+          signatureAlgorithm: 'ECDSA-SHA256',
+          subject: `CN=${cert.domain}`,
+          validations: [{ name: 'chain', status: 'ok', detail: 'Chain verifies.' }],
+        })
+      }
+      if (method === 'GET' && (action === 'certificate' || action === 'key')) {
+        return new Response('fake-pem-bytes', {
+          status: 200,
+          headers: { 'Content-Type': 'application/x-pem-file' },
+        })
+      }
+      if (method === 'POST' && action === 'renew') {
+        cert.issuedAt = new Date().toISOString()
+        return json(cert)
+      }
+      if (method === 'POST' && action === 'revoke') {
+        cert.status = 'revoked'
+        return json(cert)
+      }
+    }
+
+    return problem(404, 'Not Found', 'no operation matches this path')
   }
 
   client.setConfig({ baseUrl: 'http://localhost', fetch: handler })
