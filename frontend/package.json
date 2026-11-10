@@ -1,6 +1,6 @@
 {
   "name": "certharbor-frontend",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "description": "The certharbor single-page application. The generated client package is deliberately absent from dependencies: it is installed with `npm install --no-save` after `npm ci` (D8).",
