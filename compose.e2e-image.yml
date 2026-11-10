@@ -4,7 +4,12 @@
 # simply never evaluated, because CI never passes --build. Both pins are
 # needed: one left out silently runs that half from a local build.
 services:
-  step-webui:
-    image: step-ca-webui-backend:e2e
-  step-webui-web:
-    image: step-ca-webui-web:e2e
+  certharbor-control:
+    image: certharbor-control:e2e
+  certharbor-console:
+    image: certharbor-console:e2e
+    # The suite drives every route from one address faster than the per-address
+    # limit allows, and a 429 would mask the status each spec asserts.
+    environment:
+      WEB_RATE_LIMIT: "2000r/s"
+      WEB_RATE_BURST: "4000"

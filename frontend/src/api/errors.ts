@@ -1,8 +1,8 @@
-import type { ErrorModel } from '@andremmfaria/step-ca-webui-client'
+import type { ErrorModel } from '@andremmfaria/certharbor-client'
 
 export type Problem = ErrorModel
 
-export const PROBLEM_TYPE_BASE = 'https://step-ca-webui/errors/'
+export const PROBLEM_TYPE_BASE = 'https://certharbor/errors/'
 
 // The generated client throws the parsed error body, not the response, so the
 // status travels inside the problem document. A network failure is a

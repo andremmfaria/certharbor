@@ -61,8 +61,8 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.WebHostname != "" {
 		t.Errorf("WebHostname: got %q want empty, there is no fallback", cfg.WebHostname)
 	}
-	if cfg.WebUpstreamHost != "step-webui-web" {
-		t.Errorf("WebUpstreamHost: got %q want step-webui-web", cfg.WebUpstreamHost)
+	if cfg.WebUpstreamHost != "certharbor-console" {
+		t.Errorf("WebUpstreamHost: got %q want certharbor-console", cfg.WebUpstreamHost)
 	}
 }
 

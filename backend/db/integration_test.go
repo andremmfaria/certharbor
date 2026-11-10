@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"step-webui/models"
-	"step-webui/security"
+	"certharbor/models"
+	"certharbor/security"
 )
 
 // testDSN returns the DSN for the integration Postgres.  In CI the
@@ -23,14 +23,14 @@ func testDSN(t *testing.T) string {
 		return dsn
 	}
 	// Default matches the CI postgres service definition.
-	return "postgres://stepwebui_test:stepwebui_test@localhost:5432/stepwebui_test?sslmode=disable"
+	return "postgres://certharbor_test:certharbor_test@localhost:5432/certharbor_test?sslmode=disable"
 }
 
 // openTestDB opens a connection, runs InitSchema, and registers a cleanup that
 // truncates all tables and closes the connection so tests are isolated.
 func openTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	t.Setenv("STEPWEBUI_ADMIN_PASSWORD", "IntegrationTest123!")
+	t.Setenv("CERTHARBOR_ADMIN_PASSWORD", "IntegrationTest123!")
 	conn, err := Connect(testDSN(t))
 	if err != nil {
 		t.Skipf("integration DB not available (%v), skipping", err)
@@ -48,7 +48,7 @@ func openTestDB(t *testing.T) *sql.DB {
 
 // TestIntegration_Connect confirms that Connect returns a working connection.
 func TestIntegration_Connect(t *testing.T) {
-	t.Setenv("STEPWEBUI_ADMIN_PASSWORD", "IntegrationTest123!")
+	t.Setenv("CERTHARBOR_ADMIN_PASSWORD", "IntegrationTest123!")
 	conn, err := Connect(testDSN(t))
 	if err != nil {
 		t.Skipf("DB not reachable: %v", err)
@@ -63,7 +63,7 @@ func TestIntegration_Connect(t *testing.T) {
 // second call does not error (all IF NOT EXISTS guards).
 func TestIntegration_InitSchema_Idempotent(t *testing.T) {
 	conn := openTestDB(t)
-	t.Setenv("STEPWEBUI_ADMIN_PASSWORD", "IntegrationTest123!")
+	t.Setenv("CERTHARBOR_ADMIN_PASSWORD", "IntegrationTest123!")
 	if err := InitSchema(conn); err != nil {
 		t.Fatalf("second InitSchema (idempotency): %v", err)
 	}

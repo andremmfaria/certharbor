@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"step-webui/config"
-	"step-webui/leafcert"
-	"step-webui/stepca"
+	"certharbor/config"
+	"certharbor/leafcert"
+	"certharbor/stepca"
 )
 
 // fakeCA is a minimal stepca.CA test double for package main, a plain copy
@@ -383,7 +383,7 @@ func stepcaConfig(t *testing.T) *config.Config {
 		UITLSMode:      "stepca",
 		SSLCert:        filepath.Join(dir, "ssl", "server.crt"),
 		SSLKey:         filepath.Join(dir, "ssl", "server.key"),
-		UIHostname:     "step-webui",
+		UIHostname:     "certharbor",
 		HostIP:         "127.0.0.1",
 		WebTLSMode:     "stepca",
 		WebHostname:    "ca.example.com",

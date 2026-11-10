@@ -14,7 +14,7 @@ permissions:
 
 env:
   PLAYWRIGHT_IMAGE: "mcr.microsoft.com/playwright:v1.64.1-noble"
-  COMPOSE_PROJECT_NAME: step-ca-webui
+  COMPOSE_PROJECT_NAME: certharbor
 
 jobs:
   image:
@@ -33,7 +33,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          tags: step-ca-webui-backend:e2e
+          tags: certharbor-control:e2e
           push: false
           load: true
           cache-from: type=gha,scope=e2e-backend
@@ -44,7 +44,7 @@ jobs:
         with:
           context: .
           file: ./frontend/Dockerfile
-          tags: step-ca-webui-web:e2e
+          tags: certharbor-console:e2e
           push: false
           load: true
           cache-from: type=gha,scope=e2e-frontend
@@ -52,12 +52,12 @@ jobs:
 
       - name: Neither runtime image contains Node
         run: |
-          for img in step-ca-webui-backend:e2e step-ca-webui-web:e2e; do
+          for img in certharbor-control:e2e certharbor-console:e2e; do
             docker run --rm --entrypoint sh "$img" -c '! command -v node && ! command -v npm'
           done
 
       - name: Save both application images into one archive
-        run: docker save step-ca-webui-backend:e2e step-ca-webui-web:e2e | gzip -1 > e2e-images.tar.gz
+        run: docker save certharbor-control:e2e certharbor-console:e2e | gzip -1 > e2e-images.tar.gz
 
       - name: Upload the application images
         uses: actions/upload-artifact@v4.6.2
@@ -74,7 +74,7 @@ jobs:
           file: ./test/e2e/Dockerfile
           build-args: |
             PLAYWRIGHT_IMAGE=${{ env.PLAYWRIGHT_IMAGE }}
-          tags: step-ca-webui-harness:e2e
+          tags: certharbor-harness:e2e
           push: false
           load: true
           cache-from: type=gha,scope=e2e-harness
@@ -109,7 +109,7 @@ jobs:
           file: ./test/e2e/Dockerfile
           build-args: |
             PLAYWRIGHT_IMAGE=${{ env.PLAYWRIGHT_IMAGE }}
-          tags: step-ca-webui-harness:e2e
+          tags: certharbor-harness:e2e
           push: false
           load: true
           cache-from: type=gha,scope=e2e-harness
@@ -121,9 +121,9 @@ jobs:
           echo "::add-mask::${ADMIN_PW}"
           cp .env.example .env
           {
-            echo "STEPWEBUI_ADMIN_PASSWORD=${ADMIN_PW}"
-            echo "WEB_HOSTNAME=step-webui-web"
-            echo "PUBLIC_BASE_URL=https://step-webui-web:8443"
+            echo "CERTHARBOR_ADMIN_PASSWORD=${ADMIN_PW}"
+            echo "WEB_HOSTNAME=certharbor-console"
+            echo "PUBLIC_BASE_URL=https://certharbor-console:8443"
             echo "SESSION_SECURE=true"
           } >> .env
           chmod 644 secrets/*
@@ -140,13 +140,13 @@ jobs:
             --network step-network \
             -v "$PWD:/repo" -v /var/run/docker.sock:/var/run/docker.sock \
             -w /e2e \
-            -e BASE_URL=https://step-webui-web:8443 \
-            -e BACKEND_URL=https://step-webui:8443 \
+            -e BASE_URL=https://certharbor-console:8443 \
+            -e BACKEND_URL=https://certharbor:8443 \
             -e E2E_REPO_ROOT=/repo \
             -e E2E_ARTIFACT_DIR=/repo/test/e2e/artifacts \
-            -e COMPOSE_PROJECT_NAME=step-ca-webui \
+            -e COMPOSE_PROJECT_NAME=certharbor \
             -e CI=true \
-            step-ca-webui-harness:e2e \
+            certharbor-harness:e2e \
             npx playwright test --project=api
 
       - name: Run the SPA specs of the ui project
@@ -155,13 +155,13 @@ jobs:
             --network step-network \
             -v "$PWD:/repo" -v /var/run/docker.sock:/var/run/docker.sock \
             -w /e2e \
-            -e BASE_URL=https://step-webui-web:8443 \
-            -e BACKEND_URL=https://step-webui:8443 \
+            -e BASE_URL=https://certharbor-console:8443 \
+            -e BACKEND_URL=https://certharbor:8443 \
             -e E2E_REPO_ROOT=/repo \
             -e E2E_ARTIFACT_DIR=/repo/test/e2e/artifacts/ui \
-            -e COMPOSE_PROJECT_NAME=step-ca-webui \
+            -e COMPOSE_PROJECT_NAME=certharbor \
             -e CI=true \
-            step-ca-webui-harness:e2e \
+            certharbor-harness:e2e \
             npx playwright test --project=ui specs/spa
 
       - name: Collect artifacts

@@ -4,10 +4,10 @@
  */
 
 // Remove the legacy theme key (now stored server-side)
-try{localStorage.removeItem('step-webui-theme');}catch(e){}
+try{localStorage.removeItem('certharbor-theme');}catch(e){}
 var _sidebarOpen = true;
 (function(){
-  var saved = localStorage.getItem('step-webui-sidebar');
+  var saved = localStorage.getItem('certharbor-sidebar');
   if(saved === '0'){
     _sidebarOpen = false;
     document.getElementById('sidebar').classList.add('collapsed');
@@ -22,7 +22,7 @@ function toggleSidebar(){
   document.body.classList.toggle('sb-collapsed', !_sidebarOpen);
   var bf = document.getElementById('burgerFloat');
   if(bf) bf.classList.toggle('visible', !_sidebarOpen);
-  localStorage.setItem('step-webui-sidebar', _sidebarOpen ? '1' : '0');
+  localStorage.setItem('certharbor-sidebar', _sidebarOpen ? '1' : '0');
 }
 
 function toggleGroup(id){
@@ -67,11 +67,12 @@ function initCustomSelect(wrap){
       div.setAttribute('role', 'option');
       div.setAttribute('aria-selected', o.selected ? 'true' : 'false');
       div.setAttribute('tabindex', '-1');
-      if(multi){
-        div.innerHTML = '<span class="chk" aria-hidden="true">'+(o.selected?'&#10003;':'')+'</span>'+o.text;
-      } else {
-        div.innerHTML = '<span class="sel-check" aria-hidden="true">'+(o.selected?'&#10003;':'')+'</span>'+o.text;
-      }
+      var mark = document.createElement('span');
+      mark.className = multi ? 'chk' : 'sel-check';
+      mark.setAttribute('aria-hidden', 'true');
+      mark.textContent = o.selected ? '\u2713' : '';
+      div.appendChild(mark);
+      div.appendChild(document.createTextNode(o.text));
       div.addEventListener('mousedown', function(e){
         e.preventDefault();
         if(multi){
@@ -79,16 +80,16 @@ function initCustomSelect(wrap){
           div.classList.toggle('selected', o.selected);
           div.setAttribute('aria-selected', o.selected ? 'true' : 'false');
           var chk = div.querySelector('.chk');
-          if(chk) chk.innerHTML = o.selected ? '&#10003;' : '';
+          if(chk) chk.textContent = o.selected ? '\u2713' : '';
         } else {
           Array.from(drop.querySelectorAll('.sel-opt')).forEach(function(d){
             d.classList.remove('selected');
             d.setAttribute('aria-selected', 'false');
-            var sc = d.querySelector('.sel-check'); if(sc) sc.innerHTML='';
+            var sc = d.querySelector('.sel-check'); if(sc) sc.textContent='';
           });
           div.classList.add('selected');
           div.setAttribute('aria-selected', 'true');
-          var sc = div.querySelector('.sel-check'); if(sc) sc.innerHTML='&#10003;';
+          var sc = div.querySelector('.sel-check'); if(sc) sc.textContent='\u2713';
           sel.value = o.value;
           closeDropdown();
         }

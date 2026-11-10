@@ -24,7 +24,7 @@ describe('error classification', () => {
 
   it('matches a problem type by its final segment', () => {
     expect(
-      hasProblemType({ type: 'https://step-ca-webui/errors/upstream-unavailable' }, 'upstream-unavailable'),
+      hasProblemType({ type: 'https://certharbor/errors/upstream-unavailable' }, 'upstream-unavailable'),
     ).toBe(true)
     expect(hasProblemType({ type: 'about:blank' }, 'csrf')).toBe(false)
   })

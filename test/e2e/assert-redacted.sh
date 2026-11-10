@@ -19,10 +19,10 @@ for f in ca_password secret_key postgres_password; do
     names+=("secrets/$f")
   fi
 done
-admin_pw="$(sed -n 's/^STEPWEBUI_ADMIN_PASSWORD=//p' "${E2E_ENV_FILE:-.env}" 2>/dev/null | head -1 | tr -d '"'"'"'\r')"
+admin_pw="$(sed -n 's/^CERTHARBOR_ADMIN_PASSWORD=//p' "${E2E_ENV_FILE:-.env}" 2>/dev/null | head -1 | tr -d '"'"'"'\r')"
 if [[ -n "$admin_pw" ]]; then
   canaries+=("$admin_pw")
-  names+=("STEPWEBUI_ADMIN_PASSWORD")
+  names+=("CERTHARBOR_ADMIN_PASSWORD")
 fi
 
 # An empty canary list would make this sweep vacuous, and a vacuous pass here is

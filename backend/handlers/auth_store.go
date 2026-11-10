@@ -4,9 +4,9 @@ import (
 	"context"
 	"database/sql"
 
-	"step-webui/models"
+	"certharbor/models"
 
-	appdb "step-webui/db"
+	appdb "certharbor/db"
 )
 
 // AuthStore is the database surface the login and MFA flow touches. It exists

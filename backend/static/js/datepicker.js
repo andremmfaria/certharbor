@@ -57,7 +57,7 @@
 
     // ── DOM ───────────────────────────────────────
     wrap.innerHTML = `
-      <div class="dp-input dp-empty" tabindex="0">${placeholder}</div>
+      <div class="dp-input dp-empty" tabindex="0"></div>
       <svg class="dp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -65,7 +65,7 @@
         <line x1="8"  y1="2" x2="8"  y2="6"></line>
         <line x1="3" y1="10" x2="21" y2="10"></line>
       </svg>
-      <input type="hidden" name="${name}" value="">
+      <input type="hidden" value="">
       <div class="dp-pop">
         <div class="dp-head">
           <button type="button" class="dp-nav dp-prev" aria-label="Previous month">‹</button>
@@ -101,6 +101,10 @@
     const inMM         = wrap.querySelector('.dp-mm');
     const btnClear     = wrap.querySelector('.dp-clear');
     const btnOk        = wrap.querySelector('.dp-ok');
+
+    // data-* values are DOM text, so they go in as text/properties, never into the markup above
+    inputDisplay.textContent = placeholder;
+    hidden.name = name;
 
     function clearError() { wrap.classList.remove('dp-has-error'); }
     function showError()  { wrap.classList.add('dp-has-error'); }

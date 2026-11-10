@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"step-webui/config"
-	"step-webui/leafcert"
+	"certharbor/config"
+	"certharbor/leafcert"
 )
 
 func writeLeaf(t *testing.T, path string, notBefore, notAfter time.Time) {

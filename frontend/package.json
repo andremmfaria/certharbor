@@ -1,9 +1,9 @@
 {
-  "name": "step-ca-webui-frontend",
+  "name": "certharbor-frontend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "The step-ca-webui single-page application. The generated client package is deliberately absent from dependencies: it is installed with `npm install --no-save` after `npm ci` (D8).",
+  "description": "The certharbor single-page application. The generated client package is deliberately absent from dependencies: it is installed with `npm install --no-save` after `npm ci` (D8).",
   "license": "SEE LICENSE IN ../LICENSE",
   "engines": {
     "node": ">=22.22.0"
@@ -43,7 +43,7 @@
     "prettier": "3.9.10",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.1",
-    "vite": "8.3.5",
+    "vite": "8.3.6",
     "vitest": "5.1.0"
   },
   "overrides": {

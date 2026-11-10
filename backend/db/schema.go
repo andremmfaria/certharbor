@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"step-webui/security"
+	"certharbor/security"
 
 	_ "github.com/lib/pq" // Postgres driver registration
 )
@@ -152,12 +152,12 @@ func InitSchema(d *sql.DB) error {
 		if err != nil {
 			log.Fatal(err.Error())
 		}
-		slog.Info("seeding admin user from STEPWEBUI_ADMIN_PASSWORD")
+		slog.Info("seeding admin user from CERTHARBOR_ADMIN_PASSWORD")
 		if _, err := d.Exec(`INSERT INTO users (username,password_hash,role,is_active) VALUES ($1,$2,'admin',true)`, //nolint:noctx // pre-existing signature
 			"admin", security.HashPassword(adminPwd)); err != nil {
 			return fmt.Errorf("seeding admin user: %w", err)
 		}
-		slog.Info("admin user seeded; remove STEPWEBUI_ADMIN_PASSWORD from the environment after first login")
+		slog.Info("admin user seeded; remove CERTHARBOR_ADMIN_PASSWORD from the environment after first login")
 	}
 
 	// -- migration: certificates.issue_duration (P3-8) stores the issuance
@@ -180,16 +180,16 @@ func InitSchema(d *sql.DB) error {
 	return nil
 }
 
-// resolveAdminPassword returns the value of STEPWEBUI_ADMIN_PASSWORD from the
+// resolveAdminPassword returns the value of CERTHARBOR_ADMIN_PASSWORD from the
 // provided lookup function, or an error if it is empty. The caller must treat
 // the error as fatal, seeding a literal password would create a known
 // network-reachable credential. The getenv parameter allows injection in tests.
 func resolveAdminPassword(getenv func(string) string) (string, error) {
-	pw := getenv("STEPWEBUI_ADMIN_PASSWORD")
+	pw := getenv("CERTHARBOR_ADMIN_PASSWORD")
 	if pw == "" {
-		return "", fmt.Errorf("[FATAL] No admin user exists and STEPWEBUI_ADMIN_PASSWORD is not set. " +
-			"Set STEPWEBUI_ADMIN_PASSWORD to a strong password and restart. " +
-			"Example: STEPWEBUI_ADMIN_PASSWORD=$(openssl rand -base64 32)")
+		return "", fmt.Errorf("[FATAL] No admin user exists and CERTHARBOR_ADMIN_PASSWORD is not set. " +
+			"Set CERTHARBOR_ADMIN_PASSWORD to a strong password and restart. " +
+			"Example: CERTHARBOR_ADMIN_PASSWORD=$(openssl rand -base64 32)")
 	}
 	return pw, nil
 }

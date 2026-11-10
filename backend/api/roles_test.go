@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	appmw "step-webui/middleware"
+	appmw "certharbor/middleware"
 
 	"github.com/danielgtaylor/huma/v2"
 )

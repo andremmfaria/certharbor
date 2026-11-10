@@ -11,7 +11,7 @@ import (
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
-	appdb "step-webui/db"
+	appdb "certharbor/db"
 )
 
 // oidcRandomString returns a URL-safe random string of n bytes (base64 encoded).

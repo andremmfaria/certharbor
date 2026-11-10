@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"time"
 
-	"step-webui/security"
+	"certharbor/security"
 
 	"github.com/go-chi/chi/v5"
-	appdb "step-webui/db"
+	appdb "certharbor/db"
 )
 
 // invalidRoleMsg names the valid roles, because a rejected role is otherwise
