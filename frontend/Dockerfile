@@ -83,7 +83,7 @@ RUN CONTRACT_SHA="${CONTRACT_SHA:-$(sha256sum ../backend/openapi/openapi.json | 
 # that must be the backend's uid 10001 directory, never a root-owned one here.
 # apk upgrade pulls the security fixes the published nginx tag has not rebuilt
 # with yet, so the image does not depend on the base's rebuild cadence.
-FROM nginx:1.29-alpine AS runtime-base
+FROM nginx:1.31-alpine AS runtime-base
 # hadolint ignore=DL3018
 RUN apk upgrade --no-cache \
  && apk add --no-cache curl openssl \
