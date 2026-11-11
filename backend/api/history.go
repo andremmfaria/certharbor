@@ -24,7 +24,7 @@ type historyEntryBody struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-func newHistoryEntryBody(e handlers.HistoryEntry) historyEntryBody {
+func newHistoryEntryBody(e *handlers.HistoryEntry) historyEntryBody {
 	return historyEntryBody{
 		ID: e.ID, Action: e.Action, CertName: e.CertName, Domain: e.Domain,
 		Details: e.Details, Username: e.Username, Role: e.Role, CreatedAt: e.CreatedAt,
@@ -75,8 +75,8 @@ func listHistory(h *handlers.Handler) func(context.Context, *listHistoryInput) (
 			return nil, err
 		}
 		items := make([]historyEntryBody, 0, len(entries))
-		for _, e := range entries {
-			items = append(items, newHistoryEntryBody(e))
+		for i := range entries {
+			items = append(items, newHistoryEntryBody(&entries[i]))
 		}
 		return &listHistoryOutput{Body: apitypes.NewPage(items, page, pageSize, total)}, nil
 	}

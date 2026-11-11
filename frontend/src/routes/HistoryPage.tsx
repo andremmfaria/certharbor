@@ -8,7 +8,8 @@ import { useListParams } from '../hooks/useListParams'
 const ACTIONS = ['issue', 'renew', 'revoke', 'import']
 
 function actionBadge(action: string) {
-  const kind = action === 'issue' ? 'ok' : action === 'renew' ? 'blue' : action === 'revoke' ? 'danger' : 'gray'
+  const kind =
+    action === 'issue' ? 'ok' : action === 'renew' ? 'blue' : action === 'revoke' ? 'danger' : 'gray'
   return <span className={`badge ${kind}`}>{action}</span>
 }
 
