@@ -96,8 +96,19 @@ jobs:
       - name: djlint (Go templates, lint only; format burn-down is PR-23)
         run: djlint backend/templates/ --profile=golang --lint
 
+      - name: Build and pack the TS client (in-image approach, see test/e2e/Dockerfile)
+        run: |
+          npm ci
+          npm run generate && npm run build
+          npm version "$(tr -d '[:space:]' < ../../VERSION)-dev" --no-git-tag-version --allow-same-version
+          npm pack --pack-destination dist
+          mv dist/certharbor-client-*.tgz dist/client.tgz
+        working-directory: clients/ts
+
       - name: Install the e2e harness
-        run: npm ci
+        run: |
+          npm ci
+          npm install --no-save ../../clients/ts/dist/client.tgz
         working-directory: test/e2e
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
