@@ -74,7 +74,9 @@ test("E2E-SEC-EVENTS-01: security events pagination, search and outcome filter",
      SELECT '${username}', '198.51.100.1', false, 'seeded for E2E-SEC-EVENTS-01'
      FROM generate_series(1, ${seedCount})`,
   );
-  expect(seeded, "seeding is a write with no rows returned").toBe("");
+  expect(seeded, "seeding is a write, not a SELECT: psql's -At still prints the INSERT command tag").toMatch(
+    /^INSERT 0 \d+$/,
+  );
 
   const totalRes = await admin.call(() => listSecurityEvents({ query: { pageSize: 1 } }));
   const total = totalRes.data?.total ?? 0;
@@ -116,18 +118,20 @@ test("E2E-SEC-EVENTS-03: the endpoint requires an authenticated admin session", 
 test("E2E-SEC-EVENTS-04: ::1 unblocks end to end -- the rate limiter is actually cleared", async () => {
   test.setTimeout(120_000);
 
-  // Five failed attempts trips security.LimitCount from the loopback's own
-  // perspective (clientIP sees "::1" directly, with no trusted-proxy header
-  // in the way), the same budget LoginPost enforces for any other IP.
+  // Four failed attempts leave the allowance unexhausted (backend/handlers/
+  // session_login.go: AttemptsLeft > 0 is a plain LoginInvalid, HTTP 401).
+  // The 5th attempt is the one that consumes the last of the allowance, and
+  // the handler reports that same attempt as LoginBlocked (429) rather than
+  // waiting for a distinct 6th call -- "this attempt consumed the last of
+  // the address's allowance" is deliberate, not an off-by-one to work around.
   const username = `e2e-sec-ip-${Date.now().toString(36)}`;
   let lastCode = 0;
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 4; i++) {
     lastCode = await attemptLoopbackLogin(username, "wrong-on-purpose");
   }
-  expect(lastCode, "the 5th bad attempt is still a plain rejection, not yet a block").toBe(401);
+  expect(lastCode, "the 4th bad attempt still has allowance left, so it's a plain rejection").toBe(401);
 
-  // The 6th attempt is blocked regardless of credentials correctness: this is
-  // the rate limiter speaking, not the password check.
+  // The 5th attempt is blocked: it's the one that exhausts the allowance.
   const blockedCode = await attemptLoopbackLogin(username, "wrong-on-purpose");
   expect(blockedCode, "::1 is now rate-limited").toBe(429);
 
@@ -146,6 +150,17 @@ test("E2E-SEC-EVENTS-04: ::1 unblocks end to end -- the rate limiter is actually
   // than being rejected by the limiter again (429).
   const afterUnblock = await attemptLoopbackLogin(username, "wrong-on-purpose");
   expect(afterUnblock, "the rate limiter was actually cleared, not just acknowledged").toBe(401);
+
+  // That last probe itself registered one more attempt against ::1's shared,
+  // process-global counter (security.RL has no per-test namespace). Left
+  // uncleared, it would still be inside LimitWindow the next time this spec
+  // runs against the same backend process and silently shift the threshold
+  // by one, exactly the bug this test exists to catch. deleteIpBlock's
+  // Clear() has no "must currently be blocked" precondition (confirmed
+  // against backend/api/security.go), so calling it again here is a safe,
+  // unconditional reset rather than an assertion.
+  const cleanup = await admin.call(() => deleteIpBlock({ path: { ip: "::1" } }));
+  expect(cleanup.error, `final cleanup of ::1 succeeded: ${JSON.stringify(cleanup.error)}`).toBeUndefined();
 });
 
 test("E2E-SEC-EVENTS-05: unblocking a non-canonical IP form is rejected with 422", async () => {
