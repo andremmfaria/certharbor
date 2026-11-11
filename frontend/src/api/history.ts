@@ -1,4 +1,4 @@
-import { listHistoryOptions } from '@certharbor/client/react-query'
+import { listHistoryOptions } from '@kantharos-ai/certharbor-client/react-query'
 import { useQuery } from '@tanstack/react-query'
 import type { ListParams } from '../hooks/useListParams'
 

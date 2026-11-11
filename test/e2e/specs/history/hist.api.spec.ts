@@ -1,4 +1,4 @@
-import { listHistory } from "@certharbor/client";
+import { listHistory } from "@kantharos-ai/certharbor-client";
 import { compose } from "../../helpers/compose.js";
 import { ApiSession, authedClient } from "../../helpers/apiClient.js";
 import { adminCredentials } from "../../fixtures/test.js";

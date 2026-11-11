@@ -1,4 +1,4 @@
-import { listProvisionersOptions } from '@certharbor/client/react-query'
+import { listProvisionersOptions } from '@kantharos-ai/certharbor-client/react-query'
 import { useQuery } from '@tanstack/react-query'
 
 // No pagination: the operation returns the CA's full provisioner list, the

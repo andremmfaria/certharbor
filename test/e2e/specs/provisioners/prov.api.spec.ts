@@ -1,4 +1,4 @@
-import { listProvisioners } from "@certharbor/client";
+import { listProvisioners } from "@kantharos-ai/certharbor-client";
 import { composeOrThrow, exec, waitHealthy } from "../../helpers/compose.js";
 import { ApiSession, authedClient, newApiClient } from "../../helpers/apiClient.js";
 import { FIXTURE_USERS } from "../../fixtures/test.js";
