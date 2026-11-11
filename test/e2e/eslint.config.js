@@ -1,19 +1,18 @@
 // ESLint v9 flat config for the e2e harness, following the same shape as
 // backend/eslint.config.js rather than introducing a second style.
-"use strict";
+//
+// This file is ESM (package.json sets "type": "module"), unlike
+// backend/eslint.config.js: a CommonJS require() here throws
+// "require is not defined in ES module scope" under Node's ESM loader,
+// since a plain .js file under a "type": "module" package is always
+// loaded as a module, never CommonJS, regardless of its contents.
+import tseslint from "typescript-eslint";
 
-const tseslint = require("typescript-eslint");
-
-module.exports = tseslint.config(
+export default tseslint.config(
   {
     ignores: ["node_modules/**", "artifacts/**", "playwright-report/**"],
   },
   ...tseslint.configs.recommended,
-  {
-    // This config file itself is CommonJS, matching backend/eslint.config.js.
-    files: ["eslint.config.js"],
-    rules: { "@typescript-eslint/no-require-imports": "off" },
-  },
   {
     files: ["**/*.ts"],
     languageOptions: {

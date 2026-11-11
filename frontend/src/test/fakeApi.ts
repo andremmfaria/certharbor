@@ -37,6 +37,8 @@ export interface FakeApiState {
   importCandidates: { name: string; certFile: string; keyFile?: string }[]
   history: FakeHistoryEntry[]
   provisioners: { name: string; type: string }[]
+  securityEvents: FakeSecurityEvent[]
+  auditEvents: FakeSecurityEvent[]
   // Narrower than `down`, which also breaks the session/config calls every
   // page depends on to render at all: these fail only their own endpoint.
   // Each operation gets its own flag rather than sharing one: reusing a
@@ -44,6 +46,11 @@ export interface FakeApiState {
   // the former for every test exercising the latter's error state.
   historyDown: boolean
   provisionersDown: boolean
+  // Dedicated flags, not the shared `down`: see historyDown's note above.
+  // Reusing the global `down` flag here would also break getSession/getConfig
+  // and strand these pages' tests at the Splash screen forever.
+  securityEventsDown: boolean
+  auditEventsDown: boolean
   dashboardDown: boolean
   // Artificial delay (ms) before any response resolves, so tests asserting
   // on a transient loading state have a window to observe it.
@@ -58,6 +65,15 @@ export interface FakeHistoryEntry {
   details: string
   username: string
   role: string
+  createdAt: string
+}
+
+export interface FakeSecurityEvent {
+  id: number
+  username: string
+  ip: string
+  outcome: 'success' | 'failure'
+  reason: string
   createdAt: string
 }
 
@@ -118,8 +134,30 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
       },
     ],
     provisioners: [{ name: 'admin', type: 'JWK' }],
+    securityEvents: [
+      {
+        id: 1,
+        username: 'alice',
+        ip: '203.0.113.9',
+        outcome: 'failure',
+        reason: 'bad password',
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+    ],
+    auditEvents: [
+      {
+        id: 1,
+        username: 'alice',
+        ip: '203.0.113.9',
+        outcome: 'success',
+        reason: 'login',
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+    ],
     historyDown: false,
     provisionersDown: false,
+    securityEventsDown: false,
+    auditEventsDown: false,
     dashboardDown: false,
     delayMs: 0,
     ...overrides,
@@ -278,6 +316,42 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
       case 'GET /api/v1/provisioners':
         if (state.provisionersDown) return problem(500, 'Internal Server Error', 'provisioners unavailable')
         return json(state.provisioners)
+      case 'GET /api/v1/security/events': {
+        if (state.securityEventsDown)
+          return problem(500, 'Internal Server Error', 'security events unavailable')
+        const q = (url.searchParams.get('q') ?? '').toLowerCase()
+        const outcomeFilter = url.searchParams.get('outcome') ?? ''
+        const page = Number(url.searchParams.get('page') ?? '1')
+        const pageSize = Number(url.searchParams.get('pageSize') ?? '25')
+        const filtered = state.securityEvents.filter(
+          (e) =>
+            (!q || e.username.toLowerCase().includes(q) || e.ip.toLowerCase().includes(q)) &&
+            (!outcomeFilter || e.outcome === outcomeFilter),
+        )
+        const start = (page - 1) * pageSize
+        const items = filtered.slice(start, start + pageSize)
+        return json({
+          items,
+          page,
+          pageSize,
+          total: filtered.length,
+          totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
+        })
+      }
+      case 'GET /api/v1/audit-events': {
+        if (state.auditEventsDown) return problem(500, 'Internal Server Error', 'audit events unavailable')
+        const page = Number(url.searchParams.get('page') ?? '1')
+        const pageSize = Number(url.searchParams.get('pageSize') ?? '25')
+        const start = (page - 1) * pageSize
+        const items = state.auditEvents.slice(start, start + pageSize)
+        return json({
+          items,
+          page,
+          pageSize,
+          total: state.auditEvents.length,
+          totalPages: Math.max(1, Math.ceil(state.auditEvents.length / pageSize)),
+        })
+      }
       case 'GET /api/v1/dashboard': {
         if (state.dashboardDown) return problem(500, 'Internal Server Error', 'dashboard unavailable')
         const byStatus = { ok: 0, warning: 0, expired: 0 } as Record<string, number>
@@ -321,6 +395,17 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
       }
       default:
         break
+    }
+
+    const ipBlockMatch = /^\/api\/v1\/security\/ip-blocks\/(.+)$/.exec(url.pathname)
+    if (ipBlockMatch && method === 'DELETE') {
+      // url.pathname is already decoded, so '::1' round-trips as '::1' here,
+      // not '%3A%3A1' -- the encoding only matters on the wire, which is
+      // exactly what the generated client is trusted to get right; this fake
+      // only needs to accept whatever the real server would.
+      const ip = decodeURIComponent(ipBlockMatch[1]!)
+      state.securityEvents = state.securityEvents.filter((e) => e.ip !== ip)
+      return new Response(null, { status: 204 })
     }
 
     const idMatch = /^\/api\/v1\/certificates\/(\d+)(\/(certificate|key|renew|revoke))?$/.exec(url.pathname)

@@ -782,6 +782,53 @@
         ],
         "type": "object"
       },
+      "PageSecurityEventBody": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SecurityEventBody"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "page": {
+            "description": "1-based page number",
+            "format": "int64",
+            "type": "integer"
+          },
+          "pageSize": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "description": "null when the server declined to count",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "totalPages": {
+            "description": "null whenever total is null",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total",
+          "totalPages"
+        ],
+        "type": "object"
+      },
       "ProvisionerBody": {
         "additionalProperties": false,
         "properties": {
@@ -795,6 +842,41 @@
         "required": [
           "name",
           "type"
+        ],
+        "type": "object"
+      },
+      "SecurityEventBody": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "success",
+              "failure"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "outcome",
+          "createdAt"
         ],
         "type": "object"
       },
@@ -1055,6 +1137,70 @@
           "system"
         ],
         "x-required-role": "manager"
+      }
+    },
+    "/api/v1/audit-events": {
+      "get": {
+        "operationId": "listAuditEvents",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "default": 1,
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "default": 25,
+              "format": "int64",
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageSecurityEventBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "List the full administrative audit trail",
+        "tags": [
+          "security"
+        ],
+        "x-required-role": "admin"
       }
     },
     "/api/v1/ca": {
@@ -2110,6 +2256,140 @@
           "provisioners"
         ],
         "x-required-role": "viewer"
+      }
+    },
+    "/api/v1/security/events": {
+      "get": {
+        "operationId": "listSecurityEvents",
+        "parameters": [
+          {
+            "description": "Search username or IP.",
+            "explode": false,
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "description": "Search username or IP.",
+              "maxLength": 255,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter by outcome.",
+            "explode": false,
+            "in": "query",
+            "name": "outcome",
+            "schema": {
+              "description": "Filter by outcome.",
+              "enum": [
+                "success",
+                "failure"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "default": 1,
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "default": 25,
+              "format": "int64",
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageSecurityEventBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "List authentication and security events",
+        "tags": [
+          "security"
+        ],
+        "x-required-role": "admin"
+      }
+    },
+    "/api/v1/security/ip-blocks/{ip}": {
+      "delete": {
+        "operationId": "deleteIPBlock",
+        "parameters": [
+          {
+            "description": "Canonical IP address form, as emitted by the server (lowercase, compressed IPv6, no brackets, no zone).",
+            "in": "path",
+            "name": "ip",
+            "required": true,
+            "schema": {
+              "description": "Canonical IP address form, as emitted by the server (lowercase, compressed IPv6, no brackets, no zone).",
+              "pattern": "^[0-9a-f.:]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Clear a rate-limited IP's block",
+        "tags": [
+          "security"
+        ],
+        "x-required-role": "admin"
       }
     },
     "/api/v1/session": {
