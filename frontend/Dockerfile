@@ -46,7 +46,7 @@ WORKDIR /client-pkg
 RUN npm init -y >/dev/null
 RUN --mount=type=secret,id=npm_token \
     REGISTRY_HOST="${NPM_REGISTRY_URL#https://}" && \
-    printf '@certharbor:registry=%s\n//%s/:_authToken=%s\n' \
+    printf '@kantharos-ai:registry=%s\n//%s/:_authToken=%s\n' \
       "$NPM_REGISTRY_URL" "$REGISTRY_HOST" "$(cat /run/secrets/npm_token)" > .npmrc && \
     npm install --save-exact "@kantharos-ai/certharbor-client@${CLIENT_VERSION}" && \
     rm -f .npmrc
@@ -67,7 +67,7 @@ COPY frontend/ /src/frontend/
 WORKDIR /src/frontend
 # Either client-source stage produces the installed package at the same
 # path, so this COPY is identical regardless of CLIENT_SOURCE.
-COPY --from=client-source /client-pkg/node_modules/@certharbor ./node_modules/@certharbor
+COPY --from=client-source /client-pkg/node_modules/@kantharos-ai ./node_modules/@kantharos-ai
 # CONTRACT_SHA defaults to the digest of the spec the client was generated
 # from; a skew test overrides it to force a mismatch (5.10).
 ARG CONTRACT_SHA=""
