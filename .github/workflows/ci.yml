@@ -157,7 +157,7 @@ jobs:
         with:
           node-version: "20"
           registry-url: https://npm.pkg.github.com
-          scope: "@certharbor"
+          scope: "@kantharos-ai"
 
       - name: npm ci
         working-directory: clients/ts
@@ -191,7 +191,7 @@ jobs:
         working-directory: clients/ts
         run: |
           npm pack --pack-destination dist
-          mv dist/certharbor-client-*.tgz dist/client.tgz
+          mv dist/kantharos-ai-certharbor-client-*.tgz dist/client.tgz
 
       - name: Upload the packed client
         uses: actions/upload-artifact@v7.0.2
@@ -207,7 +207,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          if npm view "@certharbor/client@$VERSION" version >/dev/null 2>&1; then
+          if npm view "@kantharos-ai/certharbor-client@$VERSION" version >/dev/null 2>&1; then
             echo "already published at $VERSION, publish is idempotent"
           else
             npm publish ./dist/client.tgz
@@ -245,7 +245,7 @@ jobs:
       - name: Provenance, the installed client matches this commit
         run: |
           SHORT_SHA=$(git rev-parse --short HEAD)
-          VERSION=$(node -p "require('@certharbor/client/package.json').version")
+          VERSION=$(node -p "require('@kantharos-ai/certharbor-client/package.json').version")
           case "$VERSION" in
             *"$SHORT_SHA") echo "installed client $VERSION carries commit $SHORT_SHA" ;;
             *) echo "::error::installed client version $VERSION does not contain commit $SHORT_SHA"; exit 1 ;;
@@ -362,8 +362,8 @@ jobs:
           mkdir -p /tmp/contract-negative
           cd /tmp/contract-negative
           npm init -y >/dev/null
-          npm install --no-save "$GITHUB_WORKSPACE"/clients/ts/dist/certharbor-client-*.tgz
-          VERSION=$(node -p "require('@certharbor/client/package.json').version")
+          npm install --no-save "$GITHUB_WORKSPACE"/clients/ts/dist/kantharos-ai-certharbor-client-*.tgz
+          VERSION=$(node -p "require('@kantharos-ai/certharbor-client/package.json').version")
           case "$VERSION" in
             *"$SHORT_SHA") echo "::error::a client missing the commit sha was accepted ($VERSION)"; exit 1 ;;
             *) echo "correctly rejected: $VERSION does not contain $SHORT_SHA" ;;

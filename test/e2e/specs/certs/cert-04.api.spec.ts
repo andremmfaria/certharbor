@@ -4,7 +4,7 @@ import {
   getCertificateCertificate,
   renewCertificate,
   revokeCertificate,
-} from "@certharbor/client";
+} from "@kantharos-ai/certharbor-client";
 import { psql } from "../../helpers/compose.js";
 import { ApiSession, authedClient, blobText } from "../../helpers/apiClient.js";
 import { keyDetails } from "../../helpers/certs.js";

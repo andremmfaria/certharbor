@@ -6,8 +6,8 @@ describe('sdk surface', () => {
 
   it('reads names imported from any client entry point and ignores everything else', () => {
     const names = importedClientNames(`
-      import { getSession as gs } from '@certharbor/client'
-      import { createSessionMutation } from '@certharbor/client/react-query'
+      import { getSession as gs } from '@kantharos-ai/certharbor-client'
+      import { createSessionMutation } from '@kantharos-ai/certharbor-client/react-query'
       import { getStatus } from './local'
     `)
     expect([...names].sort()).toEqual(['createSessionMutation', 'getSession'])

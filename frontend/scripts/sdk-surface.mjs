@@ -3,7 +3,7 @@ import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 
-const CLIENT_PACKAGE = '@certharbor/client'
+const CLIENT_PACKAGE = '@kantharos-ai/certharbor-client'
 const DERIVED_SUFFIXES = ['', 'Options', 'QueryKey', 'Mutation', 'InfiniteOptions', 'InfiniteQueryKey']
 
 /** @param {string} dir @returns {string[]} */

@@ -5,8 +5,8 @@ import {
   importCertificateUpload,
   importCertificatesByPaths,
   listCertificateImportCandidates,
-} from "@certharbor/client";
-import type { BulkResult, ImportCandidateBody } from "@certharbor/client";
+} from "@kantharos-ai/certharbor-client";
+import type { BulkResult, ImportCandidateBody } from "@kantharos-ai/certharbor-client";
 import { psql } from "../../helpers/compose.js";
 import { ApiSession, authedClient, blobText } from "../../helpers/apiClient.js";
 import { FIXTURE_USERS } from "../../fixtures/test.js";

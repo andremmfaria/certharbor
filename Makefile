@@ -202,7 +202,7 @@ hooks: ## Register the openapi.json merge driver in this clone's git config
 .PHONY: client
 client: ## Generate, build and pack the TS client to clients/ts/dist/client.tgz
 	cd $(CLIENT_DIR) && npm ci && npm pack --pack-destination dist
-	mv $(CLIENT_DIR)/dist/certharbor-client-*.tgz $(CLIENT_DIR)/dist/client.tgz
+	mv $(CLIENT_DIR)/dist/kantharos-ai-certharbor-client-*.tgz $(CLIENT_DIR)/dist/client.tgz
 
 .PHONY: frontend-install
 frontend-install: ## Install the SPA's deps, then the packed client (run make client first)
