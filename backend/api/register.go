@@ -249,4 +249,34 @@ func Register(humaAPI huma.API, h *handlers.Handler) {
 		Tags:        []string{"provisioners"},
 		Summary:     "List the certificate authority's provisioners",
 	}), listProvisioners(h))
+
+	// Phase 5, step 2 (plans/frontend-backend-split.md Section 8): the
+	// remaining two GETs and the one DELETE of this phase's five
+	// operations (dashboard follows in step 3). security/events and
+	// audit-events both read the same auth_log table, one filtered and
+	// one not (Section 6; there is no separate audit_log table).
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID: "listSecurityEvents",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/security/events",
+		Tags:        []string{"security"},
+		Summary:     "List authentication and security events",
+	}), listSecurityEvents(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID: "listAuditEvents",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/audit-events",
+		Tags:        []string{"security"},
+		Summary:     "List the full administrative audit trail",
+	}), listAuditEvents(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID:   "deleteIPBlock",
+		Method:        http.MethodDelete,
+		Path:          BasePath + "/security/ip-blocks/{ip}",
+		Tags:          []string{"security"},
+		Summary:       "Clear a rate-limited IP's block",
+		DefaultStatus: http.StatusNoContent,
+	}), deleteIPBlock(h))
 }
