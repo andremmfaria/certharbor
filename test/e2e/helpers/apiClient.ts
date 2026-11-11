@@ -1,5 +1,5 @@
-import { client } from "@certharbor/client/client";
-import { createSession, getSession } from "@certharbor/client";
+import { client } from "@kantharos-ai/certharbor-client/client";
+import { createSession, getSession } from "@kantharos-ai/certharbor-client";
 import { BASE_URL } from "./env.js";
 import { Credentials, Role } from "./session.js";
 import { adminCredentials, authed as authedForm, ensureUser, FIXTURE_USERS } from "../fixtures/test.js";

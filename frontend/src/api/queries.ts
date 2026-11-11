@@ -5,8 +5,8 @@ import {
   getSessionOptions,
   getSessionQueryKey,
   submitMfaMutation,
-} from '@certharbor/client/react-query'
-import type { SessionBody } from '@certharbor/client'
+} from '@kantharos-ai/certharbor-client/react-query'
+import type { SessionBody } from '@kantharos-ai/certharbor-client'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isNetworkOrServerError } from './errors'
 import { dropUserData } from './invalidation'

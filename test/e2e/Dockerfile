@@ -44,7 +44,7 @@ COPY clients/ts/ /clients/ts/
 RUN npm run generate && npm run build \
  && npm version "$(tr -d '[:space:]' < /VERSION)-dev" --no-git-tag-version --allow-same-version \
  && npm pack --pack-destination dist \
- && mv dist/certharbor-client-*.tgz dist/client.tgz
+ && mv dist/kantharos-ai-certharbor-client-*.tgz dist/client.tgz
 
 WORKDIR /e2e
 

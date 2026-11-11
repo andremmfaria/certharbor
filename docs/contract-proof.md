@@ -4,7 +4,7 @@ Phase 2 of `plans/frontend-backend-split.md` asks for a real two-commit proof th
 
 ## What is being proven
 
-D8 and 7.6 make one claim: the `frontend` job's provenance assertion is what stops a stale client from going green. Without it, the frontend job could install a client from an npm cache, a previously published version, or a lockfile edit, and pass against a contract the Go code does not implement. The assertion is `node -p "require('@certharbor/client/package.json').version"`, checked for the commit's short sha.
+D8 and 7.6 make one claim: the `frontend` job's provenance assertion is what stops a stale client from going green. Without it, the frontend job could install a client from an npm cache, a previously published version, or a lockfile edit, and pass against a contract the Go code does not implement. The assertion is `node -p "require('@kantharos-ai/certharbor-client/package.json').version"`, checked for the commit's short sha.
 
 To prove the assertion is load-bearing rather than decorative, `scripts/client-version.sh` was deliberately regressed to stop appending the sha suffix, on a short-lived branch, `proof/contract-negative`, never merged into main. Both commits were run through `ci.yml` via `workflow_dispatch` against that branch, since a push to a branch other than `main` does not trigger `ci.yml`.
 
