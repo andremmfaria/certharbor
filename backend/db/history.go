@@ -42,7 +42,7 @@ func GetHistory(d *sql.DB, actions []string, cert string, page, limit int) ([]*m
 	}
 	offset := (page - 1) * limit
 	rows, err := d.Query(`SELECT id,action,cert_name,COALESCE(domain,''),COALESCE(details,''),COALESCE(username,''),COALESCE(role,''),created_at FROM cert_history `+where+ //nolint:noctx,gosec // pre-existing; where is built from app-controlled strings
-		fmt.Sprintf(` ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, i, i+1),
+		fmt.Sprintf(` ORDER BY created_at DESC, id DESC LIMIT $%d OFFSET $%d`, i, i+1),
 		append(args, limit, offset)...)
 	if err != nil {
 		return nil, 0, err

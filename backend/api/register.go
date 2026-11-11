@@ -229,4 +229,24 @@ func Register(humaAPI huma.API, h *handlers.Handler) {
 		Summary:     "Download the full certificate chain (intermediate followed by root)",
 		Responses:   binaryResponses("The intermediate certificate followed by the root certificate, PEM-encoded."),
 	}), getCAChain(h))
+
+	// Phase 5, step 1 (plans/frontend-backend-split.md Section 8): the
+	// list envelope, the total-order fix and the first two of this
+	// phase's five operations. security/events, audit-events and
+	// dashboard follow in later steps.
+	huma.Register(humaAPI, roleOp("viewer", huma.Operation{
+		OperationID: "listHistory",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/history",
+		Tags:        []string{"system"},
+		Summary:     "List certificate lifecycle history entries",
+	}), listHistory(h))
+
+	huma.Register(humaAPI, roleOp("viewer", huma.Operation{
+		OperationID: "listProvisioners",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/provisioners",
+		Tags:        []string{"provisioners"},
+		Summary:     "List the certificate authority's provisioners",
+	}), listProvisioners(h))
 }

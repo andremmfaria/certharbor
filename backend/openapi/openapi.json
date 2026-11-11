@@ -518,6 +518,44 @@
         },
         "type": "object"
       },
+      "HistoryEntryBody": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "certName": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "details": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "role": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "certName",
+          "createdAt"
+        ],
+        "type": "object"
+      },
       "ImportCandidateBody": {
         "additionalProperties": false,
         "properties": {
@@ -650,6 +688,69 @@
           "pageSize",
           "total",
           "totalPages"
+        ],
+        "type": "object"
+      },
+      "PageHistoryEntryBody": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryEntryBody"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "page": {
+            "description": "1-based page number",
+            "format": "int64",
+            "type": "integer"
+          },
+          "pageSize": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "description": "null when the server declined to count",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "totalPages": {
+            "description": "null whenever total is null",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total",
+          "totalPages"
+        ],
+        "type": "object"
+      },
+      "ProvisionerBody": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type"
         ],
         "type": "object"
       },
@@ -1790,6 +1891,142 @@
         "tags": [
           "system"
         ]
+      }
+    },
+    "/api/v1/history": {
+      "get": {
+        "operationId": "listHistory",
+        "parameters": [
+          {
+            "description": "Exact certificate name filter.",
+            "explode": false,
+            "in": "query",
+            "name": "cert",
+            "schema": {
+              "description": "Exact certificate name filter.",
+              "maxLength": 255,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Action filter, repeatable (e.g. ?action=issue\u0026action=renew).",
+            "explode": false,
+            "in": "query",
+            "name": "action",
+            "schema": {
+              "description": "Action filter, repeatable (e.g. ?action=issue\u0026action=renew).",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "default": 1,
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "default": 25,
+              "format": "int64",
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageHistoryEntryBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "viewer"
+            ]
+          }
+        ],
+        "summary": "List certificate lifecycle history entries",
+        "tags": [
+          "system"
+        ],
+        "x-required-role": "viewer"
+      }
+    },
+    "/api/v1/provisioners": {
+      "get": {
+        "operationId": "listProvisioners",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProvisionerBody"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "viewer"
+            ]
+          }
+        ],
+        "summary": "List the certificate authority's provisioners",
+        "tags": [
+          "provisioners"
+        ],
+        "x-required-role": "viewer"
       }
     },
     "/api/v1/session": {

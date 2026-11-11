@@ -51,7 +51,7 @@ func GetAuthLogs(d *sql.DB, search, filter string, page, limit int) ([]*models.A
 	}
 	offset := (page - 1) * limit
 	rows, err := d.Query(`SELECT id,username,ip,success,COALESCE(reason,''),created_at FROM auth_log `+where+ //nolint:noctx,gosec // pre-existing; where is built from app-controlled strings, not user input
-		fmt.Sprintf(` ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, i, i+1),
+		fmt.Sprintf(` ORDER BY created_at DESC, id DESC LIMIT $%d OFFSET $%d`, i, i+1),
 		append(args, limit, offset)...)
 	if err != nil {
 		return nil, 0, err
