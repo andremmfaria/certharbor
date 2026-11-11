@@ -1,26 +1,36 @@
-import { compose, psql } from "../../helpers/compose.js";
-import { expect, test } from "../../fixtures/test.js";
+import { listHistory } from "@kantharos-ai/certharbor-client";
+import { compose } from "../../helpers/compose.js";
+import { ApiSession, authedClient } from "../../helpers/apiClient.js";
+import { adminCredentials } from "../../fixtures/test.js";
+import { expect, test } from "@playwright/test";
+
+// Rewritten against GET /api/v1/history through the generated client
+// (clients/ts), the same pipeline cert-01.api.spec.ts was rewritten against.
+// The pre-split assertions scraped <span class="badge ...">action</span>
+// out of server-rendered HTML; the new operation returns a typed
+// PageHistoryEntryBody instead, so the row/action/filter checks below read
+// JSON fields (item.action, item.certName) rather than matching markup.
 
 const PAGE_SIZE = 30;
 
-/** One <tr> per entry inside the history table body, counted by its badge cell. */
-function countEntries(html: string): number {
-  return (html.match(/<span class="badge [^"]*">(issue|renew|revoke|import)<\/span>/g) ?? []).length;
-}
+let admin: ApiSession;
 
-function actionsIn(html: string): string[] {
-  return [...html.matchAll(/<span class="badge [^"]*">(issue|renew|revoke|import)<\/span>/g)].map((m) => m[1]!);
-}
+test.beforeAll(async () => {
+  admin = await authedClient(adminCredentials());
+});
 
-test("E2E-HIST-01: history pagination", async ({ admin }) => {
-  // The total is computed, never assumed: the genuine rows the certificate
-  // suite wrote are what HIST-02 and HIST-03 depend on, so the table is seeded
+test("E2E-HIST-01: history pagination via GET /api/v1/history", async () => {
+  // The total is computed, never assumed: other suites (certificates,
+  // provisioners) write history rows of their own, so the table is seeded
   // rather than truncated.
-  const before = Number(await psql("SELECT count(*) FROM cert_history"));
-  const seed = PAGE_SIZE + 5 - (before % PAGE_SIZE);
-  // The tag makes seeded names unique per run: generate_series restarts at 1
-  // every time, so a bare index would look like an overlap between pages.
+  const before = await admin.call(() => listHistory({ query: { pageSize: 1 } }));
+  expect(before.error, "baseline count request succeeded").toBeUndefined();
+  const beforeTotal = before.data?.total ?? 0;
+
+  // The tag makes seeded names unique per run: a bare index would look like
+  // an overlap between pages on a re-run.
   const tag = Date.now().toString(36);
+  const seed = PAGE_SIZE + 5 - (beforeTotal % PAGE_SIZE);
   const seeded = await compose(
     "exec",
     "-T",
@@ -39,63 +49,74 @@ test("E2E-HIST-01: history pagination", async ({ admin }) => {
   );
   expect(seeded.code, `seeding ${seed} rows: ${seeded.stderr}`).toBe(0);
 
-  const total = Number(await psql("SELECT count(*) FROM cert_history"));
+  const totalRes = await admin.call(() => listHistory({ query: { pageSize: 1 } }));
+  const total = totalRes.data?.total ?? 0;
   const expectedPages = Math.ceil(total / PAGE_SIZE);
-
-  const page1 = await admin.send(() => admin.ctx.get("/history"));
-  expect(page1.status()).toBe(200);
-  const body1 = await page1.text();
-  expect(countEntries(body1), "page 1 is full").toBe(PAGE_SIZE);
-
-  const page2 = await admin.send(() => admin.ctx.get("/history?page=2"));
-  const body2 = await page2.text();
-  const expectedOnPage2 = Math.min(PAGE_SIZE, total - PAGE_SIZE);
-  expect(countEntries(body2), `page 2 holds the remainder of ${total} rows`).toBe(expectedOnPage2);
   expect(expectedPages, "more than one page exists, so page 2 is meaningful").toBeGreaterThan(1);
 
-  // The two pages must be disjoint: a page parameter that is silently ignored
-  // returns a full, identical first page and would pass a count-only check.
-  const seedName = new RegExp(`e2e-seed-${tag}-\\d+`, "g");
-  const names1 = [...body1.matchAll(seedName)].map((m) => m[0]);
-  const names2 = [...body2.matchAll(seedName)].map((m) => m[0]);
-  const overlap = names1.filter((n) => names2.includes(n));
+  const page1 = await admin.call(() => listHistory({ query: { page: 1, pageSize: PAGE_SIZE } }));
+  expect(page1.error, "page 1 request succeeded").toBeUndefined();
+  const items1 = page1.data?.items ?? [];
+  expect(items1.length, "page 1 is full").toBe(PAGE_SIZE);
+
+  const page2 = await admin.call(() => listHistory({ query: { page: 2, pageSize: PAGE_SIZE } }));
+  const items2 = page2.data?.items ?? [];
+  const expectedOnPage2 = Math.min(PAGE_SIZE, total - PAGE_SIZE);
+  expect(items2.length, `page 2 holds the remainder of ${total} rows`).toBe(expectedOnPage2);
+
+  // The two pages must be disjoint: a page parameter that is silently
+  // ignored returns a full, identical first page and would pass a
+  // count-only check.
+  const ids1 = items1.map((i: { id: number }) => i.id);
+  const ids2 = items2.map((i: { id: number }) => i.id);
+  const overlap = ids1.filter((id: number) => ids2.includes(id));
   expect(overlap, "page 1 and page 2 share no entries").toEqual([]);
 });
 
-test("E2E-HIST-02: the history action filter", async ({ admin }) => {
-  const filtered = await admin.send(() => admin.ctx.get("/history?action=issue&action=revoke"));
-  const filteredBody = await filtered.text();
-  const filteredActions = actionsIn(filteredBody);
+test("E2E-HIST-02: the history action filter", async () => {
+  const filtered = await admin.call(() => listHistory({ query: { action: ["issue", "revoke"] } }));
+  expect(filtered.error, "filtered request succeeded").toBeUndefined();
+  const filteredActions = (filtered.data?.items ?? []).map((i: { action: string }) => i.action);
 
-  // The control is scoped by certificate name rather than left wholly
-  // unfiltered: E2E-HIST-01's seeded rows are newer than E2E-CERT-04's renew
-  // and would push it off page 1, which would make this clause fail for a
-  // reason unrelated to the action filter. It applies no action filter, which
-  // is the part under test here.
-  const control = await admin.send(() => admin.ctx.get("/history?cert=e2e-dur-8760h"));
-  const controlActions = actionsIn(await control.text());
+  // Scoped by certificate name rather than left wholly unfiltered, mirroring
+  // the server-rendered era's control: this proves renew rows exist at all
+  // in this environment, so their absence above is not simply "no renews
+  // happened yet".
+  const control = await admin.call(() => listHistory({ query: { cert: "e2e-dur-8760h" } }));
+  const controlActions = (control.data?.items ?? []).map((i: { action: string }) => i.action);
 
   expect(filteredActions.length, "zero rows would satisfy the exclusion trivially").toBeGreaterThan(0);
-  expect(filteredActions.filter((a) => a === "renew"), "no renew survives the filter").toEqual([]);
-  // Without this third clause the exclusion is unfalsifiable: GetHistory's
-  // error is discarded (handlers/history.go:30), so a broken query and a
-  // working filter look identical.
+  expect(filteredActions.filter((a: string) => a === "renew"), "no renew survives the filter").toEqual([]);
+  // Without this third clause the exclusion is unfalsifiable if the action
+  // filter were silently ignored by the query layer.
   expect(controlActions, "a renew row is visible when no action filter is applied").toContain("renew");
 });
 
-test("E2E-HIST-03: the history certificate-name filter", async ({ admin }) => {
+test("E2E-HIST-03: the history certificate-name filter", async () => {
   const subject = "e2e-server-ec-p256";
 
-  const filtered = await admin.send(() => admin.ctx.get(`/history?cert=${subject}`));
-  const filteredBody = await filtered.text();
-  const names = [...filteredBody.matchAll(/<td[^>]*>\s*([A-Za-z0-9._-]+)\s*<\/td>/g)].map((m) => m[1]!);
+  const filtered = await admin.call(() => listHistory({ query: { cert: subject } }));
+  expect(filtered.error, "filtered request succeeded").toBeUndefined();
+  const items = filtered.data?.items ?? [];
+  const names = items.map((i: { certName: string }) => i.certName);
 
-  expect(countEntries(filteredBody), "the filter returns something").toBeGreaterThan(0);
-  expect(filteredBody).toContain(subject);
-  expect(names.filter((n) => n.startsWith("e2e-") && n !== subject), "no other certificate survives").toEqual([]);
+  expect(items.length, "the filter returns something").toBeGreaterThan(0);
+  expect(names.every((n: string) => n === subject), "no other certificate survives").toBe(true);
 
-  const unfiltered = await admin.send(() => admin.ctx.get("/history"));
-  const unfilteredBody = await unfiltered.text();
-  expect(unfilteredBody.includes("e2e-seed-") || /e2e-(dur|client|wildcard|internal)/.test(unfilteredBody),
-    "the unfiltered view carries entries for a different certificate").toBe(true);
+  const unfiltered = await admin.call(() => listHistory({ query: { pageSize: 200 } }));
+  const unfilteredNames = (unfiltered.data?.items ?? []).map((i: { certName: string }) => i.certName);
+  expect(
+    unfilteredNames.some((n: string) => n.startsWith("e2e-seed-") || /e2e-(dur|client|wildcard|internal)/.test(n)),
+    "the unfiltered view carries entries for a different certificate",
+  ).toBe(true);
+});
+
+test("E2E-HIST-04: pageSize over 200 is rejected with 422", async () => {
+  const res = await admin.call(() => listHistory({ query: { pageSize: 201 } }));
+  expect(res.response?.status).toBe(422);
+});
+
+test("E2E-HIST-05: page*pageSize beyond the max offset is rejected with 422", async () => {
+  const res = await admin.call(() => listHistory({ query: { page: 51, pageSize: 200 } }));
+  expect(res.response?.status).toBe(422);
 });

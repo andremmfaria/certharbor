@@ -8,10 +8,12 @@ import { AuthLayout } from '../layouts/AuthLayout'
 import { CertificateDetailPage } from './CertificateDetailPage'
 import { CertificatesPage } from './CertificatesPage'
 import { DashboardPage } from './DashboardPage'
+import { HistoryPage } from './HistoryPage'
 import { ImportPage } from './ImportPage'
 import { IssuePage } from './IssuePage'
 import { NotFoundPage } from './NotFoundPage'
 import { placeholderFor } from './Placeholder'
+import { ProvisionersPage } from './ProvisionersPage'
 import { RequireRole } from './RequireRole'
 import { RootShell } from './RootShell'
 import { routeList, type RouteEntry } from './routeList'
@@ -20,14 +22,16 @@ function relative(path: string, prefix = ''): string {
   return path.slice(prefix.length).replace(/^\//, '')
 }
 
-// The four leaves phase 4 builds for real; everything else is still a
-// placeholder until its own phase lands.
+// The pages built for real so far; everything else is still a placeholder
+// until its own phase lands.
 const BUILT_PAGES: Record<string, ComponentType> = {
   dashboard: DashboardPage,
   certificates: CertificatesPage,
   'certificate-detail': CertificateDetailPage,
   issue: IssuePage,
   import: ImportPage,
+  history: HistoryPage,
+  provisioners: ProvisionersPage,
 }
 
 function leaf(route: RouteEntry): RouteObject {

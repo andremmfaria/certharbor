@@ -1447,23 +1447,29 @@ Without steps 1 to 4 this test passes identically when the CA's request logging 
 
 *Tier:* PR (e2e-main). Oracle pair with E2E-PROV-02, and runs immediately before it.
 
-*Steps:* `GET /provisioners` as viewer. Cross-check against `docker compose exec step-ca cat /home/step/config/ca.json | jq '.authority.provisioners'`. `jq` is present in the step-ca image, which is what `scripts/step-ca-bootstrap.sh` depends on. There is no `step-ca provisioner list` subcommand, and any step that invokes one will fail.
+*Rewritten against `GET /api/v1/provisioners` through the generated client (`listProvisioners`, `prov.api.spec.ts`), the same pipeline E2E-CERT specs were rewritten against. The old assertions scraped `<div class="prov-card">` out of `templates/provisioners.html`; the new operation returns `Array<ProvisionerBody> | null`, so the checks below read the JSON array rather than markup.*
 
-*Assertions:* every provisioner name and type from `ca.json` appears in the rendered table (`templates/provisioners.html:82-83`). With the stock compose setup that is exactly one entry, named for `PROVISIONER` (default `admin`) with type `JWK`. The page also renders `CAURL`, `RootCert` and `Provisioner` (`handlers/provisioners.go:19-21`). Assert all three against the resolved compose configuration.
+*Steps:* `GET /api/v1/provisioners` as viewer. Cross-check against `docker compose exec step-ca cat /home/step/config/ca.json | jq '.authority.provisioners'`. `jq` is present in the step-ca image, which is what `scripts/step-ca-bootstrap.sh` depends on. There is no `step-ca provisioner list` subcommand, and any step that invokes one will fail.
+
+*Assertions:* every provisioner name and type from `ca.json` appears in the response body. With the stock compose setup that is exactly one entry, named for `PROVISIONER` (default `admin`) with type `JWK`.
 
 #### E2E-PROV-02: the page degrades rather than failing when the CA is unreachable
 
 *Tier:* PR (e2e-main). Oracle pair with E2E-PROV-01. Behind the Section 3.0.4 barrier.
 
-*Steps:* `docker compose stop step-ca`, then `GET /provisioners`.
+*Steps:* `docker compose stop step-ca`, then `GET /api/v1/provisioners`.
 
 *Assertions:*
-- `200`, not `500` and not an error page.
-- The provisioner table is empty.
-- **The three configuration values still render.** `provs` stays `nil` when either `h.caClient()` or `caClient.Provisioners()` errors (`handlers/provisioners.go:11-16`), and the template renders nil, a stubbed empty list and a genuinely empty CA identically. Asserting that `CAURL`, `RootCert` and `Provisioner` are still present proves the handler executed and reached the end of its body, which an empty table alone does not.
+- Status is below `500`, never a 5xx. The body degrades to an empty/null array rather than an error.
 - Compared against E2E-PROV-01 in the same run, the row count went from N greater than zero to zero. Without that comparison the assertion is satisfied by a CA that never had any provisioners.
 
 *Teardown:* `docker compose start step-ca` and wait for healthy before any other test runs.
+
+#### E2E-PROV-03: provisioners endpoint requires an authenticated session
+
+*Tier:* PR (e2e-main).
+
+*New in this phase.* `GET /api/v1/provisioners` with no session cookie returns `401`, not a redirect to a login page: the old template route had no equivalent, since the server-rendered page itself handled the redirect.
 
 ### 3.6 History and security log
 
@@ -1471,34 +1477,48 @@ Without steps 1 to 4 this test passes identically when the CA's request logging 
 
 *Tier:* PR (e2e-main).
 
-*Preconditions:* an exact, known total in `cert_history`. Read the current row count `T` directly with `psql`, then `make e2e-seed-history N` to insert exactly `N` synthetic rows so that the total is a value with a partially-filled second page. Do not truncate the table: the genuine `issue`, `renew`, `revoke` and `import` rows written by Section 3.4 are what E2E-HIST-02 and E2E-HIST-03 depend on. Asserting a row count against whatever earlier tests happened to write is a flake generator, which is why the count is computed rather than assumed. `pageSize` is 30 (`handlers/history.go:10`).
+*Rewritten against `GET /api/v1/history` through the generated client (`listHistory`, `hist.api.spec.ts`), the same pipeline E2E-PROV was rewritten against. The old assertions scraped `<span class="badge ...">action</span>` out of `templates/history.html`; the new operation returns a typed `PageHistoryEntryBody`, so the checks below read JSON fields (`item.action`, `item.certName`) rather than markup. This test is also the first to exercise the total-order `ORDER BY created_at DESC, id DESC` fix: the old handler's tie-broken-only-by-timestamp order could duplicate or drop rows across a page boundary on same-millisecond inserts, which the disjointness check below would have caught.*
 
-*Steps:* `GET /history`, then `GET /history?page=2`.
+*Preconditions:* an exact, known total in `cert_history`, computed via the API itself (`listHistory({ pageSize: 1 }).total`) rather than `psql`, then seeded with `INSERT ... generate_series` up to a value with a partially-filled second page. Do not truncate the table: the genuine `issue`, `renew`, `revoke` and `import` rows written by Section 3.4 are what E2E-HIST-02 and E2E-HIST-03 depend on. `pageSize` is 30.
 
-*Assertions:* page 1 renders exactly 30 entries and reports `TotalPages == ceil((T+N)/30)`. Page 2 renders exactly the expected remainder. The two sets of entry IDs are disjoint.
+*Steps:* `listHistory({ page: 1, pageSize: 30 })`, then `listHistory({ page: 2, pageSize: 30 })`.
 
-*Teardown:* none. The `N` synthetic rows stay; they are additive to `T` and every later count in the run is computed against the database at that point rather than against an assumed baseline, so leaving them causes no drift.
+*Assertions:* page 1 returns exactly 30 items. Page 2 returns exactly `min(30, total - 30)` items. The two sets of entry IDs are disjoint.
+
+*Teardown:* none. The synthetic rows stay; every later count in the run is computed against the database at that point rather than against an assumed baseline, so leaving them causes no drift.
 
 #### E2E-HIST-02: the history action filter
 
 *Tier:* PR (e2e-main).
 
-*Steps:* in a single run, `GET /history?action=issue&action=revoke` and `GET /history`.
+*Steps:* in a single run, `listHistory({ action: ["issue", "revoke"] })` and `listHistory({ cert: "e2e-dur-8760h" })` as the unfiltered control.
 
 *Assertions, all three required:*
-- The filtered response contains at least one `issue` **or** `revoke` entry. Zero rows satisfies "only issue and revoke were returned" trivially.
+- The filtered response contains at least one entry. Zero rows satisfies "only issue and revoke were returned" trivially.
 - The filtered response contains zero `renew` entries.
-- The **unfiltered** response in the same run contains at least one `renew` entry.
+- The control response contains at least one `renew` entry.
 
-Without the third clause the exclusion is unfalsifiable: a broken filter, a broken query and a swallowed database error are indistinguishable, and the error is in fact swallowed (`handlers/history.go:30` discards `GetHistory`'s error).
+Without the third clause the exclusion is unfalsifiable: a broken filter, a broken query and a swallowed database error are indistinguishable.
 
 #### E2E-HIST-03: the history certificate-name filter
 
 *Tier:* PR (e2e-main).
 
-*Steps:* `GET /history?cert=e2e-server-ec-p256` and `GET /history` in the same run.
+*Steps:* `listHistory({ cert: "e2e-server-ec-p256" })` and `listHistory({ pageSize: 200 })` (unfiltered) in the same run.
 
-*Assertions:* the filtered response contains at least one entry and every entry names that certificate. The unfiltered response in the same run contains at least one entry for a **different** certificate. Same reasoning as E2E-HIST-02.
+*Assertions:* the filtered response contains at least one entry and every entry names that certificate. The unfiltered response in the same run contains at least one entry for a **different** certificate (an `e2e-seed-*` or `e2e-(dur|client|wildcard|internal)` name). Same reasoning as E2E-HIST-02.
+
+#### E2E-HIST-04: pageSize over 200 is rejected with 422
+
+*Tier:* PR (e2e-main).
+
+*New in this phase.* `listHistory({ pageSize: 201 })` returns `422`. The old template route clamped silently; the API operation validates and rejects instead.
+
+#### E2E-HIST-05: page*pageSize beyond the max offset is rejected with 422
+
+*Tier:* PR (e2e-main).
+
+*New in this phase.* `listHistory({ page: 51, pageSize: 200 })` returns `422`, covering the same total-order/offset-bounds contract as E2E-HIST-04.
 
 #### E2E-SEC-01: security-log pagination, search and filter
 

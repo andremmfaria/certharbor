@@ -1401,6 +1401,15 @@ List, detail, options, issue, import candidates, the two import operations, rene
 
 Includes the list envelope, the total-order fix, the nullable `total`, and D10's two aggregate rules applied to `dashboard` with the `source:` struct tags.
 
+**Step 1 of this phase landed history and provisioners** (`GET /api/v1/history`, `GET /api/v1/provisioners`, the `ORDER BY created_at DESC, id DESC` total-order fix, `HistoryPage.tsx`/`ProvisionersPage.tsx`, and the rewritten `hist.api.spec.ts`/`prov.api.spec.ts`). Security/events, audit-events and the dashboard aggregate are deferred to subsequent steps; the phase is not complete.
+
+#### Phase 5 Parity table (step 1: history, provisioners)
+
+| Old template route | Fields rendered / actions offered | New operation(s) | Covering test / deviation |
+| --- | --- | --- | --- |
+| `GET /history` | `history.html`: a multi-select action-chip filter (issue/renew/revoke/import) with a Reset link, a Total count, and a table of Time, Action badge, Certificate, Domain, Details, User. Pagination links carry the current action filter. | `GET /api/v1/history` (`listHistory`, with `page`/`pageSize`/`action[]`/`cert` query, returning a typed `PageHistoryEntryBody` envelope with `total`) | E2E-HIST-01 (pagination + the total-order fix's disjointness check), E2E-HIST-02 (action filter), E2E-HIST-03 (cert-name filter), E2E-HIST-04/05 (422 bounds, new in this phase — the old route clamped silently) |
+| `GET /provisioners` | `provisioners.html`: a CA Connection card (CA URL, CA certs with admin-only chain downloads, configured Provisioner name) plus a card per provisioner (name, type), or an empty-state card when the CA is unreachable. | `GET /api/v1/provisioners` (`listProvisioners`, returns `Array<ProvisionerBody> \| null`) | E2E-PROV-01 (matches `ca.json`), E2E-PROV-02 (degrades to empty/null, never 5xx, oracle pair with -01), E2E-PROV-03 (401 unauthenticated, new in this phase) |
+
 **The total-order fix touches `db/authlog.go` and `db/history.go`, which the live template routes still use**, so it can silently change results the existing HIST and SEC specs assert on. Confirm those still pass after the change, or rewrite them in the same PR.
 
 **Exit criterion.** The tied-timestamp pagination test passes on `history`, `audit-events` and `security/events`. `acme/events` joins the same table in Phase 7. The aggregate `source:` test passes. Rewritten history, security, audit and dashboard specs pass. `Parity` table signed off.
