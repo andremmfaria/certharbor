@@ -39,7 +39,9 @@ test("E2E-AUDIT-01: audit events pagination via GET /api/v1/audit-events", async
      SELECT '${username}', '198.51.100.1', false, 'seeded for E2E-AUDIT-01'
      FROM generate_series(1, ${seedCount})`,
   );
-  expect(seeded, "seeding is a write with no rows returned").toBe("");
+  expect(seeded, "seeding is a write, not a SELECT: psql's -At still prints the INSERT command tag").toMatch(
+    /^INSERT 0 \d+$/,
+  );
 
   const totalRes = await admin.call(() => listAuditEvents({ query: { pageSize: 1 } }));
   const total = totalRes.data?.total ?? 0;
