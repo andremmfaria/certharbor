@@ -39,8 +39,12 @@ export interface FakeApiState {
   provisioners: { name: string; type: string }[]
   // Narrower than `down`, which also breaks the session/config calls every
   // page depends on to render at all: these fail only their own endpoint.
+  // Each operation gets its own flag rather than sharing one: reusing a
+  // single flag across getSession/getConfig and a page endpoint once broke
+  // the former for every test exercising the latter's error state.
   historyDown: boolean
   provisionersDown: boolean
+  dashboardDown: boolean
   // Artificial delay (ms) before any response resolves, so tests asserting
   // on a transient loading state have a window to observe it.
   delayMs: number
@@ -116,6 +120,7 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
     provisioners: [{ name: 'admin', type: 'JWK' }],
     historyDown: false,
     provisionersDown: false,
+    dashboardDown: false,
     delayMs: 0,
     ...overrides,
   }
@@ -273,6 +278,25 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
       case 'GET /api/v1/provisioners':
         if (state.provisionersDown) return problem(500, 'Internal Server Error', 'provisioners unavailable')
         return json(state.provisioners)
+      case 'GET /api/v1/dashboard': {
+        if (state.dashboardDown) return problem(500, 'Internal Server Error', 'dashboard unavailable')
+        const byStatus = { ok: 0, warning: 0, expired: 0 } as Record<string, number>
+        for (const c of state.certificates) byStatus[c.expiryStatus] = (byStatus[c.expiryStatus] ?? 0) + 1
+        return json({
+          certificates: {
+            total: state.certificates.length,
+            byStatus,
+            expiringSoon: byStatus.warning ?? 0,
+          },
+          ca: {
+            subject: 'CN=Fake Root CA',
+            fingerprintSha256: 'ff:ee:dd',
+            notBefore: '2026-01-01T00:00:00Z',
+            notAfter: '2036-01-01T00:00:00Z',
+            reachable: true,
+          },
+        })
+      }
       case 'POST /api/v1/certificates/import/paths': {
         const items = body as { name: string; domain: string; certPath: string }[]
         return json({ results: items.map((i) => ({ ref: i.name, status: 'ok' as const })) })

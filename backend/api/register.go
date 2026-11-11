@@ -249,4 +249,16 @@ func Register(humaAPI huma.API, h *handlers.Handler) {
 		Tags:        []string{"provisioners"},
 		Summary:     "List the certificate authority's provisioners",
 	}), listProvisioners(h))
+
+	// Phase 5, step 3: the dashboard aggregate, replacing GET / and GET
+	// /dashboard (D4 decision 8, D10). viewer, same as every source it
+	// draws from (listCertificates, getCA) — D10 rule 2. No ACME field yet:
+	// see dashboard.go's comment.
+	huma.Register(humaAPI, roleOp("viewer", huma.Operation{
+		OperationID: "getDashboard",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/dashboard",
+		Tags:        []string{"dashboard"},
+		Summary:     "Get the dashboard aggregate: certificate counts and CA status",
+	}), getDashboard(h))
 }

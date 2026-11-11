@@ -446,6 +446,50 @@
         ],
         "type": "object"
       },
+      "DashboardBody": {
+        "additionalProperties": false,
+        "properties": {
+          "ca": {
+            "$ref": "#/components/schemas/CaInfoBody"
+          },
+          "certificates": {
+            "$ref": "#/components/schemas/DashboardCertificatesBody"
+          }
+        },
+        "required": [
+          "certificates",
+          "ca"
+        ],
+        "type": "object"
+      },
+      "DashboardCertificatesBody": {
+        "additionalProperties": false,
+        "properties": {
+          "byStatus": {
+            "additionalProperties": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "description": "Certificate counts keyed by expiryStatus: ok, warning, expired.",
+            "type": "object"
+          },
+          "expiringSoon": {
+            "description": "Certificates whose expiryStatus is warning.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "byStatus",
+          "expiringSoon"
+        ],
+        "type": "object"
+      },
       "ErrorDetail": {
         "additionalProperties": false,
         "properties": {
@@ -1891,6 +1935,45 @@
         "tags": [
           "system"
         ]
+      }
+    },
+    "/api/v1/dashboard": {
+      "get": {
+        "operationId": "getDashboard",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "viewer"
+            ]
+          }
+        ],
+        "summary": "Get the dashboard aggregate: certificate counts and CA status",
+        "tags": [
+          "dashboard"
+        ],
+        "x-required-role": "viewer"
       }
     },
     "/api/v1/history": {

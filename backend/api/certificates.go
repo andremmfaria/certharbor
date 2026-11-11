@@ -560,12 +560,15 @@ func getCertificateKey(h *handlers.Handler) func(context.Context, *getCertificat
 	}
 }
 
+// caInfoBody's source tags name getCA because this type doubles as the
+// dashboard aggregate's ca field (D10 rule 1: the dashboard composes this
+// operation's own response shape rather than a parallel aggregate-only one).
 type caInfoBody struct {
-	Subject           string     `json:"subject"`
-	FingerprintSha256 string     `json:"fingerprintSha256"`
-	NotBefore         *time.Time `json:"notBefore,omitempty"`
-	NotAfter          *time.Time `json:"notAfter,omitempty"`
-	Reachable         bool       `json:"reachable"`
+	Subject           string     `json:"subject" source:"getCA"`
+	FingerprintSha256 string     `json:"fingerprintSha256" source:"getCA"`
+	NotBefore         *time.Time `json:"notBefore,omitempty" source:"getCA"`
+	NotAfter          *time.Time `json:"notAfter,omitempty" source:"getCA"`
+	Reachable         bool       `json:"reachable" source:"getCA"`
 }
 
 type getCAInfoOutput struct {
