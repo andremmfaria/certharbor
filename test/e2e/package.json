@@ -1,6 +1,6 @@
 {
   "name": "certharbor-e2e",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "description": "End-to-end suite for certharbor (plans/e2e-tests.md). Deliberately its own Node project, outside the Go module and the repo-root frontend tooling.",
   "license": "SEE LICENSE IN ../../LICENSE",

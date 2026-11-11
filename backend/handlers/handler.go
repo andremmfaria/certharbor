@@ -31,7 +31,7 @@ var StartedAt time.Time
 
 // Versioning, overridden via ldflags at build time
 var (
-	Version   = "0.1.3"
+	Version   = "0.1.4"
 	BuildDate = "2026-05-28"
 	GitCommit = "unknown"
 )
