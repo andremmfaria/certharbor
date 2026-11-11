@@ -38,7 +38,11 @@ describe('provisioners page', () => {
     installFakeApi({ session: 'authenticated', provisionersDown: true })
     // The default query client retries server errors with real exponential
     // backoff, which outlasts the test's assertion timeout; disable retry.
-    renderRoutes(appRoutes, ['/provisioners'], new QueryClient({ defaultOptions: { queries: { retry: false } } }))
+    renderRoutes(
+      appRoutes,
+      ['/provisioners'],
+      new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+    )
 
     expect(await screen.findByTestId('error-state')).toBeInTheDocument()
   })

@@ -57,7 +57,7 @@ func TestListHistory_TiedTimestampPaginationThroughHTTP(t *testing.T) {
 	tied := time.Now().UTC().Truncate(time.Second)
 	const total = 60
 	for i := 0; i < total; i++ {
-		if _, err := db.Exec(//nolint:noctx // test setup
+		if _, err := db.Exec( //nolint:noctx // test setup
 			`INSERT INTO cert_history (action,cert_name,domain,details,username,role,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
 			"issue", "http-tied-cert", "http-tied.example.com", "", "tester", "admin", tied,
 		); err != nil {

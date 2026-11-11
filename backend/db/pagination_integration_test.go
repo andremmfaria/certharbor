@@ -56,7 +56,7 @@ func TestGetHistory_TiedTimestampPaginationHasNoRepeatOrOmission(t *testing.T) {
 	tied := time.Now().UTC().Truncate(time.Second)
 	const total = 60
 	for i := 0; i < total; i++ {
-		if _, err := d.Exec(//nolint:noctx // test setup
+		if _, err := d.Exec( //nolint:noctx // test setup
 			`INSERT INTO cert_history (action,cert_name,domain,details,username,role,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
 			"issue", "tied-cert", "tied.example.com", "", "tester", "admin", tied,
 		); err != nil {
@@ -86,7 +86,7 @@ func TestGetAuthLogs_TiedTimestampPaginationHasNoRepeatOrOmission(t *testing.T) 
 	tied := time.Now().UTC().Truncate(time.Second)
 	const total = 60
 	for i := 0; i < total; i++ {
-		if _, err := d.Exec(//nolint:noctx // test setup
+		if _, err := d.Exec( //nolint:noctx // test setup
 			`INSERT INTO auth_log (username,ip,success,reason,created_at) VALUES ($1,$2,$3,$4,$5)`,
 			"tied-user", "127.0.0.1", true, "", tied,
 		); err != nil {
