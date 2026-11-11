@@ -1,5 +1,5 @@
 import { deleteIpBlock, listSecurityEvents } from "@kantharos-ai/certharbor-client";
-import { exec } from "../../helpers/compose.js";
+import { exec, psql } from "../../helpers/compose.js";
 import { ApiSession, authedClient, newApiClient } from "../../helpers/apiClient.js";
 import { adminCredentials } from "../../fixtures/test.js";
 import { expect, test } from "@playwright/test";
@@ -60,16 +60,21 @@ test("E2E-SEC-EVENTS-01: security events pagination, search and outcome filter",
   const username = `e2e-sec-events-${tag}`;
   const seedCount = PAGE_SIZE + 5 - (beforeTotal % PAGE_SIZE);
 
-  // A bare read never writes auth_log, so this test seeds rows through the
-  // real login-failure path instead, against a single disposable username:
-  // that guarantees outcome=failure rows it owns and can search for by name,
-  // without truncating or otherwise disturbing rows other suites wrote.
-  const { createSession, getSession } = await import("@kantharos-ai/certharbor-client");
-  const anon = newApiClient();
-  for (let i = 0; i < seedCount; i++) {
-    await anon.call(() => getSession({}));
-    await anon.call(() => createSession({ body: { username, password: "wrong-on-purpose" } }));
-  }
+  // A bare read never writes auth_log, so this test seeds rows directly
+  // against a single disposable username: that guarantees outcome=failure
+  // rows it owns and can search for by name, without truncating or
+  // otherwise disturbing rows other suites wrote. Seeding through the real
+  // login-failure path instead would register every attempt against
+  // security.RL (backend/security/security.go): LimitCount is 5 per
+  // LimitWindow, so a seed loop of more than 5 would trip the harness's own
+  // source IP and 429 every login from it (including this file's own admin
+  // session, and every later spec file's) for the next 5 minutes.
+  const seeded = await psql(
+    `INSERT INTO auth_log (username, ip, success, reason)
+     SELECT '${username}', '198.51.100.1', false, 'seeded for E2E-SEC-EVENTS-01'
+     FROM generate_series(1, ${seedCount})`,
+  );
+  expect(seeded, "seeding is a write with no rows returned").toBe("");
 
   const totalRes = await admin.call(() => listSecurityEvents({ query: { pageSize: 1 } }));
   const total = totalRes.data?.total ?? 0;
@@ -79,8 +84,14 @@ test("E2E-SEC-EVENTS-01: security events pagination, search and outcome filter",
   expect(searched.error, "search request succeeded").toBeUndefined();
   const items = searched.data?.items ?? [];
   expect(items.length, "the username search matches this test's own rows").toBeGreaterThan(0);
-  expect(items.every((i) => i.username === username), "no other username survives the search").toBe(true);
-  expect(items.every((i) => i.outcome === "failure"), "every seeded row is a failure").toBe(true);
+  expect(
+    items.every((i: { username?: string }) => i.username === username),
+    "no other username survives the search",
+  ).toBe(true);
+  expect(
+    items.every((i: { outcome: string }) => i.outcome === "failure"),
+    "every seeded row is a failure",
+  ).toBe(true);
 
   const successOnly = await admin.call(() =>
     listSecurityEvents({ query: { q: username, outcome: "success", pageSize: 200 } }),
