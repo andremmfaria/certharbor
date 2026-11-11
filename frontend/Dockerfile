@@ -5,7 +5,7 @@
 
 # CLIENT_SOURCE selects the client-source stage below: "local" (default)
 # builds the client from source in-image, "registry" installs the real
-# published @certharbor/client at an exact version. Must be
+# published @kantharos-ai/certharbor-client at an exact version. Must be
 # declared before any FROM that references it.
 ARG CLIENT_SOURCE=local
 
@@ -26,7 +26,7 @@ RUN npm ci \
  && npm run generate && npm run build \
  && npm version "$(tr -d '[:space:]' < ../../VERSION)-dev" --no-git-tag-version --allow-same-version \
  && npm pack --pack-destination dist \
- && mv dist/certharbor-client-*.tgz dist/client.tgz
+ && mv dist/kantharos-ai-certharbor-client-*.tgz dist/client.tgz
 WORKDIR /client-pkg
 RUN npm init -y >/dev/null \
  && npm install --no-save /src/clients/ts/dist/client.tgz
@@ -48,7 +48,7 @@ RUN --mount=type=secret,id=npm_token \
     REGISTRY_HOST="${NPM_REGISTRY_URL#https://}" && \
     printf '@certharbor:registry=%s\n//%s/:_authToken=%s\n' \
       "$NPM_REGISTRY_URL" "$REGISTRY_HOST" "$(cat /run/secrets/npm_token)" > .npmrc && \
-    npm install --save-exact "@certharbor/client@${CLIENT_VERSION}" && \
+    npm install --save-exact "@kantharos-ai/certharbor-client@${CLIENT_VERSION}" && \
     rm -f .npmrc
 
 # ── Client source selection ───────────────────────────────────────────────────

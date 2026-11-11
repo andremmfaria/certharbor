@@ -1,5 +1,5 @@
 import './zodConfig'
-import { getSessionQueryKey } from '@certharbor/client/react-query'
+import { getSessionQueryKey } from '@kantharos-ai/certharbor-client/react-query'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createBrowserRouter } from 'react-router'

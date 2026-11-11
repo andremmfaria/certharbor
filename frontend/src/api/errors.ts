@@ -1,4 +1,4 @@
-import type { ErrorModel } from '@certharbor/client'
+import type { ErrorModel } from '@kantharos-ai/certharbor-client'
 
 export type Problem = ErrorModel
 
