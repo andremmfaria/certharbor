@@ -35,6 +35,26 @@ export interface FakeApiState {
   csrfCookie: string
   certificates: FakeCertificate[]
   importCandidates: { name: string; certFile: string; keyFile?: string }[]
+  history: FakeHistoryEntry[]
+  provisioners: { name: string; type: string }[]
+  // Narrower than `down`, which also breaks the session/config calls every
+  // page depends on to render at all: these fail only their own endpoint.
+  historyDown: boolean
+  provisionersDown: boolean
+  // Artificial delay (ms) before any response resolves, so tests asserting
+  // on a transient loading state have a window to observe it.
+  delayMs: number
+}
+
+export interface FakeHistoryEntry {
+  id: number
+  action: string
+  certName: string
+  domain: string
+  details: string
+  username: string
+  role: string
+  createdAt: string
 }
 
 export interface RecordedCall {
@@ -81,6 +101,22 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
       },
     ],
     importCandidates: [{ name: 'orphan', certFile: 'orphan.crt', keyFile: 'orphan.key' }],
+    history: [
+      {
+        id: 1,
+        action: 'issue',
+        certName: 'example',
+        domain: 'example.test',
+        details: 'synthetic',
+        username: 'alice',
+        role: 'admin',
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+    ],
+    provisioners: [{ name: 'admin', type: 'JWK' }],
+    historyDown: false,
+    provisionersDown: false,
+    delayMs: 0,
     ...overrides,
   }
   const calls: RecordedCall[] = []
@@ -101,6 +137,8 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
     const isJsonBody = text && !request.headers.get('Content-Type')?.includes('multipart/form-data')
     const body: unknown = isJsonBody ? JSON.parse(text) : undefined
     calls.push({ method, path: url.pathname, csrf: request.headers.get('X-CSRF-Token'), body })
+
+    if (state.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, state.delayMs))
 
     if (state.down === 'network') throw new TypeError('Failed to fetch')
     if (state.down)
@@ -213,6 +251,28 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
         })
       case 'GET /api/v1/certificates/import-candidates':
         return json(state.importCandidates)
+      case 'GET /api/v1/history': {
+        if (state.historyDown) return problem(500, 'Internal Server Error', 'history unavailable')
+        const actions = url.searchParams.getAll('action').filter((a) => a !== '')
+        const cert = url.searchParams.get('cert') ?? ''
+        const page = Number(url.searchParams.get('page') ?? '1')
+        const pageSize = Number(url.searchParams.get('pageSize') ?? '25')
+        const filtered = state.history.filter(
+          (e) => (actions.length === 0 || actions.includes(e.action)) && (!cert || e.certName === cert),
+        )
+        const start = (page - 1) * pageSize
+        const items = filtered.slice(start, start + pageSize)
+        return json({
+          items,
+          page,
+          pageSize,
+          total: filtered.length,
+          totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
+        })
+      }
+      case 'GET /api/v1/provisioners':
+        if (state.provisionersDown) return problem(500, 'Internal Server Error', 'provisioners unavailable')
+        return json(state.provisioners)
       case 'POST /api/v1/certificates/import/paths': {
         const items = body as { name: string; domain: string; certPath: string }[]
         return json({ results: items.map((i) => ({ ref: i.name, status: 'ok' as const })) })
