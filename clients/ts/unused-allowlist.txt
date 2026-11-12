@@ -6,3 +6,9 @@
 getSpikeBlob
 postSpikeUpload
 getStatus
+
+# downloadBackup: the pg_dump archive must never be buffered into JS heap as
+# a Blob, so frontend/src/api/backups.ts's navigateToBackupDownload does a
+# real top-level window.location.assign navigation instead of calling the
+# generated client (R9, 5.7 binary responses).
+downloadBackup
