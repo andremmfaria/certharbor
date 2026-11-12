@@ -39,6 +39,9 @@ export interface FakeApiState {
   provisioners: { name: string; type: string }[]
   securityEvents: FakeSecurityEvent[]
   auditEvents: FakeSecurityEvent[]
+  adminAbout: FakeAdminAbout
+  adminIntegrity: FakeHealthCheck[]
+  adminConsoleCommands: FakeConsoleCommand[]
   // Narrower than `down`, which also breaks the session/config calls every
   // page depends on to render at all: these fail only their own endpoint.
   // Each operation gets its own flag rather than sharing one: reusing a
@@ -52,6 +55,12 @@ export interface FakeApiState {
   securityEventsDown: boolean
   auditEventsDown: boolean
   dashboardDown: boolean
+  adminAboutDown: boolean
+  adminIntegrityDown: boolean
+  adminConsoleCommandsDown: boolean
+  // When set, POST /api/v1/admin/console/run always 422s, matching the
+  // backend's rejection of an id outside the allowlist.
+  adminConsoleRunFails: boolean
   // Artificial delay (ms) before any response resolves, so tests asserting
   // on a transient loading state have a window to observe it.
   delayMs: number
@@ -75,6 +84,42 @@ export interface FakeSecurityEvent {
   outcome: 'success' | 'failure'
   reason: string
   createdAt: string
+}
+
+export interface FakeHealthCheck {
+  name: string
+  status: 'ok' | 'warn' | 'err'
+  detail: string
+  critical: boolean
+}
+
+export interface FakeAdminAbout {
+  system: {
+    version: string
+    buildDate: string
+    gitCommit: string
+    startedAt: string
+    uptime: string
+    caUrl: string
+    provisioner: string
+    stepCaImage: string
+    sessionSecure: boolean
+  }
+  checks: FakeHealthCheck[]
+}
+
+export interface FakeConsoleCommand {
+  id: string
+  label: string
+  description: string
+}
+
+function healthSummary(checks: FakeHealthCheck[]) {
+  return {
+    ok: checks.filter((c) => c.status === 'ok').length,
+    warnings: checks.filter((c) => c.status === 'warn').length,
+    errors: checks.filter((c) => c.status === 'err').length,
+  }
 }
 
 export interface RecordedCall {
@@ -154,11 +199,33 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
         createdAt: '2026-01-01T00:00:00Z',
       },
     ],
+    adminAbout: {
+      system: {
+        version: '0.1.4',
+        buildDate: '2026-01-01T00:00:00Z',
+        gitCommit: 'abc1234',
+        startedAt: '2026-01-01T00:00:00Z',
+        uptime: '1h0m0s',
+        caUrl: 'https://ca.test:9000',
+        provisioner: 'admin',
+        stepCaImage: 'step-ca:latest',
+        sessionSecure: true,
+      },
+      checks: [{ name: 'database', status: 'ok', detail: 'reachable', critical: true }],
+    },
+    adminIntegrity: [{ name: 'root certificate', status: 'ok', detail: 'valid', critical: true }],
+    adminConsoleCommands: [
+      { id: 'pg_isready', label: 'pg_isready', description: 'Check database connectivity.' },
+    ],
     historyDown: false,
     provisionersDown: false,
     securityEventsDown: false,
     auditEventsDown: false,
     dashboardDown: false,
+    adminAboutDown: false,
+    adminIntegrityDown: false,
+    adminConsoleCommandsDown: false,
+    adminConsoleRunFails: false,
     delayMs: 0,
     ...overrides,
   }
@@ -369,6 +436,47 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
             notAfter: '2036-01-01T00:00:00Z',
             reachable: true,
           },
+        })
+      }
+      case 'GET /api/v1/admin/about': {
+        if (state.adminAboutDown) return problem(500, 'Internal Server Error', 'about unavailable')
+        return json({
+          system: state.adminAbout.system,
+          checks: state.adminAbout.checks,
+          summary: healthSummary(state.adminAbout.checks),
+        })
+      }
+      case 'GET /api/v1/admin/integrity': {
+        if (state.adminIntegrityDown) return problem(500, 'Internal Server Error', 'integrity unavailable')
+        return json({
+          checks: state.adminIntegrity,
+          summary: healthSummary(state.adminIntegrity),
+        })
+      }
+      case 'GET /api/v1/admin/console/commands': {
+        if (state.adminConsoleCommandsDown)
+          return problem(500, 'Internal Server Error', 'console commands unavailable')
+        return json(state.adminConsoleCommands)
+      }
+      case 'POST /api/v1/admin/console/run': {
+        const { commandId } = body as { commandId: string }
+        const cmd = state.adminConsoleCommands.find((c) => c.id === commandId)
+        if (state.adminConsoleRunFails || !cmd) {
+          return problem(
+            422,
+            'Unprocessable Entity',
+            'unknown command_id: only allowlisted commands may be run',
+            'validation',
+          )
+        }
+        return json({
+          commandLine: cmd.id,
+          output: `${cmd.label}: ok`,
+          exitCode: 0,
+          duration: '12ms',
+          timedOut: false,
+          truncated: false,
+          success: true,
         })
       }
       case 'POST /api/v1/certificates/import/paths': {
