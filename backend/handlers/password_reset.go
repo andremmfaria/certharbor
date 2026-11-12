@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -39,6 +40,125 @@ var passwordResetRL = struct { //nolint:gochecknoglobals // package-level single
 // ForgotPasswordGet renders the "forgot password" form.
 func (h *Handler) ForgotPasswordGet(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "forgot_password", h.base(w, r, ""))
+}
+
+// ErrPasswordResetTokenInvalid reports that a submitted password-reset token
+// does not correspond to a valid, unexpired, unused record. It is returned by
+// both ValidatePasswordResetToken's API-facing error form and
+// ConfirmPasswordReset, so POST /api/v1/password-reset/validate and
+// /confirm (Section 8 Phase 8) can map it to the same problem type without
+// each reimplementing the lookup.
+var ErrPasswordResetTokenInvalid = errors.New("handlers: password reset token is invalid or has expired")
+
+// RequestPasswordReset is the data half of POST /api/v1/password-reset/requests
+// (Section 8 Phase 8, replacing the template's POST /forgot-password). It
+// performs the identical lookup-and-send sequence ForgotPasswordPost does,
+// minus CSRF and rendering, and deliberately returns nothing: the caller
+// (api.requestPasswordReset) always answers 202 with the same body whether or
+// not an account was found, so there is no result here to branch on and no
+// early-return-before-202 path to regress into one (no-enumeration via
+// status code or response shape, Section 8 Phase 8's stated invariant).
+func (h *Handler) RequestPasswordReset(r *http.Request, identifier string) {
+	ip := clientIP(r)
+
+	user, err := appdb.GetUserByLoginOrEmail(h.db, identifier)
+	if err != nil || user == nil {
+		_ = appdb.LogAuth(h.db, identifier, ip, false, "Password reset requested for unknown account")
+		return
+	}
+	if !user.IsActive {
+		_ = appdb.LogAuth(h.db, user.Username, ip, false, "Password reset requested for inactive account")
+		return
+	}
+	if strings.TrimSpace(user.Email) == "" {
+		_ = appdb.LogAuth(h.db, user.Username, ip, false, "Password reset requested but user has no email address")
+		return
+	}
+
+	settings, err := appdb.GetNotificationSettings(r.Context(), h.db)
+	if err != nil || !settings.SMTPEnabled || strings.TrimSpace(settings.SMTPHost) == "" || strings.TrimSpace(settings.SMTPFrom) == "" {
+		_ = appdb.LogAuth(h.db, user.Username, ip, false, "Password reset requested but SMTP is not configured")
+		return
+	}
+
+	rawToken := security.GenerateToken()
+	tokenHash := passwordResetTokenHash(rawToken)
+	_ = appdb.InvalidatePasswordResetTokens(h.db, user.ID) // invalidate any prior tokens
+	if err := appdb.CreatePasswordResetToken(h.db, user.ID, tokenHash, ip, time.Now().Add(passwordResetTTL)); err != nil {
+		_ = appdb.LogAuth(h.db, user.Username, ip, false, "Password reset token creation failed")
+		return
+	}
+
+	link, err := resetLink(h.cfg.PublicBaseURL, rawToken)
+	if err != nil {
+		slog.Error("password reset link could not be built", "user", user.Username, "err", err)
+		_ = appdb.LogAuth(h.db, user.Username, ip, false, "Password reset link not built: "+err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	if err := sendPasswordResetMail(
+		ctx,
+		settings.SMTPHost, settings.SMTPPort, settings.SMTPSecurity,
+		settings.SMTPUsername, settings.SMTPPassword,
+		settings.SMTPFrom, user.Email, link,
+	); err != nil {
+		slog.Error("password reset email failed", "user", user.Username, "err", err)
+		_ = appdb.LogAuth(h.db, user.Username, ip, false, "Password reset email send failed: "+err.Error())
+		return
+	}
+	_ = appdb.LogAuth(h.db, user.Username, ip, true, "Password reset email sent")
+}
+
+// ValidatePasswordResetToken is the data half of POST
+// /api/v1/password-reset/validate (Section 8 Phase 8). It validates without
+// consuming the token, matching passwordResetTokenOK/ResetPasswordGet's
+// existing behaviour: a link scanner or mail-client prefetcher hitting this
+// operation must not burn the token before the real recipient opens it.
+func (h *Handler) ValidatePasswordResetToken(token string) error {
+	if !h.passwordResetTokenOK(token) {
+		return ErrPasswordResetTokenInvalid
+	}
+	return nil
+}
+
+// ConfirmPasswordReset is the data half of POST /api/v1/password-reset/confirm
+// (Section 8 Phase 8, replacing the template's POST /reset-password). It
+// validates the token, the new password, consumes the token (single-use) and
+// bumps the user's session epoch so every session predating the reset dies
+// (V8), the same sequence ResetPasswordPost performs today.
+func (h *Handler) ConfirmPasswordReset(r *http.Request, token, newPassword string) error {
+	resetToken, err := appdb.GetValidPasswordResetToken(h.db, passwordResetTokenHash(token))
+	if err != nil || resetToken == nil {
+		return ErrPasswordResetTokenInvalid
+	}
+
+	if ok, msg := security.ValidatePassword(newPassword); !ok {
+		return NewValidationError(msg)
+	}
+
+	user, err := appdb.GetUserByID(h.db, resetToken.UserID)
+	if err != nil || user == nil || !user.IsActive {
+		return NewValidationError("Account is not available. Please contact an administrator.")
+	}
+
+	if err := appdb.UpdateUserPassword(h.db, user.ID, security.HashPassword(newPassword)); err != nil {
+		return err
+	}
+
+	// A reset is the recovery path for a compromised account, so every session
+	// predating it dies (V8).
+	if err := appdb.BumpSessionEpoch(h.db, user.ID); err != nil {
+		slog.Error("bumping session epoch after password reset failed", "user_id", user.ID, "err", err)
+	}
+
+	// Invalidate on use: mark this token used AND invalidate any others for the user.
+	_ = appdb.MarkPasswordResetTokenUsed(h.db, resetToken.ID)
+	_ = appdb.InvalidatePasswordResetTokens(h.db, user.ID)
+	_ = appdb.LogAuth(h.db, user.Username, clientIP(r), true, "Password reset completed")
+
+	return nil
 }
 
 // ForgotPasswordPost handles submission of the forgot-password form.

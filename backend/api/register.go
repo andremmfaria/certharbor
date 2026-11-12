@@ -605,4 +605,35 @@ func Register(humaAPI huma.API, h *handlers.Handler) {
 		Summary:       "Change the signed-in user's password",
 		DefaultStatus: http.StatusNoContent,
 	}), changePassword(h))
+
+	// Phase 8 (plans/frontend-backend-split.md Section 8 "Phase 8. Profile
+	// and MFA", Section 6): the three password-reset operations, public and
+	// rate-limited the same way createSession/submitMfa are above. See
+	// api/password_reset.go's doc comments for the per-operation rationale.
+	huma.Register(humaAPI, rateLimited(publicOp(huma.Operation{
+		OperationID:   "requestPasswordReset",
+		Method:        http.MethodPost,
+		Path:          BasePath + "/password-reset/requests",
+		Tags:          []string{"session"},
+		Summary:       "Request a password reset email",
+		DefaultStatus: http.StatusAccepted,
+	})), requestPasswordReset(h))
+
+	huma.Register(humaAPI, rateLimited(publicOp(huma.Operation{
+		OperationID:   "validatePasswordReset",
+		Method:        http.MethodPost,
+		Path:          BasePath + "/password-reset/validate",
+		Tags:          []string{"session"},
+		Summary:       "Validate a password reset token without consuming it",
+		DefaultStatus: http.StatusNoContent,
+	})), validatePasswordReset(h))
+
+	huma.Register(humaAPI, rateLimited(publicOp(huma.Operation{
+		OperationID:   "confirmPasswordReset",
+		Method:        http.MethodPost,
+		Path:          BasePath + "/password-reset/confirm",
+		Tags:          []string{"session"},
+		Summary:       "Set a new password using a password reset token",
+		DefaultStatus: http.StatusNoContent,
+	})), confirmPasswordReset(h))
 }
