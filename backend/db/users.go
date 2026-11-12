@@ -362,6 +362,33 @@ func ListTempUsers(db *sql.DB) ([]TempUserRow, error) {
 	return out, nil
 }
 
+// DeleteTempUser deletes a temporary user row. It has no legacy template
+// equivalent (the admin_users_temp page never gained a delete action).
+// Scoped to is_temporary=true so this endpoint cannot be
+// pointed at a regular account by guessing an id.
+func DeleteTempUser(db *sql.DB, id int) (bool, error) {
+	var username string
+	// best-effort: retrieve username for cascading auth_log cleanup; ignore errors
+	_ = db.QueryRow(`SELECT username FROM users WHERE id=$1 AND is_temporary=true`, id).Scan(&username) //nolint:noctx // pre-existing signature
+	res, err := db.Exec(`DELETE FROM users WHERE id=$1 AND is_temporary=true`, id)                      //nolint:noctx // pre-existing signature
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if n == 0 {
+		return false, nil
+	}
+	if username != "" {
+		if _, err := db.Exec(`DELETE FROM auth_log WHERE username=$1`, username); err != nil { //nolint:noctx // pre-existing signature
+			return true, err
+		}
+	}
+	return true, nil
+}
+
 // ExpireOverdueTempUsers sets is_active=false for accounts past their expiry.
 // The epoch bump is what makes the expiry immediate: without it an expired
 // temporary admin keeps admin until its cookie ages out (V5).

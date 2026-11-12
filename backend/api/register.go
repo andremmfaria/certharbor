@@ -328,4 +328,87 @@ func Register(humaAPI huma.API, h *handlers.Handler) {
 		Tags:        []string{"admin"},
 		Summary:     "Get CA integrity and update guardrail checks",
 	}), getAdminIntegrity(h))
+
+	// Phase 6, step 1 (plans/frontend-backend-split.md Section 8): the
+	// five-way POST /admin/users multiplexer becomes five single-purpose
+	// operations (unblock_ip left already, in Phase 5 step 2, as
+	// deleteIPBlock above), plus the list and detail GETs. All admin: the
+	// template chain gates the whole /admin/users tree at admin today.
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID: "listUsers",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/users",
+		Tags:        []string{"users"},
+		Summary:     "List user accounts",
+	}), listUsers(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID: "getUser",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/users/{id}",
+		Tags:        []string{"users"},
+		Summary:     "Get one user account",
+	}), getUser(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID:   "createUser",
+		Method:        http.MethodPost,
+		Path:          BasePath + "/users",
+		Tags:          []string{"users"},
+		Summary:       "Create a user account",
+		DefaultStatus: http.StatusCreated,
+	}), createUser(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID: "updateUser",
+		Method:      http.MethodPatch,
+		Path:        BasePath + "/users/{id}",
+		Tags:        []string{"users"},
+		Summary:     "Update a user's role and/or active state",
+	}), updateUser(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID:   "deleteUser",
+		Method:        http.MethodDelete,
+		Path:          BasePath + "/users/{id}",
+		Tags:          []string{"users"},
+		Summary:       "Delete a user account",
+		DefaultStatus: http.StatusNoContent,
+	}), deleteUser(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID: "resetUserPassword",
+		Method:      http.MethodPost,
+		Path:        BasePath + "/users/{id}/password-reset",
+		Tags:        []string{"users"},
+		Summary:     "Reset a user's password",
+	}), resetUserPassword(h))
+
+	// Temporary users (handlers/admin_temp.go), same tag and role as the
+	// permanent-user operations above: Section 6's endpoint map.
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID: "listTemporaryUsers",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/temporary-users",
+		Tags:        []string{"users"},
+		Summary:     "List temporary user accounts",
+	}), listTemporaryUsers(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID:   "createTemporaryUser",
+		Method:        http.MethodPost,
+		Path:          BasePath + "/temporary-users",
+		Tags:          []string{"users"},
+		Summary:       "Create a temporary user account",
+		DefaultStatus: http.StatusCreated,
+	}), createTemporaryUser(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID:   "deleteTemporaryUser",
+		Method:        http.MethodDelete,
+		Path:          BasePath + "/temporary-users/{id}",
+		Tags:          []string{"users"},
+		Summary:       "Delete a temporary user account",
+		DefaultStatus: http.StatusNoContent,
+	}), deleteTemporaryUser(h))
 }

@@ -47,3 +47,19 @@ POST /api/v1/certificates/{id}/renew auth=required role=manager tag=certificates
 POST /api/v1/certificates/{id}/revoke auth=required role=admin tag=certificates csrf=yes ratelimit=no templateRouteRetired=false
 POST /api/v1/session       auth=public   role=-       tag=session     csrf=yes ratelimit=yes templateRouteRetired=false
 POST /api/v1/session/mfa   auth=public   role=-       tag=session     csrf=yes ratelimit=yes templateRouteRetired=false
+
+# Phase 6, step 1 (plans/frontend-backend-split.md Section 8): Users and
+# temporary users. All admin, same as the template chain's /admin/users
+# tree today. deleteTemporaryUser has no legacy template route (the
+# admin_users_temp page never gained a delete action), so it is
+# templateRouteRetired=true; every other row here replaces a route that
+# stays registered until Phase 9 (R22).
+GET  /api/v1/users         auth=required role=admin   tag=users       csrf=no  ratelimit=no templateRouteRetired=false
+GET  /api/v1/users/{id}    auth=required role=admin   tag=users       csrf=no  ratelimit=no templateRouteRetired=false
+POST /api/v1/users         auth=required role=admin   tag=users       csrf=yes ratelimit=no templateRouteRetired=false
+PATCH /api/v1/users/{id}   auth=required role=admin   tag=users       csrf=yes ratelimit=no templateRouteRetired=false
+DELETE /api/v1/users/{id}  auth=required role=admin   tag=users       csrf=yes ratelimit=no templateRouteRetired=false
+POST /api/v1/users/{id}/password-reset auth=required role=admin tag=users csrf=yes ratelimit=no templateRouteRetired=false
+GET  /api/v1/temporary-users auth=required role=admin tag=users      csrf=no  ratelimit=no templateRouteRetired=false
+POST /api/v1/temporary-users auth=required role=admin tag=users      csrf=yes ratelimit=no templateRouteRetired=false
+DELETE /api/v1/temporary-users/{id} auth=required role=admin tag=users csrf=yes ratelimit=no templateRouteRetired=true

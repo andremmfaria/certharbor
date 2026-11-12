@@ -6,6 +6,8 @@ import { IntegrityPage } from './IntegrityPage'
 import { placeholderFor } from './Placeholder'
 import { routeList } from './routeList'
 import { SecurityPage } from './SecurityPage'
+import { TempUsersPage } from './TempUsersPage'
+import { UsersPage } from './UsersPage'
 
 // The admin leaves built for real so far; everything else is still a
 // placeholder until its own phase lands (mirrors appRoutes.tsx's BUILT_PAGES).
@@ -15,6 +17,8 @@ const BUILT_ADMIN_PAGES: Record<string, ComponentType> = {
   'admin-console': ConsolePage,
   'admin-about': AboutPage,
   'admin-integrity': IntegrityPage,
+  'admin-users': UsersPage,
+  'admin-users-temp': TempUsersPage,
 }
 
 // One lazy chunk for every admin leaf (D12.7).
