@@ -17,6 +17,7 @@ import { ImportPage } from './ImportPage'
 import { IssuePage } from './IssuePage'
 import { NotFoundPage } from './NotFoundPage'
 import { placeholderFor } from './Placeholder'
+import { ProfilePage } from './ProfilePage'
 import { ProvisionersPage } from './ProvisionersPage'
 import { RequireRole } from './RequireRole'
 import { RootShell } from './RootShell'
@@ -40,6 +41,7 @@ const BUILT_PAGES: Record<string, ComponentType> = {
   'acme-issue': AcmeIssuePage,
   'acme-settings': AcmeSettingsPage,
   'acme-logs': AcmeEventsPage,
+  profile: ProfilePage,
 }
 
 function leaf(route: RouteEntry): RouteObject {

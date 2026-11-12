@@ -86,3 +86,7 @@ GET  /api/v1/acme/certificates/{id}/key auth=required role=manager tag=acme csrf
 GET  /api/v1/acme/settings auth=required role=manager tag=acme         csrf=no  ratelimit=no templateRouteRetired=false
 PATCH /api/v1/acme/settings auth=required role=manager tag=acme         csrf=yes ratelimit=no templateRouteRetired=false
 GET  /api/v1/acme/events  auth=required role=manager tag=acme         csrf=no  ratelimit=no templateRouteRetired=false
+GET  /api/v1/profile      auth=required role=viewer  tag=profile      csrf=no  ratelimit=no templateRouteRetired=false
+PATCH /api/v1/profile     auth=required role=viewer  tag=profile      csrf=yes ratelimit=no templateRouteRetired=false
+PATCH /api/v1/profile/preferences auth=required role=viewer tag=profile csrf=yes ratelimit=no templateRouteRetired=false
+POST /api/v1/profile/password auth=required role=viewer tag=profile  csrf=yes ratelimit=no templateRouteRetired=false

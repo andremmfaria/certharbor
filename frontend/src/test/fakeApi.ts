@@ -6,6 +6,9 @@ export interface FakeUser {
   id: number
   username: string
   role: string
+  displayName: string
+  email: string
+  theme: string
 }
 
 export interface FakeCertificate {
@@ -42,6 +45,12 @@ export interface FakeApiState {
   // When set, every request answers with this status instead of its normal reply.
   down: { status: number; body: string; contentType: string } | 'network' | undefined
   password: string
+  // The stored password profile/password reauths against. Distinct from
+  // `password` (the login credential helper), to let a test change one
+  // without perturbing the other.
+  profilePassword: string
+  profileDown: boolean
+  changePasswordFails: boolean
   mfaCode: string
   recoveryCode: string
   mfaRequired: boolean
@@ -200,10 +209,26 @@ export const ROLE_LEVELS = { viewer: 1, manager: 2, admin: 3 }
 
 // A stand-in for the backend with just enough memory to drive the login flow:
 // the discriminated session, the CSRF cookie and the two credential steps.
-export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
+export function installFakeApi(
+  overrides: Partial<Omit<FakeApiState, 'user'>> & { user?: Partial<FakeUser> } = {},
+) {
+  // user merges field-by-field with the default rather than being replaced
+  // wholesale: existing callers across many page tests pass a partial user
+  // (id/username/role only, predating displayName/email/theme), and a plain
+  // top-level spread of `overrides` would silently drop those three fields.
+  const defaultUser: FakeUser = {
+    id: 1,
+    username: 'alice',
+    role: 'admin',
+    displayName: 'Alice Admin',
+    email: 'alice@example.com',
+    theme: 'dark',
+  }
   const state: FakeApiState = {
     session: 'anonymous',
-    user: { id: 1, username: 'alice', role: 'admin' },
+    profilePassword: 'correct horse',
+    profileDown: false,
+    changePasswordFails: false,
     contractSha: 'abc',
     oidcEnabled: false,
     localLoginEnabled: true,
@@ -355,6 +380,10 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
     tempUsersDown: false,
     delayMs: 0,
     ...overrides,
+    // Re-applied after the ...overrides spread above: that spread would
+    // otherwise overwrite the merged user back to overrides.user verbatim,
+    // undoing the defaultUser merge above.
+    user: { ...defaultUser, ...overrides.user },
   }
   const calls: RecordedCall[] = []
   let nextCertId = Math.max(0, ...state.certificates.map((c) => c.id)) + 1
@@ -566,6 +595,35 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
         // echoes back (writeOnly, 5.8).
         state.acmeSettings = { ...state.acmeSettings, ...patch }
         return json(state.acmeSettings)
+      }
+      case 'GET /api/v1/profile': {
+        if (state.profileDown) return problem(500, 'Internal Server Error', 'profile unavailable')
+        return json(state.user)
+      }
+      case 'PATCH /api/v1/profile': {
+        if (state.profileDown) return problem(500, 'Internal Server Error', 'profile unavailable')
+        const patch = body as Partial<Pick<FakeUser, 'displayName' | 'email'>>
+        state.user = { ...state.user, ...patch }
+        return json(state.user)
+      }
+      case 'PATCH /api/v1/profile/preferences': {
+        if (state.profileDown) return problem(500, 'Internal Server Error', 'profile unavailable')
+        const patch = body as Partial<Pick<FakeUser, 'theme'>>
+        state.user = { ...state.user, ...patch }
+        return json(state.user)
+      }
+      case 'POST /api/v1/profile/password': {
+        const creds = body as { currentPassword: string; newPassword: string }
+        if (state.changePasswordFails || creds.currentPassword !== state.profilePassword) {
+          return problem(
+            401,
+            'Unauthorized',
+            'current password is incorrect',
+            'https://certharbor/errors/invalid-credentials',
+          )
+        }
+        state.profilePassword = creds.newPassword
+        return new Response(null, { status: 204 })
       }
       case 'GET /api/v1/acme/events': {
         if (state.acmeEventsDown) return problem(500, 'Internal Server Error', 'ACME events unavailable')

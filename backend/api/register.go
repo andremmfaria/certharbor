@@ -566,4 +566,43 @@ func Register(humaAPI huma.API, h *handlers.Handler) {
 		Tags:        []string{"acme"},
 		Summary:     "List ACME certificate lifecycle events",
 	}), listAcmeEvents(h))
+
+	// Phase 8, step A (plans/frontend-backend-split.md Section 8 "Profile"):
+	// GET/PATCH profile, PATCH preferences, POST password (reauth). Every
+	// row is viewer, acting on the session's own account: no {id} parameter
+	// anywhere in this group (5.5). The old /profile chi group sat with no
+	// RequireRole wrapper (any authenticated user), so viewer is the correct
+	// floor, not a guess.
+	huma.Register(humaAPI, roleOp("viewer", huma.Operation{
+		OperationID: "getProfile",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/profile",
+		Tags:        []string{"profile"},
+		Summary:     "Get the signed-in user's own profile",
+	}), getProfile(h))
+
+	huma.Register(humaAPI, roleOp("viewer", huma.Operation{
+		OperationID: "patchProfile",
+		Method:      http.MethodPatch,
+		Path:        BasePath + "/profile",
+		Tags:        []string{"profile"},
+		Summary:     "Update the signed-in user's display name and email",
+	}), patchProfile(h))
+
+	huma.Register(humaAPI, roleOp("viewer", huma.Operation{
+		OperationID: "patchProfilePreferences",
+		Method:      http.MethodPatch,
+		Path:        BasePath + "/profile/preferences",
+		Tags:        []string{"profile"},
+		Summary:     "Update the signed-in user's theme preference",
+	}), patchProfilePreferences(h))
+
+	huma.Register(humaAPI, roleOp("viewer", huma.Operation{
+		OperationID:   "changePassword",
+		Method:        http.MethodPost,
+		Path:          BasePath + "/profile/password",
+		Tags:          []string{"profile"},
+		Summary:       "Change the signed-in user's password",
+		DefaultStatus: http.StatusNoContent,
+	}), changePassword(h))
 }
