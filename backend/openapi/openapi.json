@@ -1,6 +1,111 @@
 {
   "components": {
     "schemas": {
+      "AdminAboutBody": {
+        "additionalProperties": false,
+        "properties": {
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/HealthCheckBody"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "summary": {
+            "$ref": "#/components/schemas/HealthSummaryBody"
+          },
+          "system": {
+            "$ref": "#/components/schemas/SystemInfoBody"
+          }
+        },
+        "required": [
+          "system",
+          "checks",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "AdminConsoleCommandBody": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "description"
+        ],
+        "type": "object"
+      },
+      "AdminConsoleRunBody": {
+        "additionalProperties": false,
+        "properties": {
+          "commandLine": {
+            "type": "string"
+          },
+          "duration": {
+            "type": "string"
+          },
+          "exitCode": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "output": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "timedOut": {
+            "type": "boolean"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "commandLine",
+          "output",
+          "exitCode",
+          "duration",
+          "timedOut",
+          "truncated",
+          "success"
+        ],
+        "type": "object"
+      },
+      "AdminIntegrityBody": {
+        "additionalProperties": false,
+        "properties": {
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/HealthCheckBody"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "summary": {
+            "$ref": "#/components/schemas/HealthSummaryBody"
+          }
+        },
+        "required": [
+          "checks",
+          "summary"
+        ],
+        "type": "object"
+      },
       "BulkResponse": {
         "additionalProperties": false,
         "properties": {
@@ -562,6 +667,58 @@
         },
         "type": "object"
       },
+      "HealthCheckBody": {
+        "additionalProperties": false,
+        "properties": {
+          "critical": {
+            "type": "boolean"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "warn",
+              "err"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "status",
+          "detail",
+          "critical"
+        ],
+        "type": "object"
+      },
+      "HealthSummaryBody": {
+        "additionalProperties": false,
+        "properties": {
+          "errors": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "ok": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "warnings": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ok",
+          "warnings",
+          "errors"
+        ],
+        "type": "object"
+      },
       "HistoryEntryBody": {
         "additionalProperties": false,
         "properties": {
@@ -845,6 +1002,21 @@
         ],
         "type": "object"
       },
+      "RunAdminConsoleCommandInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "commandId": {
+            "description": "One of GET /api/v1/admin/console/commands' ids.",
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "commandId"
+        ],
+        "type": "object"
+      },
       "SecurityEventBody": {
         "additionalProperties": false,
         "properties": {
@@ -1005,6 +1177,51 @@
           "codeType"
         ],
         "type": "object"
+      },
+      "SystemInfoBody": {
+        "additionalProperties": false,
+        "properties": {
+          "buildDate": {
+            "type": "string"
+          },
+          "caUrl": {
+            "type": "string"
+          },
+          "gitCommit": {
+            "type": "string"
+          },
+          "provisioner": {
+            "type": "string"
+          },
+          "sessionSecure": {
+            "type": "boolean"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "stepCaImage": {
+            "type": "string"
+          },
+          "uptime": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "buildDate",
+          "gitCommit",
+          "startedAt",
+          "uptime",
+          "caUrl",
+          "provisioner",
+          "stepCaImage",
+          "sessionSecure"
+        ],
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -1137,6 +1354,178 @@
           "system"
         ],
         "x-required-role": "manager"
+      }
+    },
+    "/api/v1/admin/about": {
+      "get": {
+        "operationId": "getAdminAbout",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAboutBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Get system build info and preflight health checks",
+        "tags": [
+          "admin"
+        ],
+        "x-required-role": "admin"
+      }
+    },
+    "/api/v1/admin/console/commands": {
+      "get": {
+        "operationId": "listAdminConsoleCommands",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AdminConsoleCommandBody"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "List the allowlisted diagnostic console commands",
+        "tags": [
+          "admin"
+        ],
+        "x-required-role": "admin"
+      }
+    },
+    "/api/v1/admin/console/run": {
+      "post": {
+        "operationId": "runAdminConsoleCommand",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunAdminConsoleCommandInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminConsoleRunBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Run one allowlisted diagnostic console command",
+        "tags": [
+          "admin"
+        ],
+        "x-required-role": "admin"
+      }
+    },
+    "/api/v1/admin/integrity": {
+      "get": {
+        "operationId": "getAdminIntegrity",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminIntegrityBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Get CA integrity and update guardrail checks",
+        "tags": [
+          "admin"
+        ],
+        "x-required-role": "admin"
       }
     },
     "/api/v1/audit-events": {

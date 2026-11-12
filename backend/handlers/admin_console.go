@@ -374,3 +374,77 @@ func adminCommandLine(c *adminConsoleCommand) string {
 	parts := append([]string{c.Name}, c.Args...)
 	return strings.Join(parts, " ")
 }
+
+// AdminConsoleCommandInfo is the DTO-safe view of an allowlisted command:
+// id, label and description only. Name, Args and NativeFn never leave this
+// package through it (Phase 6 step 2): Args in particular is built from
+// cfg.DatabaseURL via pgIsReadyArgs and would otherwise ship the database
+// host, port, user and name to the client.
+type AdminConsoleCommandInfo struct {
+	ID          string
+	Label       string
+	Description string
+}
+
+// ListAdminConsoleCommands returns the DTO-safe allowlist for GET
+// /api/v1/admin/console/commands, replacing GET /admin/console's rendered
+// command picker.
+func (h *Handler) ListAdminConsoleCommands() []AdminConsoleCommandInfo {
+	cmds := adminConsoleCommands(h.cfg)
+	out := make([]AdminConsoleCommandInfo, 0, len(cmds))
+	for _, c := range cmds {
+		out = append(out, AdminConsoleCommandInfo{ID: c.ID, Label: c.Label, Description: c.Description})
+	}
+	return out
+}
+
+// ErrUnknownAdminConsoleCommand is returned by RunAdminConsoleCommand when
+// commandID does not match the allowlist.
+var ErrUnknownAdminConsoleCommand = errors.New("unknown command: only allowlisted commands may be run")
+
+// AdminConsoleRunResult is the DTO-safe result of a console command run. It
+// is field-for-field adminConsoleResult: CommandLine and Output are already
+// built from server-controlled Name/Args (or NativeFn text) with the
+// password never included (pgIsReadyArgs excludes it), so this shape cannot
+// carry a substring of the configured DATABASE_URL.
+type AdminConsoleRunResult struct {
+	CommandLine string
+	Output      string
+	ExitCode    int
+	Duration    string
+	TimedOut    bool
+	Truncated   bool
+	Success     bool
+}
+
+// RunAdminConsoleCommand resolves commandID against the allowlist and runs
+// it under the same timeout/truncation/audit contract as AdminConsolePost,
+// for POST /api/v1/admin/console/run. r supplies only the audit identity
+// (auditSecurity reads the session off it); ctx is not the one the command
+// runs under on its own — runAdminConsoleCommand derives its own bounded
+// context from it.
+func (h *Handler) RunAdminConsoleCommand(ctx context.Context, r *http.Request, commandID string) (*AdminConsoleRunResult, error) {
+	c, ok := findAdminConsoleCommand(h.cfg, commandID)
+	if !ok {
+		h.auditSecurity(r, "console.denied command_id="+commandID)
+		return nil, ErrUnknownAdminConsoleCommand
+	}
+
+	// nil on error is fine, native commands report it as their result text.
+	caClient, _ := h.caClient()
+	result := runAdminConsoleCommand(ctx, &c, caClient)
+	h.auditSecurity(r, fmt.Sprintf(
+		"console.run id=%s command=%q exit=%d timeout=%t duration=%s",
+		c.ID, result.CommandLine, result.ExitCode, result.TimedOut, result.Duration,
+	))
+
+	return &AdminConsoleRunResult{
+		CommandLine: result.CommandLine,
+		Output:      result.Output,
+		ExitCode:    result.ExitCode,
+		Duration:    result.Duration,
+		TimedOut:    result.TimedOut,
+		Truncated:   result.Truncated,
+		Success:     result.Success,
+	}, nil
+}

@@ -217,6 +217,24 @@ func (h *Handler) caHealthErr(ctx context.Context) error {
 	return caClient.Health(ctx)
 }
 
+// SystemInfo exposes systemInfo to backend/api, for GET /api/v1/admin/about.
+func (h *Handler) SystemInfo() SystemInfo { return h.systemInfo() }
+
+// Preflight exposes preflight to backend/api, for GET /api/v1/admin/about.
+func (h *Handler) Preflight(ctx context.Context) ([]HealthCheck, HealthSummary) {
+	return h.preflight(ctx)
+}
+
+// CAIntegrity exposes caIntegrity to backend/api, for GET
+// /api/v1/admin/integrity. Deliberately uncached: see api/admin.go's comment
+// on getAdminIntegrity for the measurement that decided this (Phase 6 step
+// 2). caIntegrity never lists or reads the certificates directory — its five
+// sub-checks are one CA health probe plus a handful of small, fixed-path
+// file reads — so there is no per-certificate cost to amortise.
+func (h *Handler) CAIntegrity(ctx context.Context) ([]HealthCheck, HealthSummary) {
+	return h.caIntegrity(ctx)
+}
+
 func (h *Handler) preflight(ctx context.Context) ([]HealthCheck, HealthSummary) {
 	var checks []HealthCheck
 	// addCritical appends a critical health-check result (all checks here are critical).

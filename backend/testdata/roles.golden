@@ -29,6 +29,10 @@ GET  /api/v1/audit-events  auth=required role=admin   tag=security    csrf=no  r
 DELETE /api/v1/security/ip-blocks/{ip} auth=required role=admin tag=security csrf=yes ratelimit=no templateRouteRetired=false
 GET  /api/v1/ca            auth=required role=viewer  tag=ca          csrf=no  ratelimit=no templateRouteRetired=true
 GET  /api/v1/dashboard     auth=required role=viewer  tag=dashboard   csrf=no  ratelimit=no templateRouteRetired=false
+GET  /api/v1/admin/console/commands auth=required role=admin tag=admin csrf=no ratelimit=no templateRouteRetired=false
+POST /api/v1/admin/console/run auth=required role=admin tag=admin csrf=yes ratelimit=no templateRouteRetired=false
+GET  /api/v1/admin/about  auth=required role=admin  tag=admin       csrf=no  ratelimit=no templateRouteRetired=false
+GET  /api/v1/admin/integrity auth=required role=admin tag=admin    csrf=no  ratelimit=no templateRouteRetired=false
 GET  /api/v1/ca/root       auth=required role=admin   tag=ca          csrf=no  ratelimit=no templateRouteRetired=false
 GET  /api/v1/ca/intermediate auth=required role=admin   tag=ca          csrf=no  ratelimit=no templateRouteRetired=false
 GET  /api/v1/ca/chain      auth=required role=admin   tag=ca          csrf=no  ratelimit=no templateRouteRetired=false

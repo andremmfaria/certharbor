@@ -291,4 +291,41 @@ func Register(humaAPI huma.API, h *handlers.Handler) {
 		Tags:        []string{"dashboard"},
 		Summary:     "Get the dashboard aggregate: certificate counts and CA status",
 	}), getDashboard(h))
+
+	// Phase 6, step 2 (plans/frontend-backend-split.md Section 8): admin
+	// console, about and integrity. The console's two operations split the
+	// old single GET/POST /admin/console: listing the allowlist (DTO-narrowed
+	// to id/label/description) and running one command by id are now
+	// separate operations, matching the table at Section 6.
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID: "listAdminConsoleCommands",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/admin/console/commands",
+		Tags:        []string{"admin"},
+		Summary:     "List the allowlisted diagnostic console commands",
+	}), listAdminConsoleCommands(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID: "runAdminConsoleCommand",
+		Method:      http.MethodPost,
+		Path:        BasePath + "/admin/console/run",
+		Tags:        []string{"admin"},
+		Summary:     "Run one allowlisted diagnostic console command",
+	}), postAdminConsoleRun(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID: "getAdminAbout",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/admin/about",
+		Tags:        []string{"admin"},
+		Summary:     "Get system build info and preflight health checks",
+	}), getAdminAbout(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID: "getAdminIntegrity",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/admin/integrity",
+		Tags:        []string{"admin"},
+		Summary:     "Get CA integrity and update guardrail checks",
+	}), getAdminIntegrity(h))
 }
