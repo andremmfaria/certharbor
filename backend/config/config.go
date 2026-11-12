@@ -90,13 +90,13 @@ type Config struct {
 	WebRootCA   string
 
 	// Env-only: a manager-editable DB setting must not be able to repoint
-	// where LE issuance actually dials.
-	LEACMEDirectoryURL string
+	// where ACME issuance actually dials.
+	ACMEDirectoryURL string
 }
 
-// LEProductionDirectoryURL is LE_ACME_DIRECTORY_URL's default, so behaviour is
+// ACMEProductionDirectoryURL is LE_ACME_DIRECTORY_URL's default, so behaviour is
 // unchanged until an operator points issuance somewhere else.
-const LEProductionDirectoryURL = "https://acme-v02.api.letsencrypt.org/directory"
+const ACMEProductionDirectoryURL = "https://acme-v02.api.letsencrypt.org/directory"
 
 const defaultUICertDuration = 8760 * time.Hour
 
@@ -161,7 +161,7 @@ func Load() *Config {
 		WebSSLKey:   "/opt/certharbor/web-ssl/web.key",
 		WebRootCA:   "/opt/certharbor/web-ssl/root_ca.crt",
 
-		LEACMEDirectoryURL: getEnv("LE_ACME_DIRECTORY_URL", LEProductionDirectoryURL),
+		ACMEDirectoryURL: getEnv("LE_ACME_DIRECTORY_URL", ACMEProductionDirectoryURL),
 	}
 }
 

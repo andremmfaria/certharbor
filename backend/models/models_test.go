@@ -44,9 +44,9 @@ func TestCertificate(t *testing.T) {
 	}
 }
 
-// TestLECertificate exercises the LECertificate model fields.
-func TestLECertificate(t *testing.T) {
-	c := LECertificate{
+// TestACMECertificate exercises the ACMECertificate model fields.
+func TestACMECertificate(t *testing.T) {
+	c := ACMECertificate{
 		Domain:    "acme.example.com",
 		Provider:  "cloudflare",
 		AutoRenew: true,
@@ -60,9 +60,9 @@ func TestLECertificate(t *testing.T) {
 	}
 }
 
-// TestLESettings exercises the LESettings model.
-func TestLESettings(t *testing.T) {
-	s := LESettings{
+// TestACMESettings exercises the ACMESettings model.
+func TestACMESettings(t *testing.T) {
+	s := ACMESettings{
 		Email:    "user@example.com",
 		Provider: "http01",
 	}

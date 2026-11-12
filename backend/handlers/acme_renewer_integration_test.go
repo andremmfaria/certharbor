@@ -17,20 +17,20 @@ import (
 )
 
 // openRenewerTestDB opens the integration Postgres, creates the schemas
-// runRenewal touches, and truncates the LE tables afterwards.
+// runRenewal touches, and truncates the ACME tables afterwards.
 func openRenewerTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	dsn := os.Getenv("INTEGRATION_DB_DSN")
 	if dsn == "" {
-		dsn = "postgres://certharbor_test:certharbor_test@localhost:5432/certharbor_test?sslmode=disable"
+		dsn = "postgres://certharbor_test:***@localhost:5432/certharbor_test?sslmode=disable"
 	}
 	conn, err := appdb.Connect(dsn)
 	if err != nil {
 		t.Skipf("integration DB not available (%v), skipping", err)
 	}
-	if err := appdb.InitLESchema(conn); err != nil {
+	if err := appdb.InitACMESchema(conn); err != nil {
 		_ = conn.Close()
-		t.Fatalf("InitLESchema: %v", err)
+		t.Fatalf("InitACMESchema: %v", err)
 	}
 	if err := appdb.InitNotificationSchema(conn); err != nil {
 		_ = conn.Close()
@@ -86,7 +86,7 @@ func TestIntegration_RunRenewalSkipsOutOfPolicyCerts(t *testing.T) {
 		t.Errorf("out-of-policy certificate: status %q, want it left alone at %q", got, "active")
 	}
 
-	// The skip must reach the LE log page, not only the process log: a
+	// The skip must reach the ACME log page, not only the process log: a
 	// certificate skipped in silence expires in thirty days.
 	var domain, message string
 	if err := conn.QueryRowContext(ctx,

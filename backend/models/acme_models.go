@@ -2,8 +2,8 @@ package models
 
 import "time"
 
-// LECertificate represents an ACME (Let's Encrypt) certificate tracked by the system.
-type LECertificate struct {
+// ACMECertificate represents an ACME (Let's Encrypt) certificate tracked by the system.
+type ACMECertificate struct {
 	ID        int
 	Domain    string
 	Email     string
@@ -19,8 +19,8 @@ type LECertificate struct {
 	UpdatedAt *time.Time
 }
 
-// LESettings holds the ACME provider configuration (Cloudflare, Route53, etc.).
-type LESettings struct {
+// ACMESettings holds the ACME provider configuration (Cloudflare, Route53, etc.).
+type ACMESettings struct {
 	ID           int
 	Email        string
 	Provider     string
@@ -32,8 +32,8 @@ type LESettings struct {
 	UpdatedAt    *time.Time
 }
 
-// LELog is a single ACME lifecycle event log entry.
-type LELog struct {
+// ACMELog is a single ACME lifecycle event log entry.
+type ACMELog struct {
 	ID        int
 	Domain    string
 	Action    string // issue, renew, revoke, error

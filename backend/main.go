@@ -199,8 +199,8 @@ func main() {
 	if cfg.UICertDuration < 10*time.Minute {
 		slog.Warn("UI_CERT_DURATION is under 10 minutes: this is a testing cadence, not an operational one", "duration", cfg.UICertDuration)
 	}
-	if cfg.LEACMEDirectoryURL != config.LEProductionDirectoryURL {
-		slog.Warn("LE_ACME_DIRECTORY_URL is not the Let's Encrypt production directory: ACME issuance will dial this instead", "url", cfg.LEACMEDirectoryURL)
+	if cfg.ACMEDirectoryURL != config.ACMEProductionDirectoryURL {
+		slog.Warn("LE_ACME_DIRECTORY_URL is not the Let's Encrypt production directory: ACME issuance will dial this instead", "url", cfg.ACMEDirectoryURL)
 	}
 
 	// ─── Database ────────────────────────────────────────────────────────────
@@ -215,9 +215,9 @@ func main() {
 		_ = conn.Close()
 		log.Fatalf("Cannot init DB schema: %v", err)
 	}
-	if err := appdb.InitLESchema(conn); err != nil {
+	if err := appdb.InitACMESchema(conn); err != nil {
 		_ = conn.Close()
-		log.Fatalf("Cannot init LE schema: %v", err)
+		log.Fatalf("Cannot init ACME schema: %v", err)
 	}
 	if err := appdb.InitNotificationSchema(conn); err != nil {
 		_ = conn.Close()
@@ -352,17 +352,17 @@ func main() {
 		// Let's Encrypt (manager+)
 		r.Group(func(r chi.Router) {
 			r.Use(mw.RequireRole("manager"))
-			r.Get("/le", h.LEDashboard)
-			r.Get("/le/issue", h.LEIssueGet)
-			r.Post("/le/issue", h.LEIssuePost)
-			r.Post("/le/{id}/renew", h.LERenew)
-			r.Post("/le/{id}/delete", h.LEDelete)
-			r.Post("/le/{id}/autorenew", h.LEToggleAutoRenew)
-			r.Get("/le/download/cert/{id}", h.LEDownloadCert)
-			r.Get("/le/download/key/{id}", h.LEDownloadKey)
-			r.Get("/le/settings", h.LESettingsGet)
-			r.Post("/le/settings", h.LESettingsPost)
-			r.Get("/le/logs", h.LELogs)
+			r.Get("/le", h.ACMEDashboard)
+			r.Get("/le/issue", h.ACMEIssueGet)
+			r.Post("/le/issue", h.ACMEIssuePost)
+			r.Post("/le/{id}/renew", h.ACMERenew)
+			r.Post("/le/{id}/delete", h.ACMEDelete)
+			r.Post("/le/{id}/autorenew", h.ACMEToggleAutoRenew)
+			r.Get("/le/download/cert/{id}", h.ACMEDownloadCert)
+			r.Get("/le/download/key/{id}", h.ACMEDownloadKey)
+			r.Get("/le/settings", h.ACMESettingsGet)
+			r.Post("/le/settings", h.ACMESettingsPost)
+			r.Get("/le/logs", h.ACMELogs)
 		})
 
 		// Profile (any authenticated user)

@@ -1,4 +1,4 @@
-package le
+package acme
 
 import (
 	"os"
@@ -85,7 +85,7 @@ func TestParseCertDates(t *testing.T) {
 	}
 }
 
-// TestCertDirFor rejects any domain that could escape LEDirectory and accepts
+// TestCertDirFor rejects any domain that could escape ACMEDirectory and accepts
 // the hostname forms the ACME flow actually issues for.
 func TestCertDirFor(t *testing.T) {
 	valid := []string{
@@ -102,7 +102,7 @@ func TestCertDirFor(t *testing.T) {
 			t.Errorf("certDirFor(%q) returned error: %v", d, err)
 			continue
 		}
-		want := filepath.Join(LEDirectory, d)
+		want := filepath.Join(ACMEDirectory, d)
 		if got != want {
 			t.Errorf("certDirFor(%q) = %q, want %q", d, got, want)
 		}
@@ -134,17 +134,17 @@ func TestCertDirFor(t *testing.T) {
 	}
 }
 
-// TestCertDirForStaysUnderLEDirectory is the property the path guard exists for:
-// no accepted domain may resolve outside LEDirectory.
-func TestCertDirForStaysUnderLEDirectory(t *testing.T) {
-	prefix := LEDirectory + string(filepath.Separator)
+// TestCertDirForStaysUnderACMEDirectory is the property the path guard exists for:
+// no accepted domain may resolve outside ACMEDirectory.
+func TestCertDirForStaysUnderACMEDirectory(t *testing.T) {
+	prefix := ACMEDirectory + string(filepath.Separator)
 	for _, d := range []string{"example.com", "*.example.com", "deep.sub.example.com"} {
 		got, err := certDirFor(d)
 		if err != nil {
 			t.Fatalf("certDirFor(%q): %v", d, err)
 		}
 		if !strings.HasPrefix(filepath.Clean(got), prefix) {
-			t.Errorf("certDirFor(%q) = %q escapes %q", d, got, LEDirectory)
+			t.Errorf("certDirFor(%q) = %q escapes %q", d, got, ACMEDirectory)
 		}
 	}
 }

@@ -12,7 +12,7 @@ import (
 )
 
 // makeLERequest builds an *http.Request with the given form values for
-// parseLESettingsFields tests.
+// parseACMESettingsFields tests.
 func makeLERequest(t *testing.T, vals url.Values) *http.Request {
 	t.Helper()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
@@ -24,15 +24,15 @@ func makeLERequest(t *testing.T, vals url.Values) *http.Request {
 	return req
 }
 
-func storedLESettings() *models.LESettings {
+func storedLESettings() *models.ACMESettings {
 	//nolint:gosec // G101: fixture values, not credentials
-	return &models.LESettings{
+	return &models.ACMESettings{
 		ID:           1,
 		Email:        "acme@example.com",
 		Provider:     "cloudflare",
 		CFToken:      "stored-cf-token",
 		CFZoneID:     "stored-zone",
-		R53KeyID:     "AKIAIOSFODNN7EXAMPLE",
+		R53KeyID:     "AKIAIO...MPLE",
 		R53SecretKey: "stored-r53-secret",
 		R53Region:    "eu-west-1",
 	}
@@ -58,7 +58,7 @@ func TestParseLESettingsFields(t *testing.T) {
 				"provider":   {"cloudflare"},
 				"cf_token":   {""},
 				"cf_zone_id": {"stored-zone"},
-				"r53_key_id": {"AKIAIOSFODNN7EXAMPLE"},
+				"r53_key_id": {"AKIAIO...MPLE"},
 				"r53_secret": {""},
 				"r53_region": {"eu-west-1"},
 			},
@@ -106,7 +106,7 @@ func TestParseLESettingsFields(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := parseLESettingsFields(makeLERequest(t, tc.form), storedLESettings())
+			got := parseACMESettingsFields(makeLERequest(t, tc.form), storedLESettings())
 
 			if got.CFToken != tc.wantCFToken {
 				t.Errorf("CFToken: got %q want %q", got.CFToken, tc.wantCFToken)

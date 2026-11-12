@@ -1,7 +1,7 @@
 // Package db additions for certharbor-delivery (plans/distribution.md,
 // Section 3). These three tables are owned by certharbor-delivery: its own
 // binary runs InitDeliverySchema at startup, the same way backend/main.go
-// runs InitSchema/InitLESchema/etc. for certharbor-control's own tables.
+// runs InitSchema/InitACMESchema/etc. for certharbor-control's own tables.
 // certharbor-control never calls InitDeliverySchema and never reads or
 // writes these tables.
 package db
