@@ -68,6 +68,8 @@ jobs:
   gitleaks:
     name: gitleaks
     runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: "8.30.1"
     permissions:
       security-events: write
       contents: read
@@ -77,14 +79,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      # gitleaks/gitleaks-action now requires a paid GITLEAKS_LICENSE for
+      # org-owned repos (this repo moved to org kantharos-ai), so the OSS CLI
+      # binary is run directly instead, with the same scan coverage and the
+      # same job-fails-on-finding behaviour.
+      - name: Install gitleaks
+        run: |
+          curl -sSL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo install -m 755 gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
       - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v3.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_ENABLE_SARIF: "true"
-          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "true"
-          GITLEAKS_ENABLE_SUMMARY: "true"
-          GITLEAKS_EXIT_CODE: "1"
+        run: gitleaks detect --source . --redact -v --exit-code 1
 
   trivy-fs:
     name: trivy filesystem scan
