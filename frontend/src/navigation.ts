@@ -51,8 +51,8 @@ export const appNavigation: NavSection<AppIconName>[] = [
     requiredRole: 'manager',
     group: { label: "Let's Encrypt", icon: 'acme' },
     items: [
-      { label: 'LE Certificates', to: '/le', requiredRole: 'manager', feature: 'acme', end: true },
-      { label: 'Issue', to: '/le/issue', requiredRole: 'manager', feature: 'acme' },
+      { label: 'LE Certificates', to: '/acme', requiredRole: 'manager', feature: 'acme', end: true },
+      { label: 'Issue', to: '/acme/issue', requiredRole: 'manager', feature: 'acme' },
       { label: 'LE Settings', to: '/le/settings', requiredRole: 'manager', feature: 'acme' },
       { label: 'LE Logs', to: '/le/logs', requiredRole: 'manager', feature: 'acme' },
     ],

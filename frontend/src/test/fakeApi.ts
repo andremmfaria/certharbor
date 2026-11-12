@@ -20,6 +20,19 @@ export interface FakeCertificate {
   expiresAt: string
 }
 
+export interface FakeAcmeCertificate {
+  id: number
+  domain: string
+  email: string
+  provider: string
+  status: string
+  lastError?: string
+  autoRenew: boolean
+  expiryStatus: string
+  issuedAt?: string
+  expiresAt?: string
+}
+
 export interface FakeApiState {
   session: FakeSessionState
   user: FakeUser
@@ -34,6 +47,9 @@ export interface FakeApiState {
   mfaRequired: boolean
   csrfCookie: string
   certificates: FakeCertificate[]
+  acmeCertificates: FakeAcmeCertificate[]
+  acmeCertificatesDown: boolean
+  acmeOptionsDown: boolean
   importCandidates: { name: string; certFile: string; keyFile?: string }[]
   history: FakeHistoryEntry[]
   provisioners: { name: string; type: string }[]
@@ -190,6 +206,21 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
         expiresAt: '2027-01-01T00:00:00Z',
       },
     ],
+    acmeCertificates: [
+      {
+        id: 1,
+        domain: 'acme.example.test',
+        email: 'ops@example.test',
+        provider: 'http-01',
+        status: 'active',
+        autoRenew: true,
+        expiryStatus: 'ok',
+        issuedAt: '2026-01-01T00:00:00Z',
+        expiresAt: '2027-01-01T00:00:00Z',
+      },
+    ],
+    acmeCertificatesDown: false,
+    acmeOptionsDown: false,
     importCandidates: [{ name: 'orphan', certFile: 'orphan.crt', keyFile: 'orphan.key' }],
     history: [
       {
@@ -289,6 +320,7 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
   }
   const calls: RecordedCall[] = []
   let nextCertId = Math.max(0, ...state.certificates.map((c) => c.id)) + 1
+  let nextAcmeCertId = Math.max(0, ...state.acmeCertificates.map((c) => c.id)) + 1
   let nextUserId = Math.max(0, ...state.users.map((u) => u.id)) + 1
   let nextTempUserId = Math.max(0, ...state.tempUsers.map((u) => u.id)) + 1
 
@@ -421,6 +453,48 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
         })
       case 'GET /api/v1/certificates/import-candidates':
         return json(state.importCandidates)
+      case 'GET /api/v1/acme/certificates': {
+        if (state.acmeCertificatesDown)
+          return problem(500, 'Internal Server Error', 'acme certificates unavailable')
+        const page = Number(url.searchParams.get('page') ?? '1')
+        const pageSize = Number(url.searchParams.get('pageSize') ?? '25')
+        const start = (page - 1) * pageSize
+        const items = state.acmeCertificates.slice(start, start + pageSize)
+        return json({
+          items,
+          page,
+          pageSize,
+          total: state.acmeCertificates.length,
+          totalPages: Math.max(1, Math.ceil(state.acmeCertificates.length / pageSize)),
+        })
+      }
+      case 'GET /api/v1/acme/options':
+        if (state.acmeOptionsDown) return problem(500, 'Internal Server Error', 'acme options unavailable')
+        return json({
+          providers: [
+            { id: 'http-01', label: 'HTTP-01' },
+            { id: 'dns-01', label: 'DNS-01' },
+          ],
+          defaultProvider: 'http-01',
+          defaultEmail: 'ops@example.test',
+          allowedDomainSuffixes: [],
+          cloudflareConfigured: false,
+          route53Configured: false,
+        })
+      case 'POST /api/v1/acme/certificates': {
+        const created = body as { domain: string; email: string; provider?: string; autoRenew: boolean }
+        const cert: FakeAcmeCertificate = {
+          id: nextAcmeCertId++,
+          domain: created.domain,
+          email: created.email,
+          provider: created.provider || 'http-01',
+          status: 'pending',
+          autoRenew: created.autoRenew,
+          expiryStatus: 'ok',
+        }
+        state.acmeCertificates.push(cert)
+        return json(cert, 201)
+      }
       case 'GET /api/v1/history': {
         if (state.historyDown) return problem(500, 'Internal Server Error', 'history unavailable')
         const actions = url.searchParams.getAll('action').filter((a) => a !== '')
@@ -691,6 +765,33 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
       if (method === 'POST' && action === 'revoke') {
         cert.status = 'revoked'
         return json(cert)
+      }
+    }
+
+    const acmeMatch = /^\/api\/v1\/acme\/certificates\/(\d+)(\/(certificate|key|renew))?$/.exec(url.pathname)
+    if (acmeMatch) {
+      const id = Number(acmeMatch[1])
+      const action = acmeMatch[3]
+      const cert = state.acmeCertificates.find((c) => c.id === id)
+      if (!cert) return problem(404, 'Not Found', 'no ACME certificate with that id')
+      if (method === 'GET' && (action === 'certificate' || action === 'key')) {
+        return new Response('fake-pem-bytes', {
+          status: 200,
+          headers: { 'Content-Type': 'application/x-pem-file' },
+        })
+      }
+      if (method === 'POST' && action === 'renew') {
+        cert.issuedAt = new Date().toISOString()
+        return json(cert)
+      }
+      if (method === 'PATCH' && !action) {
+        const patch = body as { autoRenew?: boolean }
+        if (patch.autoRenew !== undefined) cert.autoRenew = patch.autoRenew
+        return json(cert)
+      }
+      if (method === 'DELETE' && !action) {
+        state.acmeCertificates = state.acmeCertificates.filter((c) => c.id !== id)
+        return new Response(null, { status: 204 })
       }
     }
 
