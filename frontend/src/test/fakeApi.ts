@@ -42,6 +42,8 @@ export interface FakeApiState {
   adminAbout: FakeAdminAbout
   adminIntegrity: FakeHealthCheck[]
   adminConsoleCommands: FakeConsoleCommand[]
+  users: FakeManagedUser[]
+  tempUsers: FakeTempUser[]
   // Narrower than `down`, which also breaks the session/config calls every
   // page depends on to render at all: these fail only their own endpoint.
   // Each operation gets its own flag rather than sharing one: reusing a
@@ -61,6 +63,8 @@ export interface FakeApiState {
   // When set, POST /api/v1/admin/console/run always 422s, matching the
   // backend's rejection of an id outside the allowlist.
   adminConsoleRunFails: boolean
+  usersDown: boolean
+  tempUsersDown: boolean
   // Artificial delay (ms) before any response resolves, so tests asserting
   // on a transient loading state have a window to observe it.
   delayMs: number
@@ -120,6 +124,27 @@ function healthSummary(checks: FakeHealthCheck[]) {
     warnings: checks.filter((c) => c.status === 'warn').length,
     errors: checks.filter((c) => c.status === 'err').length,
   }
+}
+
+export interface FakeManagedUser {
+  id: number
+  username: string
+  role: string
+  isActive: boolean
+  createdAt: string
+  lastLogin?: string
+  lastIp?: string
+  failCount24h: number
+}
+
+export interface FakeTempUser {
+  id: number
+  username: string
+  role: string
+  note?: string
+  createdAt: string
+  expiresAt?: string
+  status: 'active' | 'expired' | 'blocked'
 }
 
 export interface RecordedCall {
@@ -217,6 +242,37 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
     adminConsoleCommands: [
       { id: 'pg_isready', label: 'pg_isready', description: 'Check database connectivity.' },
     ],
+    users: [
+      {
+        id: 1,
+        username: 'alice',
+        role: 'admin',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00Z',
+        lastLogin: '2026-01-02T00:00:00Z',
+        lastIp: '203.0.113.9',
+        failCount24h: 0,
+      },
+      {
+        id: 2,
+        username: 'bob',
+        role: 'viewer',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00Z',
+        failCount24h: 1,
+      },
+    ],
+    tempUsers: [
+      {
+        id: 1,
+        username: 'temp-xyz',
+        role: 'viewer',
+        note: 'vendor access',
+        createdAt: '2026-01-01T00:00:00Z',
+        expiresAt: '2027-01-01T00:00:00Z',
+        status: 'active',
+      },
+    ],
     historyDown: false,
     provisionersDown: false,
     securityEventsDown: false,
@@ -226,11 +282,15 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
     adminIntegrityDown: false,
     adminConsoleCommandsDown: false,
     adminConsoleRunFails: false,
+    usersDown: false,
+    tempUsersDown: false,
     delayMs: 0,
     ...overrides,
   }
   const calls: RecordedCall[] = []
   let nextCertId = Math.max(0, ...state.certificates.map((c) => c.id)) + 1
+  let nextUserId = Math.max(0, ...state.users.map((u) => u.id)) + 1
+  let nextTempUserId = Math.max(0, ...state.tempUsers.map((u) => u.id)) + 1
 
   const sessionBody = () => ({
     state: state.session,
@@ -483,6 +543,53 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
         const items = body as { name: string; domain: string; certPath: string }[]
         return json({ results: items.map((i) => ({ ref: i.name, status: 'ok' as const })) })
       }
+      case 'GET /api/v1/users': {
+        if (state.usersDown) return problem(500, 'Internal Server Error', 'users unavailable')
+        const q = (url.searchParams.get('q') ?? '').toLowerCase()
+        const page = Number(url.searchParams.get('page') ?? '1')
+        const pageSize = Number(url.searchParams.get('pageSize') ?? '25')
+        const filtered = state.users.filter((u) => !q || u.username.toLowerCase().includes(q))
+        const start = (page - 1) * pageSize
+        const items = filtered.slice(start, start + pageSize)
+        return json({
+          items,
+          page,
+          pageSize,
+          total: filtered.length,
+          totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
+        })
+      }
+      case 'POST /api/v1/users': {
+        const created = body as { username: string; password: string; role: string }
+        const user: FakeManagedUser = {
+          id: nextUserId++,
+          username: created.username,
+          role: created.role,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          failCount24h: 0,
+        }
+        state.users.push(user)
+        return json(user, 201)
+      }
+      case 'GET /api/v1/temporary-users':
+        if (state.tempUsersDown) return problem(500, 'Internal Server Error', 'temporary users unavailable')
+        return json(state.tempUsers)
+      case 'POST /api/v1/temporary-users': {
+        const created = body as { role: string; note?: string; expiresAt: string }
+        const username = `temp-${nextTempUserId}`
+        const tempUser: FakeTempUser = {
+          id: nextTempUserId++,
+          username,
+          role: created.role,
+          note: created.note,
+          createdAt: new Date().toISOString(),
+          expiresAt: created.expiresAt,
+          status: 'active',
+        }
+        state.tempUsers.push(tempUser)
+        return json({ ...tempUser, passphrase: 'fake-one-time-passphrase' }, 201)
+      }
       case 'POST /api/v1/certificates/import/upload': {
         const form = await request.formData()
         const name = String(form.get('name') ?? 'uploaded')
@@ -514,6 +621,36 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
       const ip = decodeURIComponent(ipBlockMatch[1]!)
       state.securityEvents = state.securityEvents.filter((e) => e.ip !== ip)
       return new Response(null, { status: 204 })
+    }
+
+    const tempUserMatch = /^\/api\/v1\/temporary-users\/(\d+)$/.exec(url.pathname)
+    if (tempUserMatch && method === 'DELETE') {
+      const id = Number(tempUserMatch[1])
+      if (!state.tempUsers.some((u) => u.id === id))
+        return problem(404, 'Not Found', 'no such temporary user')
+      state.tempUsers = state.tempUsers.filter((u) => u.id !== id)
+      return new Response(null, { status: 204 })
+    }
+
+    const userMatch = /^\/api\/v1\/users\/(\d+)(\/password-reset)?$/.exec(url.pathname)
+    if (userMatch) {
+      const id = Number(userMatch[1])
+      const action = userMatch[2]
+      const user = state.users.find((u) => u.id === id)
+      if (!user) return problem(404, 'Not Found', 'user not found')
+      if (method === 'PATCH' && !action) {
+        const patch = body as { role?: string; isActive?: boolean }
+        if (patch.role !== undefined) user.role = patch.role
+        if (patch.isActive !== undefined) user.isActive = patch.isActive
+        return json(user)
+      }
+      if (method === 'DELETE' && !action) {
+        state.users = state.users.filter((u) => u.id !== id)
+        return new Response(null, { status: 204 })
+      }
+      if (method === 'POST' && action === '/password-reset') {
+        return json(user)
+      }
     }
 
     const idMatch = /^\/api\/v1\/certificates\/(\d+)(\/(certificate|key|renew|revoke))?$/.exec(url.pathname)
