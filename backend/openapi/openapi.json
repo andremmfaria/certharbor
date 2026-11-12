@@ -106,6 +106,33 @@
         ],
         "type": "object"
       },
+      "BackupBody": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "downloadUrl": {
+            "pattern": "^/api/v1/admin/backups/[A-Za-z0-9_-]+/download$",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "sizeBytes",
+          "createdAt",
+          "downloadUrl"
+        ],
+        "type": "object"
+      },
       "BulkResponse": {
         "additionalProperties": false,
         "properties": {
@@ -951,6 +978,64 @@
         ],
         "type": "object"
       },
+      "NotificationsBody": {
+        "additionalProperties": false,
+        "properties": {
+          "expiryDays": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "notifyAuthBurst": {
+            "type": "boolean"
+          },
+          "notifyExpiry": {
+            "type": "boolean"
+          },
+          "notifyFailures": {
+            "type": "boolean"
+          },
+          "smtpEnabled": {
+            "type": "boolean"
+          },
+          "smtpFrom": {
+            "type": "string"
+          },
+          "smtpHost": {
+            "type": "string"
+          },
+          "smtpPort": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "smtpSecurity": {
+            "enum": [
+              "none",
+              "starttls",
+              "tls"
+            ],
+            "type": "string"
+          },
+          "smtpUsername": {
+            "type": "string"
+          },
+          "webhookEnabled": {
+            "type": "boolean"
+          },
+          "webhookUrl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "webhookEnabled",
+          "notifyExpiry",
+          "expiryDays",
+          "notifyFailures",
+          "notifyAuthBurst",
+          "smtpEnabled",
+          "smtpPort"
+        ],
+        "type": "object"
+      },
       "PageCertificateSummaryBody": {
         "additionalProperties": false,
         "properties": {
@@ -1137,6 +1222,68 @@
           "total",
           "totalPages"
         ],
+        "type": "object"
+      },
+      "PatchNotificationsBody": {
+        "additionalProperties": false,
+        "properties": {
+          "expiryDays": {
+            "format": "int64",
+            "maximum": 365,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "notifyAuthBurst": {
+            "type": "boolean"
+          },
+          "notifyExpiry": {
+            "type": "boolean"
+          },
+          "notifyFailures": {
+            "type": "boolean"
+          },
+          "smtpEnabled": {
+            "type": "boolean"
+          },
+          "smtpFrom": {
+            "maxLength": 255,
+            "type": "string"
+          },
+          "smtpHost": {
+            "maxLength": 255,
+            "type": "string"
+          },
+          "smtpPassword": {
+            "description": "SMTP password. Omit to leave the stored value unchanged; never present in any response.",
+            "type": "string",
+            "writeOnly": true
+          },
+          "smtpPort": {
+            "format": "int64",
+            "maximum": 65535,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "smtpSecurity": {
+            "enum": [
+              "none",
+              "starttls",
+              "tls"
+            ],
+            "type": "string"
+          },
+          "smtpUsername": {
+            "maxLength": 255,
+            "type": "string"
+          },
+          "webhookEnabled": {
+            "type": "boolean"
+          },
+          "webhookUrl": {
+            "maxLength": 2048,
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "ProvisionerBody": {
@@ -1697,6 +1844,154 @@
         "x-required-role": "admin"
       }
     },
+    "/api/v1/admin/backups": {
+      "get": {
+        "operationId": "listBackups",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BackupBody"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "List persisted backup bundles",
+        "tags": [
+          "admin"
+        ],
+        "x-required-role": "admin"
+      },
+      "post": {
+        "operationId": "createBackup",
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupBody"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Create a new backup bundle",
+        "tags": [
+          "admin"
+        ],
+        "x-required-role": "admin"
+      }
+    },
+    "/api/v1/admin/backups/{id}/download": {
+      "get": {
+        "operationId": "downloadBackup",
+        "parameters": [
+          {
+            "description": "Backup id, as returned by POST /api/v1/admin/backups.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Backup id, as returned by POST /api/v1/admin/backups.",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "contentMediaType": "application/octet-stream",
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The backup bundle, gzip-compressed tar.",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Download a backup bundle",
+        "tags": [
+          "admin"
+        ],
+        "x-required-role": "admin"
+      }
+    },
     "/api/v1/admin/console/commands": {
       "get": {
         "operationId": "listAdminConsoleCommands",
@@ -1824,6 +2119,124 @@
           }
         ],
         "summary": "Get CA integrity and update guardrail checks",
+        "tags": [
+          "admin"
+        ],
+        "x-required-role": "admin"
+      }
+    },
+    "/api/v1/admin/notifications": {
+      "get": {
+        "operationId": "getNotifications",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationsBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Get notification settings",
+        "tags": [
+          "admin"
+        ],
+        "x-required-role": "admin"
+      },
+      "patch": {
+        "operationId": "patchNotifications",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchNotificationsBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationsBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Update notification settings",
+        "tags": [
+          "admin"
+        ],
+        "x-required-role": "admin"
+      }
+    },
+    "/api/v1/admin/notifications/test": {
+      "post": {
+        "operationId": "testNotifications",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Send a test webhook notification",
         "tags": [
           "admin"
         ],
