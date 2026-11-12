@@ -756,6 +756,41 @@
         ],
         "type": "object"
       },
+      "ConfirmMfaEnrollmentBody": {
+        "additionalProperties": false,
+        "properties": {
+          "recoveryCodes": {
+            "description": "One-time recovery codes. Shown only in this response; store them now, they cannot be retrieved again.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ],
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "recoveryCodes"
+        ],
+        "type": "object"
+      },
+      "ConfirmMfaEnrollmentInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "description": "The 6-digit code from the authenticator app.",
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
       "ConfirmPasswordResetBody": {
         "additionalProperties": false,
         "properties": {
@@ -948,6 +983,29 @@
           "total",
           "byStatus",
           "expiringSoon"
+        ],
+        "type": "object"
+      },
+      "DisableMfaInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "description": "A fresh code from the authenticator app.",
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "currentPassword": {
+            "description": "The account's current password.",
+            "maxLength": 1024,
+            "minLength": 1,
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "currentPassword",
+          "code"
         ],
         "type": "object"
       },
@@ -1229,6 +1287,22 @@
         "required": [
           "name",
           "domain"
+        ],
+        "type": "object"
+      },
+      "MfaStatusBody": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "pendingEnrollment": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "pendingEnrollment"
         ],
         "type": "object"
       },
@@ -1894,6 +1968,19 @@
         "required": [
           "filename",
           "sizeBytes"
+        ],
+        "type": "object"
+      },
+      "StartMfaEnrollmentBody": {
+        "additionalProperties": false,
+        "properties": {
+          "manualEntryKey": {
+            "description": "TOTP secret for manual entry into an authenticator app; shown once, alongside the QR code.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "manualEntryKey"
         ],
         "type": "object"
       },
@@ -4588,6 +4675,223 @@
           }
         ],
         "summary": "Update the signed-in user's display name and email",
+        "tags": [
+          "profile"
+        ],
+        "x-required-role": "viewer"
+      }
+    },
+    "/api/v1/profile/mfa": {
+      "get": {
+        "operationId": "getMfa",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaStatusBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "viewer"
+            ]
+          }
+        ],
+        "summary": "Get the current user's 2FA status",
+        "tags": [
+          "profile"
+        ],
+        "x-required-role": "viewer"
+      }
+    },
+    "/api/v1/profile/mfa/disable": {
+      "post": {
+        "operationId": "disableMfa",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DisableMfaInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "viewer"
+            ]
+          }
+        ],
+        "summary": "Disable 2FA with the current password and a TOTP code",
+        "tags": [
+          "profile"
+        ],
+        "x-required-role": "viewer"
+      }
+    },
+    "/api/v1/profile/mfa/enrollment": {
+      "post": {
+        "operationId": "startMfaEnrollment",
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartMfaEnrollmentBody"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "viewer"
+            ]
+          }
+        ],
+        "summary": "Start a 2FA enrollment by generating a new TOTP secret",
+        "tags": [
+          "profile"
+        ],
+        "x-required-role": "viewer"
+      }
+    },
+    "/api/v1/profile/mfa/enrollment/confirm": {
+      "post": {
+        "operationId": "confirmMfaEnrollment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmMfaEnrollmentInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmMfaEnrollmentBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "viewer"
+            ]
+          }
+        ],
+        "summary": "Confirm a pending 2FA enrollment with a TOTP code",
+        "tags": [
+          "profile"
+        ],
+        "x-required-role": "viewer"
+      }
+    },
+    "/api/v1/profile/mfa/enrollment/qr": {
+      "get": {
+        "operationId": "getMfaEnrollmentQr",
+        "responses": {
+          "200": {
+            "content": {
+              "image/png": {
+                "schema": {
+                  "contentMediaType": "application/octet-stream",
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The pending TOTP enrollment's QR code.",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "viewer"
+            ]
+          }
+        ],
+        "summary": "Get the pending 2FA enrollment's QR code",
         "tags": [
           "profile"
         ],

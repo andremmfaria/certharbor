@@ -636,4 +636,53 @@ func Register(humaAPI huma.API, h *handlers.Handler) {
 		Summary:       "Set a new password using a password reset token",
 		DefaultStatus: http.StatusNoContent,
 	})), confirmPasswordReset(h))
+
+	// Phase 8, step B (plans/frontend-backend-split.md Section 8 "Profile
+	// and MFA" / Section 6 "### Profile"): the TOTP enrollment, QR,
+	// confirm and disable operations. Every row is viewer, acting on the
+	// session's own account with no id parameter (5.5). Profile core
+	// (PATCH /profile, /profile/preferences, POST /profile/password) and
+	// the public password-reset operations are a sibling step.
+	huma.Register(humaAPI, roleOp("viewer", huma.Operation{
+		OperationID: "getMfa",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/profile/mfa",
+		Tags:        []string{"profile"},
+		Summary:     "Get the current user's 2FA status",
+	}), getMfa(h))
+
+	huma.Register(humaAPI, roleOp("viewer", huma.Operation{
+		OperationID:   "startMfaEnrollment",
+		Method:        http.MethodPost,
+		Path:          BasePath + "/profile/mfa/enrollment",
+		Tags:          []string{"profile"},
+		Summary:       "Start a 2FA enrollment by generating a new TOTP secret",
+		DefaultStatus: http.StatusCreated,
+	}), startMfaEnrollment(h))
+
+	huma.Register(humaAPI, roleOp("viewer", huma.Operation{
+		OperationID: "getMfaEnrollmentQr",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/profile/mfa/enrollment/qr",
+		Tags:        []string{"profile"},
+		Summary:     "Get the pending 2FA enrollment's QR code",
+		Responses:   mfaQrResponses(),
+	}), getMfaEnrollmentQr(h))
+
+	huma.Register(humaAPI, roleOp("viewer", huma.Operation{
+		OperationID: "confirmMfaEnrollment",
+		Method:      http.MethodPost,
+		Path:        BasePath + "/profile/mfa/enrollment/confirm",
+		Tags:        []string{"profile"},
+		Summary:     "Confirm a pending 2FA enrollment with a TOTP code",
+	}), confirmMfaEnrollment(h))
+
+	huma.Register(humaAPI, roleOp("viewer", huma.Operation{
+		OperationID:   "disableMfa",
+		Method:        http.MethodPost,
+		Path:          BasePath + "/profile/mfa/disable",
+		Tags:          []string{"profile"},
+		Summary:       "Disable 2FA with the current password and a TOTP code",
+		DefaultStatus: http.StatusNoContent,
+	}), disableMfa(h))
 }

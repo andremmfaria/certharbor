@@ -16,6 +16,7 @@ import { ForgotPasswordPage } from './ForgotPasswordPage'
 import { HistoryPage } from './HistoryPage'
 import { ImportPage } from './ImportPage'
 import { IssuePage } from './IssuePage'
+import { MfaPage } from './MfaPage'
 import { NotFoundPage } from './NotFoundPage'
 import { placeholderFor } from './Placeholder'
 import { ProfilePage } from './ProfilePage'
@@ -44,6 +45,7 @@ const BUILT_PAGES: Record<string, ComponentType> = {
   'acme-settings': AcmeSettingsPage,
   'acme-logs': AcmeEventsPage,
   profile: ProfilePage,
+  'profile-mfa': MfaPage,
 }
 
 function leaf(route: RouteEntry): RouteObject {
