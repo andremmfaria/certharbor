@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"certharbor/models"
@@ -191,6 +192,46 @@ func SaveACMESettings(ctx context.Context, d *sql.DB, s *models.ACMESettings) er
 // AddACMELog appends a log entry for an ACME domain event (best-effort; errors are discarded).
 func AddACMELog(ctx context.Context, d *sql.DB, domain, action, message string) {
 	_, _ = d.ExecContext(ctx, `INSERT INTO le_logs (domain,action,message) VALUES ($1,$2,$3)`, domain, action, message)
+}
+
+// ListACMELogsPaged returns a page of le_logs entries, optionally filtered
+// by domain, newest first with a (created_at DESC, id DESC) total order so
+// a LIMIT/OFFSET page boundary cannot repeat or omit a row when many
+// entries share one created_at (the same fix db/authlog.go and
+// db/history.go already carry; GET /api/v1/acme/events is this table's
+// equivalent operation, Phase 7).
+func ListACMELogsPaged(ctx context.Context, d *sql.DB, domain string, page, pageSize int) ([]*models.ACMELog, int, error) {
+	where := "WHERE 1=1"
+	args := []interface{}{}
+	if domain != "" {
+		where += " AND domain=$1"
+		args = append(args, domain)
+	}
+
+	var total int
+	if err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM le_logs `+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	offset := (page - 1) * pageSize
+	limitIdx := len(args) + 1
+	offsetIdx := len(args) + 2
+	rows, err := d.QueryContext(ctx, `SELECT id,COALESCE(domain,''),COALESCE(action,''),COALESCE(message,''),created_at FROM le_logs `+where+ //nolint:gosec // pre-existing pattern (db/history.go); where is built from app-controlled strings
+		fmt.Sprintf(` ORDER BY created_at DESC, id DESC LIMIT $%d OFFSET $%d`, limitIdx, offsetIdx),
+		append(args, pageSize, offset)...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer func() { _ = rows.Close() }()
+	var logs []*models.ACMELog
+	for rows.Next() {
+		l := &models.ACMELog{}
+		if err := rows.Scan(&l.ID, &l.Domain, &l.Action, &l.Message, &l.CreatedAt); err != nil {
+			return nil, 0, err
+		}
+		logs = append(logs, l)
+	}
+	return logs, total, rows.Err()
 }
 
 // GetACMELogs returns up to limit log entries for the given domain (or all domains if domain is empty).

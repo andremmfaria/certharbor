@@ -60,6 +60,32 @@
         ],
         "type": "object"
       },
+      "AcmeEventBody": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "createdAt"
+        ],
+        "type": "object"
+      },
       "AcmeOptionsBody": {
         "additionalProperties": false,
         "properties": {
@@ -119,6 +145,36 @@
         "required": [
           "id",
           "label"
+        ],
+        "type": "object"
+      },
+      "AcmeSettingsBody": {
+        "additionalProperties": false,
+        "properties": {
+          "cfZoneId": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "http01",
+              "cloudflare",
+              "route53",
+              "manual"
+            ],
+            "type": "string"
+          },
+          "r53KeyId": {
+            "type": "string"
+          },
+          "r53Region": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider"
         ],
         "type": "object"
       },
@@ -1235,6 +1291,53 @@
         ],
         "type": "object"
       },
+      "PageAcmeEventBody": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AcmeEventBody"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "page": {
+            "description": "1-based page number",
+            "format": "int64",
+            "type": "integer"
+          },
+          "pageSize": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "description": "null when the server declined to count",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "totalPages": {
+            "description": "null whenever total is null",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total",
+          "totalPages"
+        ],
+        "type": "object"
+      },
       "PageCertificateSummaryBody": {
         "additionalProperties": false,
         "properties": {
@@ -1428,6 +1531,47 @@
         "properties": {
           "autoRenew": {
             "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "PatchAcmeSettingsBody": {
+        "additionalProperties": false,
+        "properties": {
+          "cfToken": {
+            "description": "Cloudflare API token. Omit to leave the stored value unchanged; never present in any response.",
+            "type": "string",
+            "writeOnly": true
+          },
+          "cfZoneId": {
+            "maxLength": 255,
+            "type": "string"
+          },
+          "email": {
+            "maxLength": 255,
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "http01",
+              "cloudflare",
+              "route53",
+              "manual"
+            ],
+            "type": "string"
+          },
+          "r53KeyId": {
+            "maxLength": 255,
+            "type": "string"
+          },
+          "r53Region": {
+            "maxLength": 50,
+            "type": "string"
+          },
+          "r53SecretKey": {
+            "description": "AWS Route53 secret access key. Omit to leave the stored value unchanged; never present in any response.",
+            "type": "string",
+            "writeOnly": true
           }
         },
         "type": "object"
@@ -2411,6 +2555,81 @@
         "x-required-role": "manager"
       }
     },
+    "/api/v1/acme/events": {
+      "get": {
+        "operationId": "listAcmeEvents",
+        "parameters": [
+          {
+            "description": "Exact domain filter.",
+            "explode": false,
+            "in": "query",
+            "name": "domain",
+            "schema": {
+              "description": "Exact domain filter.",
+              "maxLength": 255,
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "default": 1,
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "default": 25,
+              "format": "int64",
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageAcmeEventBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "manager"
+            ]
+          }
+        ],
+        "summary": "List ACME certificate lifecycle events",
+        "tags": [
+          "acme"
+        ],
+        "x-required-role": "manager"
+      }
+    },
     "/api/v1/acme/options": {
       "get": {
         "operationId": "getACMEOptions",
@@ -2444,6 +2663,92 @@
           }
         ],
         "summary": "Get ACME issuance options and defaults",
+        "tags": [
+          "acme"
+        ],
+        "x-required-role": "manager"
+      }
+    },
+    "/api/v1/acme/settings": {
+      "get": {
+        "operationId": "getAcmeSettings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcmeSettingsBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "manager"
+            ]
+          }
+        ],
+        "summary": "Get ACME provider settings",
+        "tags": [
+          "acme"
+        ],
+        "x-required-role": "manager"
+      },
+      "patch": {
+        "operationId": "patchAcmeSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchAcmeSettingsBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcmeSettingsBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "manager"
+            ]
+          }
+        ],
+        "summary": "Update ACME provider settings",
         "tags": [
           "acme"
         ],
