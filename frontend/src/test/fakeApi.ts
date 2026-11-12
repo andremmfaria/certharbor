@@ -97,6 +97,12 @@ export interface FakeApiState {
   // Artificial delay (ms) before any response resolves, so tests asserting
   // on a transient loading state have a window to observe it.
   delayMs: number
+  // The one token this fake recognizes as live. requestPasswordReset never
+  // reveals whether the submitted email matched an account (no-enumeration,
+  // 5.9); it always 202s. validate/confirm instead key off this token.
+  resetToken: string
+  resetTokenConsumed: boolean
+  requestPasswordResetDown: boolean
 }
 
 export interface FakeHistoryEntry {
@@ -379,6 +385,9 @@ export function installFakeApi(
     usersDown: false,
     tempUsersDown: false,
     delayMs: 0,
+    resetToken: 'valid-reset-token',
+    resetTokenConsumed: false,
+    requestPasswordResetDown: false,
     ...overrides,
     // Re-applied after the ...overrides spread above: that spread would
     // otherwise overwrite the merged user back to overrides.user verbatim,
@@ -805,6 +814,47 @@ export function installFakeApi(
         }
         state.certificates.push(cert)
         return json(cert, 201)
+      }
+      case 'POST /api/v1/password-reset/requests': {
+        if (state.requestPasswordResetDown)
+          return problem(500, 'Internal Server Error', 'password reset unavailable')
+        // Always 202, regardless of body.email: no-enumeration (5.9).
+        return new Response(null, { status: 202 })
+      }
+      case 'POST /api/v1/password-reset/validate': {
+        const { token } = body as { token: string }
+        if (token !== state.resetToken || state.resetTokenConsumed) {
+          return problem(
+            422,
+            'Unprocessable Entity',
+            'This reset link is invalid or has expired. Please request a new one.',
+            'https://certharbor/errors/password-reset-token-invalid',
+          )
+        }
+        // Validating never consumes the token.
+        return new Response(null, { status: 204 })
+      }
+      case 'POST /api/v1/password-reset/confirm': {
+        const { token, newPassword } = body as { token: string; newPassword: string }
+        if (token !== state.resetToken || state.resetTokenConsumed) {
+          return problem(
+            422,
+            'Unprocessable Entity',
+            'This reset link is invalid or has expired. Please request a new one.',
+            'https://certharbor/errors/password-reset-token-invalid',
+          )
+        }
+        if (newPassword.length < 8) {
+          return problem(
+            422,
+            'Unprocessable Entity',
+            'newPassword: must be at least 8 characters',
+            'validation',
+          )
+        }
+        state.resetTokenConsumed = true
+        state.password = newPassword
+        return new Response(null, { status: 204 })
       }
       default:
         break

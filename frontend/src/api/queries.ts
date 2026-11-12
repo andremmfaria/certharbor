@@ -1,10 +1,13 @@
 import {
+  confirmPasswordResetMutation,
   createSessionMutation,
   deleteSessionMutation,
   getConfigOptions,
   getSessionOptions,
   getSessionQueryKey,
+  requestPasswordResetMutation,
   submitMfaMutation,
+  validatePasswordResetMutation,
 } from '@kantharos-ai/certharbor-client/react-query'
 import type { SessionBody } from '@kantharos-ai/certharbor-client'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -48,6 +51,21 @@ export function useSubmitMfa() {
     ...submitMfaMutation(),
     onSuccess: (session: SessionBody) => queryClient.setQueryData(getSessionQueryKey(), session),
   })
+}
+
+// Unauthenticated like useCreateSession/useSubmitMfa above, but with no
+// session to seed on success: the caller never has a session yet, and
+// requestPasswordReset's 202 carries no body at all (no-enumeration, 5.9).
+export function useRequestPasswordReset() {
+  return useMutation(requestPasswordResetMutation())
+}
+
+export function useValidatePasswordReset() {
+  return useMutation(validatePasswordResetMutation())
+}
+
+export function useConfirmPasswordReset() {
+  return useMutation(confirmPasswordResetMutation())
 }
 
 // Logging out drops every cached query but the public ones, because none of
