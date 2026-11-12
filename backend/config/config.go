@@ -41,9 +41,15 @@ type Config struct {
 	Port          int
 	CertsDir      string
 	UploadDir     string
-	SSLCert       string
-	SSLKey        string
-	UseHTTPS      bool // explicit override; defaults to auto-detect via os.Stat
+	// BackupDir holds the persisted backup bundles POST /api/v1/admin/backups
+	// creates (5.7's create-then-navigate convention): the create and the
+	// download are two separate HTTP requests, so the bundle must outlive
+	// the request that built it, unlike the legacy /admin/backup/download
+	// route's stream-from-tmp-then-delete.
+	BackupDir string
+	SSLCert   string
+	SSLKey    string
+	UseHTTPS  bool // explicit override; defaults to auto-detect via os.Stat
 
 	// OIDC / JumpCloud SSO
 	OIDCEnabled      bool
@@ -119,6 +125,7 @@ func Load() *Config {
 		Port:          port,
 		CertsDir:      "/opt/certharbor/certs",
 		UploadDir:     "/opt/certharbor/uploads",
+		BackupDir:     getEnv("BACKUP_DIR", "/opt/certharbor/backups"),
 		SSLCert:       "/opt/certharbor/ssl/server.crt",
 		SSLKey:        "/opt/certharbor/ssl/server.key",
 
