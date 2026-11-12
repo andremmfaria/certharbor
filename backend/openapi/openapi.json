@@ -1,6 +1,127 @@
 {
   "components": {
     "schemas": {
+      "AcmeCertificateBody": {
+        "additionalProperties": false,
+        "properties": {
+          "autoRenew": {
+            "type": "boolean"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "expiryStatus": {
+            "enum": [
+              "ok",
+              "warning",
+              "expired"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "issuedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "lastError": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "expired",
+              "pending",
+              "error"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "domain",
+          "email",
+          "provider",
+          "status",
+          "autoRenew",
+          "expiryStatus"
+        ],
+        "type": "object"
+      },
+      "AcmeOptionsBody": {
+        "additionalProperties": false,
+        "properties": {
+          "allowedDomainSuffixes": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "cloudflareConfigured": {
+            "type": "boolean"
+          },
+          "defaultEmail": {
+            "type": "string"
+          },
+          "defaultProvider": {
+            "type": "string"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/AcmeProviderOptionBody"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "route53Configured": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "providers",
+          "defaultProvider",
+          "allowedDomainSuffixes",
+          "cloudflareConfigured",
+          "route53Configured"
+        ],
+        "type": "object"
+      },
+      "AcmeProviderOptionBody": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "type": "object"
+      },
       "AdminAboutBody": {
         "additionalProperties": false,
         "properties": {
@@ -941,6 +1062,37 @@
         ],
         "type": "object"
       },
+      "IssueACMECertificateInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "autoRenew": {
+            "type": "boolean"
+          },
+          "domain": {
+            "description": "Domain the certificate covers. Must be publicly accessible.",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "email": {
+            "description": "Used for Let's Encrypt notifications.",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "provider": {
+            "description": "Challenge provider, from GET /api/v1/acme/options.",
+            "maxLength": 32,
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "email",
+          "autoRenew"
+        ],
+        "type": "object"
+      },
       "IssueCertificateBody": {
         "additionalProperties": false,
         "properties": {
@@ -1033,6 +1185,53 @@
           "notifyAuthBurst",
           "smtpEnabled",
           "smtpPort"
+        ],
+        "type": "object"
+      },
+      "PageAcmeCertificateBody": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AcmeCertificateBody"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "page": {
+            "description": "1-based page number",
+            "format": "int64",
+            "type": "integer"
+          },
+          "pageSize": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "description": "null when the server declined to count",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "totalPages": {
+            "description": "null whenever total is null",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total",
+          "totalPages"
         ],
         "type": "object"
       },
@@ -1222,6 +1421,15 @@
           "total",
           "totalPages"
         ],
+        "type": "object"
+      },
+      "PatchACMECertificateInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "autoRenew": {
+            "type": "boolean"
+          }
+        },
         "type": "object"
       },
       "PatchNotificationsBody": {
@@ -1801,6 +2009,443 @@
         "summary": "Phase 0 spike: multipart upload mechanic",
         "tags": [
           "system"
+        ],
+        "x-required-role": "manager"
+      }
+    },
+    "/api/v1/acme/certificates": {
+      "get": {
+        "operationId": "listACMECertificates",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "default": 1,
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "default": 25,
+              "format": "int64",
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageAcmeCertificateBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "manager"
+            ]
+          }
+        ],
+        "summary": "List ACME-managed certificates",
+        "tags": [
+          "acme"
+        ],
+        "x-required-role": "manager"
+      },
+      "post": {
+        "operationId": "createACMECertificate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueACMECertificateInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcmeCertificateBody"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "manager"
+            ]
+          }
+        ],
+        "summary": "Issue a new ACME certificate",
+        "tags": [
+          "acme"
+        ],
+        "x-required-role": "manager"
+      }
+    },
+    "/api/v1/acme/certificates/{id}": {
+      "delete": {
+        "operationId": "deleteACMECertificate",
+        "parameters": [
+          {
+            "description": "ACME certificate id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "ACME certificate id.",
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "manager"
+            ]
+          }
+        ],
+        "summary": "Delete an ACME certificate record",
+        "tags": [
+          "acme"
+        ],
+        "x-required-role": "manager"
+      },
+      "patch": {
+        "operationId": "patchACMECertificate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchACMECertificateInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcmeCertificateBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "manager"
+            ]
+          }
+        ],
+        "summary": "Toggle auto-renewal for an ACME certificate",
+        "tags": [
+          "acme"
+        ],
+        "x-required-role": "manager"
+      }
+    },
+    "/api/v1/acme/certificates/{id}/certificate": {
+      "get": {
+        "operationId": "getACMECertificateCertificate",
+        "parameters": [
+          {
+            "description": "ACME certificate id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "ACME certificate id.",
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "contentMediaType": "application/octet-stream",
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The ACME certificate file, PEM-encoded.",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "manager"
+            ]
+          }
+        ],
+        "summary": "Download an ACME certificate's certificate file",
+        "tags": [
+          "acme"
+        ],
+        "x-required-role": "manager"
+      }
+    },
+    "/api/v1/acme/certificates/{id}/key": {
+      "get": {
+        "operationId": "getACMECertificateKey",
+        "parameters": [
+          {
+            "description": "ACME certificate id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "ACME certificate id.",
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "contentMediaType": "application/octet-stream",
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The ACME certificate's private key, PEM-encoded.",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "manager"
+            ]
+          }
+        ],
+        "summary": "Download an ACME certificate's private key",
+        "tags": [
+          "acme"
+        ],
+        "x-required-role": "manager"
+      }
+    },
+    "/api/v1/acme/certificates/{id}/renew": {
+      "post": {
+        "operationId": "renewACMECertificate",
+        "parameters": [
+          {
+            "description": "ACME certificate id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "ACME certificate id.",
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcmeCertificateBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "manager"
+            ]
+          }
+        ],
+        "summary": "Manually renew an ACME certificate",
+        "tags": [
+          "acme"
+        ],
+        "x-required-role": "manager"
+      }
+    },
+    "/api/v1/acme/options": {
+      "get": {
+        "operationId": "getACMEOptions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcmeOptionsBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "manager"
+            ]
+          }
+        ],
+        "summary": "Get ACME issuance options and defaults",
+        "tags": [
+          "acme"
         ],
         "x-required-role": "manager"
       }
