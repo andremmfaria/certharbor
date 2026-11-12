@@ -90,3 +90,11 @@ GET  /api/v1/profile      auth=required role=viewer  tag=profile      csrf=no  r
 PATCH /api/v1/profile     auth=required role=viewer  tag=profile      csrf=yes ratelimit=no templateRouteRetired=false
 PATCH /api/v1/profile/preferences auth=required role=viewer tag=profile csrf=yes ratelimit=no templateRouteRetired=false
 POST /api/v1/profile/password auth=required role=viewer tag=profile  csrf=yes ratelimit=no templateRouteRetired=false
+
+# Phase 8 (plans/frontend-backend-split.md Section 8 "Phase 8. Profile and
+# MFA", Section 6): the three public password-reset operations, replacing
+# GET/POST /forgot-password and GET/POST /reset-password. Public, same
+# "auth" rate-limit scope as createSession/submitMfa (5.5).
+POST /api/v1/password-reset/requests auth=public role=-   tag=session csrf=yes ratelimit=yes templateRouteRetired=false
+POST /api/v1/password-reset/validate auth=public role=-   tag=session csrf=yes ratelimit=yes templateRouteRetired=false
+POST /api/v1/password-reset/confirm  auth=public role=-   tag=session csrf=yes ratelimit=yes templateRouteRetired=false

@@ -12,6 +12,7 @@ import { AcmeSettingsPage } from './AcmeSettingsPage'
 import { CertificateDetailPage } from './CertificateDetailPage'
 import { CertificatesPage } from './CertificatesPage'
 import { DashboardPage } from './DashboardPage'
+import { ForgotPasswordPage } from './ForgotPasswordPage'
 import { HistoryPage } from './HistoryPage'
 import { ImportPage } from './ImportPage'
 import { IssuePage } from './IssuePage'
@@ -20,6 +21,7 @@ import { placeholderFor } from './Placeholder'
 import { ProfilePage } from './ProfilePage'
 import { ProvisionersPage } from './ProvisionersPage'
 import { RequireRole } from './RequireRole'
+import { ResetPasswordPage } from './ResetPasswordPage'
 import { RootShell } from './RootShell'
 import { routeList, type RouteEntry } from './routeList'
 
@@ -68,11 +70,19 @@ function adminLeaf(route: RouteEntry): RouteObject {
 
 const byLayout = (layout: RouteEntry['layout']) => routeList.filter((r) => r.layout === layout)
 
-const authRoutes: RouteObject[] = byLayout('auth').map((route) =>
-  route.name === 'login'
-    ? { path: 'login', Component: LoginPage }
-    : { path: relative(route.path), Component: placeholderFor(route) },
-)
+// The pages built for real so far among the auth layout's routes; anything
+// else there still falls through to placeholderFor, same as BUILT_PAGES does
+// for the app layout above.
+const BUILT_AUTH_PAGES: Record<string, ComponentType> = {
+  login: LoginPage,
+  'forgot-password': ForgotPasswordPage,
+  'reset-password': ResetPasswordPage,
+}
+
+const authRoutes: RouteObject[] = byLayout('auth').map((route) => ({
+  path: relative(route.path),
+  Component: BUILT_AUTH_PAGES[route.name] ?? placeholderFor(route),
+}))
 
 export const appRoutes: RouteObject[] = [
   {

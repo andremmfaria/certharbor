@@ -756,6 +756,28 @@
         ],
         "type": "object"
       },
+      "ConfirmPasswordResetBody": {
+        "additionalProperties": false,
+        "properties": {
+          "newPassword": {
+            "description": "The new account password.",
+            "minLength": 1,
+            "type": "string",
+            "writeOnly": true
+          },
+          "token": {
+            "description": "The raw password reset token from the emailed link.",
+            "minLength": 1,
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "token",
+          "newPassword"
+        ],
+        "type": "object"
+      },
       "CreateSessionBody": {
         "additionalProperties": false,
         "properties": {
@@ -1738,6 +1760,21 @@
         ],
         "type": "object"
       },
+      "RequestPasswordResetBody": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "description": "Account email or username.",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "type": "object"
+      },
       "ResetUserPasswordInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -2105,6 +2142,21 @@
         "required": [
           "totpEnabled",
           "ipBlocked"
+        ],
+        "type": "object"
+      },
+      "ValidatePasswordResetBody": {
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "description": "The raw password reset token from the emailed link.",
+            "minLength": 1,
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "token"
         ],
         "type": "object"
       }
@@ -4349,6 +4401,111 @@
           "system"
         ],
         "x-required-role": "viewer"
+      }
+    },
+    "/api/v1/password-reset/confirm": {
+      "post": {
+        "operationId": "confirmPasswordReset",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmPasswordResetBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Set a new password using a password reset token",
+        "tags": [
+          "session"
+        ]
+      }
+    },
+    "/api/v1/password-reset/requests": {
+      "post": {
+        "operationId": "requestPasswordReset",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestPasswordResetBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Request a password reset email",
+        "tags": [
+          "session"
+        ]
+      }
+    },
+    "/api/v1/password-reset/validate": {
+      "post": {
+        "operationId": "validatePasswordReset",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidatePasswordResetBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Validate a password reset token without consuming it",
+        "tags": [
+          "session"
+        ]
       }
     },
     "/api/v1/profile": {

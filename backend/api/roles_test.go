@@ -236,12 +236,15 @@ func TestRateLimitedSetsTheScopeTheMiddlewareReads(t *testing.T) {
 }
 
 // TestRateLimitIsScopedToAuthOperations asserts 5.5's rule that the login
-// limiter is attached to nothing but the four auth operations. Two of them
-// (the password-reset pair) are not ported yet, so the set may be a subset.
+// limiter is attached to nothing but the five auth operations: the two
+// session operations and the three password-reset operations (Section 8
+// Phase 8), which share the same per-IP bucket so a bad-login streak and a
+// password-reset-request streak from the same address count against each
+// other rather than each getting its own budget.
 func TestRateLimitIsScopedToAuthOperations(t *testing.T) {
 	allowed := map[string]bool{
 		"createSession": true, "submitMfa": true,
-		"requestPasswordReset": true, "confirmPasswordReset": true,
+		"requestPasswordReset": true, "validatePasswordReset": true, "confirmPasswordReset": true,
 	}
 	spec := NewForSpec().OpenAPI()
 	for path, item := range spec.Paths {
