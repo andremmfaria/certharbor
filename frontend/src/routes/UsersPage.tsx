@@ -1,5 +1,12 @@
-import { useState } from 'react'
-import { useCreateUser, useDeleteUser, useResetUserPassword, useUpdateUser, useUsers } from '../api/users'
+import { Fragment, useState } from 'react'
+import {
+  useCreateUser,
+  useDeleteUser,
+  useResetUserPassword,
+  useUpdateUser,
+  useUser,
+  useUsers,
+} from '../api/users'
 import { errorMessage } from '../api/errors'
 import { useAuthenticatedUser } from '../auth/useAuthenticatedUser'
 import { EmptyState } from '../components/EmptyState'
@@ -15,6 +22,41 @@ function activeBadge(isActive: boolean) {
   return <span className={`badge ${isActive ? 'ok' : 'danger'}`}>{isActive ? 'active' : 'disabled'}</span>
 }
 
+// Expandable per-row detail: GET /api/v1/users/{id} carries ipBlocked and
+// profile fields (email, displayName, theme, totpEnabled) the list body
+// omits, so it's only fetched once a row is expanded.
+function UserDetailRow({ id, colSpan }: { id: number; colSpan: number }) {
+  const detail = useUser(id, true)
+  return (
+    <tr>
+      <td colSpan={colSpan} className="td-detail">
+        {detail.isPending ? (
+          <Skeleton rows={1} label="Loading details" />
+        ) : detail.isError ? (
+          <ErrorState problem={detail.error} onRetry={() => void detail.refetch()} />
+        ) : (
+          <dl className="detail-grid">
+            <dt>Email</dt>
+            <dd>{detail.data.email || '—'}</dd>
+            <dt>Display name</dt>
+            <dd>{detail.data.displayName || '—'}</dd>
+            <dt>Theme</dt>
+            <dd>{detail.data.theme || '—'}</dd>
+            <dt>TOTP enabled</dt>
+            <dd>{detail.data.totpEnabled ? 'Yes' : 'No'}</dd>
+            <dt>IP blocked</dt>
+            <dd>
+              <span className={`badge ${detail.data.ipBlocked ? 'danger' : 'ok'}`}>
+                {detail.data.ipBlocked ? 'blocked' : 'not blocked'}
+              </span>
+            </dd>
+          </dl>
+        )}
+      </td>
+    </tr>
+  )
+}
+
 export function UsersPage() {
   const { params, qInput, setQuery, setPage } = useListParams()
   const self = useAuthenticatedUser()
@@ -24,6 +66,7 @@ export function UsersPage() {
   const deleteUser = useDeleteUser()
   const resetPassword = useResetUserPassword()
   const toast = useToast()
+  const [expandedId, setExpandedId] = useState<number | null>(null)
 
   const [newUsername, setNewUsername] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -185,57 +228,69 @@ export function UsersPage() {
               <tbody>
                 {users.data.items.map((u) => {
                   const isSelf = u.id === self.id
+                  const isExpanded = expandedId === u.id
                   return (
-                    <tr key={u.id}>
-                      <td data-label="Username">
-                        <strong>{u.username}</strong>
-                      </td>
-                      <td data-label="Role">
-                        <select
-                          aria-label={`Role for ${u.username}`}
-                          value={u.role}
-                          disabled={isSelf || updateUser.isPending}
-                          onChange={(e) => onRoleChange(u.id, e.target.value as Role)}
-                        >
-                          {ROLES.map((r) => (
-                            <option key={r} value={r}>
-                              {r}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td data-label="Status">{activeBadge(u.isActive)}</td>
-                      <td data-label="Last login" className="td-muted-ts">
-                        {u.lastLogin ? new Date(u.lastLogin).toLocaleString() : '—'}
-                      </td>
-                      <td data-label="Last IP">{u.lastIp ? <code>{u.lastIp}</code> : '—'}</td>
-                      <td data-label="Actions">
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          disabled={isSelf || updateUser.isPending}
-                          onClick={() => onToggleActive(u.id, u.isActive)}
-                        >
-                          {u.isActive ? 'Disable' : 'Enable'}
-                        </button>{' '}
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          disabled={resetPassword.isPending}
-                          onClick={() => onResetPassword(u.id, u.username)}
-                        >
-                          Reset password
-                        </button>{' '}
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          disabled={isSelf || deleteUser.isPending}
-                          onClick={() => onDelete(u.id, u.username)}
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
+                    <Fragment key={u.id}>
+                      <tr>
+                        <td data-label="Username">
+                          <strong>{u.username}</strong>
+                        </td>
+                        <td data-label="Role">
+                          <select
+                            aria-label={`Role for ${u.username}`}
+                            value={u.role}
+                            disabled={isSelf || updateUser.isPending}
+                            onChange={(e) => onRoleChange(u.id, e.target.value as Role)}
+                          >
+                            {ROLES.map((r) => (
+                              <option key={r} value={r}>
+                                {r}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td data-label="Status">{activeBadge(u.isActive)}</td>
+                        <td data-label="Last login" className="td-muted-ts">
+                          {u.lastLogin ? new Date(u.lastLogin).toLocaleString() : '—'}
+                        </td>
+                        <td data-label="Last IP">{u.lastIp ? <code>{u.lastIp}</code> : '—'}</td>
+                        <td data-label="Actions">
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            disabled={isSelf || updateUser.isPending}
+                            onClick={() => onToggleActive(u.id, u.isActive)}
+                          >
+                            {u.isActive ? 'Disable' : 'Enable'}
+                          </button>{' '}
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            disabled={resetPassword.isPending}
+                            onClick={() => onResetPassword(u.id, u.username)}
+                          >
+                            Reset password
+                          </button>{' '}
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            aria-expanded={isExpanded}
+                            onClick={() => setExpandedId(isExpanded ? null : u.id)}
+                          >
+                            {isExpanded ? 'Hide details' : 'View details'}
+                          </button>{' '}
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            disabled={isSelf || deleteUser.isPending}
+                            onClick={() => onDelete(u.id, u.username)}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                      {isExpanded ? <UserDetailRow id={u.id} colSpan={6} /> : null}
+                    </Fragment>
                   )
                 })}
               </tbody>

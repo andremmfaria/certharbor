@@ -3,6 +3,7 @@ import {
   createUserMutation,
   deleteTemporaryUserMutation,
   deleteUserMutation,
+  getUserOptions,
   listTemporaryUsersOptions,
   listUsersOptions,
   resetUserPasswordMutation,
@@ -18,6 +19,13 @@ export function useUsers(params: Pick<ListParams, 'page' | 'pageSize'>, q: strin
   return useQuery(
     listUsersOptions({ query: { page: params.page, pageSize: params.pageSize, q: q || undefined } }),
   )
+}
+
+// GET /api/v1/users/{id}: the per-user detail view. The list body omits
+// ipBlocked (and the profile fields below) so this is only fetched when a
+// row's details are actually expanded, gated on `enabled`.
+export function useUser(id: number, enabled: boolean) {
+  return useQuery({ ...getUserOptions({ path: { id } }), enabled })
 }
 
 // POST /api/v1/users.
