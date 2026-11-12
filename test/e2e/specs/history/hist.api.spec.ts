@@ -1,4 +1,4 @@
-import { listHistory } from "@kantharos-ai/certharbor-client";
+import { createCertificate, listHistory, renewCertificate } from "@kantharos-ai/certharbor-client";
 import { compose } from "../../helpers/compose.js";
 import { ApiSession, authedClient } from "../../helpers/apiClient.js";
 import { adminCredentials } from "../../fixtures/test.js";
@@ -81,8 +81,24 @@ test("E2E-HIST-02: the history action filter", async () => {
   // Scoped by certificate name rather than left wholly unfiltered, mirroring
   // the server-rendered era's control: this proves renew rows exist at all
   // in this environment, so their absence above is not simply "no renews
-  // happened yet".
-  const control = await admin.call(() => listHistory({ query: { cert: "e2e-dur-8760h" } }));
+  // happened yet". "e2e-dur-8760h" (cert-01's duration-axis fixture) used to
+  // be the stand-in here, but that cert is only ever issued, never renewed,
+  // by any spec in this suite — a stale reference from before cert-04's
+  // renew/revoke subjects were made per-run-unique to stop interfering with
+  // each other (see cert-04.api.spec.ts's own comment on that). Renewing a
+  // cert of this test's own here makes the control self-contained instead of
+  // depending on another file's side effect and run order.
+  const controlSubject = `e2e-hist-control-${Date.now().toString(36)}`;
+  const controlIssued = await admin.call(() =>
+    createCertificate({
+      body: { name: controlSubject, domain: `${controlSubject}.example.com`, template: "server", keyType: "EC:P-256", duration: "8760h" },
+    }),
+  );
+  expect(controlIssued.response?.status, "control precondition issuance").toBe(201);
+  const controlRenew = await admin.call(() => renewCertificate({ path: { id: controlIssued.data!.id } }));
+  expect(controlRenew.response?.status, "control renew").toBe(200);
+
+  const control = await admin.call(() => listHistory({ query: { cert: controlSubject } }));
   const controlActions = (control.data?.items ?? []).map((i: { action: string }) => i.action);
 
   expect(filteredActions.length, "zero rows would satisfy the exclusion trivially").toBeGreaterThan(0);

@@ -89,7 +89,21 @@ test("E2E-SEC-01: security-log pagination, search and filter", async ({ admin })
 });
 
 test("E2E-SEC-02: audited privileged actions carry the Audit prefix and the right payload", async ({ admin, manager }) => {
-  const name = "e2e-server-ec-p256";
+  // This test owns its subject: it used to borrow "e2e-server-ec-p256" from
+  // cert-01.api.spec.ts, but Playwright does not guarantee spec execution
+  // order in this harness's CI run, so that fixture is not reliably present
+  // yet. Issuing its own certificate removes the cross-file ordering
+  // dependency.
+  const name = disposableName("sec02");
+  const domainName = `${name}.e2e.invalid`;
+  const issueToken = await manager.csrf("/issue");
+  const issued = await manager.send(() =>
+    manager.ctx.post("/issue", {
+      form: { name, domain: domainName, template: "server", key_type: "EC:P-256", duration: "24h", csrf_token: issueToken },
+    }),
+  );
+  expect([302, 303]).toContain(issued.status());
+
   const id = await certificateID(name);
   const domain = await psql(`SELECT domain FROM certificates WHERE id = ${id}`);
 

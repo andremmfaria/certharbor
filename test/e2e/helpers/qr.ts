@@ -1,5 +1,18 @@
-import jsQR from "jsqr";
+import jsQRModule from "jsqr";
 import { PNG } from "pngjs";
+
+// jsqr's own dist/index.d.ts (export default) disagrees with its actual CJS
+// shape (module.exports is the function itself, with .default pointing back
+// at itself for esModule interop) in a way TS's NodeNext resolution can't
+// reconcile: the default import above type-checks as the whole module
+// namespace, not a callable. Both `jsQRModule` and `jsQRModule.default` are
+// the same function at runtime (verified empirically), so re-typing the
+// import as the callable it actually is avoids fighting the package's types.
+const jsQR = jsQRModule as unknown as (
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+) => { data: string } | null;
 
 /**
  * E2E-AUTH-04 asserts that GET /profile/2fa/qr decodes to the same secret the

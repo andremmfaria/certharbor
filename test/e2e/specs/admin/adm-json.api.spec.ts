@@ -75,7 +75,12 @@ test("E2E-ADM-01 (JSON): app.version pins the certificates library", async () =>
   );
 
   const security = await admin.call(() => listSecurityEvents({ query: { pageSize: 200 } }));
-  const reasons = (security.data?.items ?? []).map((i: { reason: string }) => i.reason);
+  // backend/api/security.go's Reason field is `omitempty`: a success event
+  // with no reason (e.g. a plain login) drops the key entirely, so it comes
+  // back here as undefined, not "". Default to "" so `.some` can scan the
+  // whole page (including a negative assertion that must reach the end
+  // without a match) without throwing on those rows.
+  const reasons = (security.data?.items ?? []).map((i: { reason?: string }) => i.reason ?? "");
   expect(
     reasons.some((r: string) => r.includes("console.run id=app.version") && /duration=\S+/.test(r)),
     "the audit row is the black-box shadow of the allowlist invariant",
@@ -87,7 +92,8 @@ test("E2E-ADM-05 (JSON): an unknown command id is rejected with 422 and audited,
   expect(run.response?.status).toBe(422);
 
   const security = await admin.call(() => listSecurityEvents({ query: { pageSize: 200 } }));
-  const reasons = (security.data?.items ?? []).map((i: { reason: string }) => i.reason);
+  // Same omitempty/undefined-reason caveat as E2E-ADM-01 above.
+  const reasons = (security.data?.items ?? []).map((i: { reason?: string }) => i.reason ?? "");
   expect(
     reasons.some((r: string) => r.includes("console.denied command_id=rm.rf")),
     "the denial is audited",
