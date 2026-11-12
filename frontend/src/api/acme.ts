@@ -3,8 +3,11 @@ import {
   createAcmeCertificateMutation,
   deleteAcmeCertificateMutation,
   getAcmeOptionsOptions,
+  getAcmeSettingsOptions,
   listAcmeCertificatesOptions,
+  listAcmeEventsOptions,
   patchAcmeCertificateMutation,
+  patchAcmeSettingsMutation,
   renewAcmeCertificateMutation,
 } from '@kantharos-ai/certharbor-client/react-query'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -73,4 +76,33 @@ export function downloadAcmeCrt(id: number, domain: string): Promise<void> {
 
 export function downloadAcmeKey(id: number, domain: string): Promise<void> {
   return fetchAndDownload(() => getAcmeCertificateKey({ path: { id } }), `${domain}.key`)
+}
+
+// GET /api/v1/acme/settings. cfToken and r53SecretKey are writeOnly and
+// never present in this response (5.8), so the form fields they back
+// start blank on every load and a save that omits them leaves the stored
+// value unchanged.
+export function useAcmeSettings() {
+  return useQuery(getAcmeSettingsOptions())
+}
+
+// PATCH /api/v1/acme/settings is merge-style: absent fields are
+// unchanged, so the form only sends cfToken/r53SecretKey when the
+// manager typed a new value.
+export function usePatchAcmeSettings() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    ...patchAcmeSettingsMutation(),
+    onSuccess: () => invalidate(queryClient, 'acme'),
+  })
+}
+
+// GET /api/v1/acme/events: paginated le_logs feed with an optional exact
+// domain filter, same envelope and bounds as history/security events.
+export function useAcmeEvents(params: Pick<ListParams, 'page' | 'pageSize'>, domain: string | undefined) {
+  return useQuery(
+    listAcmeEventsOptions({
+      query: { page: params.page, pageSize: params.pageSize, domain: domain || undefined },
+    }),
+  )
 }

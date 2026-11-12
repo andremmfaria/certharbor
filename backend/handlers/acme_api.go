@@ -323,3 +323,157 @@ func (h *Handler) AuditACMEKeyDownload(r *http.Request, id int, domain string) {
 	}
 	h.auditSecurity(r, fmt.Sprintf("le.key_download id=%d domain=%s", id, domain))
 }
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
+
+// ACMESettingsRow is the handler-layer view of models.ACMESettings: GET and
+// PATCH /api/v1/acme/settings build their response from this, never from
+// the models type directly (api/ never imports certharbor/models,
+// certharbor/handlers.NotificationSettingsRow's comment). CFToken and
+// R53SecretKey are deliberately absent: they are writeOnly on the way in
+// (ACMESettingsPatch) and must never round-trip into any response, exactly
+// as NotificationSettingsRow omits SMTPPassword (5.8).
+type ACMESettingsRow struct {
+	Email     string
+	Provider  string
+	CFZoneID  string
+	R53KeyID  string
+	R53Region string
+}
+
+// ACMESettingsPatch is PATCH /api/v1/acme/settings' merge-style body
+// (5.8): a nil field means absent, which UpdateACMESettings leaves
+// unchanged. CFToken and R53SecretKey are the ACME provider account
+// material this phase's exit criterion ("Settings PATCH preserves account
+// material") is written against: a PATCH omitting either must leave the
+// stored credential unchanged, never zeroed.
+type ACMESettingsPatch struct {
+	Email, Provider, CFZoneID, R53KeyID, R53Region *string
+	CFToken, R53SecretKey                          *string
+}
+
+func toACMESettingsRow(s *models.ACMESettings) *ACMESettingsRow {
+	return &ACMESettingsRow{
+		Email: s.Email, Provider: s.Provider,
+		CFZoneID: s.CFZoneID, R53KeyID: s.R53KeyID, R53Region: s.R53Region,
+	}
+}
+
+// applyACMESettingsPatch merges patch onto current and returns a new value
+// (5.8: absent means unchanged). Pure and database-free, mirroring
+// applyNotificationPatch, so the "omitting a secret leaves it unchanged"
+// claim is unit-testable without a database.
+func applyACMESettingsPatch(current *models.ACMESettings, patch *ACMESettingsPatch) *models.ACMESettings {
+	merged := *current
+	if patch.Email != nil {
+		merged.Email = *patch.Email
+	}
+	if patch.Provider != nil {
+		merged.Provider = *patch.Provider
+	}
+	if patch.CFZoneID != nil {
+		merged.CFZoneID = *patch.CFZoneID
+	}
+	if patch.R53KeyID != nil {
+		merged.R53KeyID = *patch.R53KeyID
+	}
+	if patch.R53Region != nil {
+		merged.R53Region = *patch.R53Region
+	}
+	// Omitted (nil): merged.CFToken / merged.R53SecretKey keep current's
+	// value, carried over by the `merged := *current` copy above. No
+	// branch here means no code path can zero the account material.
+	if patch.CFToken != nil {
+		merged.CFToken = *patch.CFToken
+	}
+	if patch.R53SecretKey != nil {
+		merged.R53SecretKey = *patch.R53SecretKey
+	}
+	return &merged
+}
+
+// acmeValidProviders mirrors the provider vocabulary acme.ACMEConfig.Provider
+// and the le_issue.html form already use.
+var acmeValidProviders = map[string]bool{
+	"http01": true, "cloudflare": true, "route53": true, "manual": true,
+}
+
+// ACMESettingsAPI implements GET /api/v1/acme/settings, replacing GET
+// /le/settings (Section 6, Phase 7).
+func (h *Handler) ACMESettingsAPI(ctx context.Context) (*ACMESettingsRow, error) {
+	s, err := appdb.GetACMESettings(ctx, h.db)
+	if err != nil {
+		return nil, err
+	}
+	return toACMESettingsRow(s), nil
+}
+
+// UpdateACMESettingsAPI implements PATCH /api/v1/acme/settings, replacing
+// POST /le/settings (Section 6, 5.8): PUT would clear CFToken/R53SecretKey
+// on the first save of an unrelated field, exactly the defect a
+// merge-style PATCH against the loaded current row avoids.
+func (h *Handler) UpdateACMESettingsAPI(ctx context.Context, patch *ACMESettingsPatch) (*ACMESettingsRow, error) {
+	current, err := appdb.GetACMESettings(ctx, h.db)
+	if err != nil {
+		return nil, err
+	}
+	merged := applyACMESettingsPatch(current, patch)
+
+	if merged.Provider != "" && !acmeValidProviders[merged.Provider] {
+		return nil, NewValidationError("provider must be one of: http01, cloudflare, route53, manual")
+	}
+	if merged.Provider == "cloudflare" && merged.CFToken == "" {
+		return nil, NewValidationError("cloudflare provider requires an API token")
+	}
+	if merged.Provider == "route53" && (merged.R53KeyID == "" || merged.R53SecretKey == "") {
+		return nil, NewValidationError("route53 provider requires an access key id and secret key")
+	}
+
+	if err := appdb.SaveACMESettings(ctx, h.db, merged); err != nil {
+		return nil, err
+	}
+	return toACMESettingsRow(merged), nil
+}
+
+// AuditACMESettingsSave is UpdateACMESettingsAPI's h.auditSecurity call
+// site, adapted for the api layer exactly as AuditNotificationsSave is
+// (handlers/notifications.go's comment): the huma session middleware never
+// populates the gorilla-session "username" key h.auditSecurity reads.
+func (h *Handler) AuditACMESettingsSave(username string) {
+	if username == "" || h.db == nil {
+		return
+	}
+	_ = appdb.LogAuth(h.db, username, "", true, auditPrefix+"acme.settings.save (api)")
+}
+
+// ─── Events ───────────────────────────────────────────────────────────────────
+
+// ACMEEvent is the handler-layer view of models.ACMELog: GET
+// /api/v1/acme/events builds its response from this.
+type ACMEEvent struct {
+	ID        int
+	Domain    string
+	Action    string
+	Message   string
+	CreatedAt string
+}
+
+// ListACMEEvents implements GET /api/v1/acme/events's data half, replacing
+// GET /le/logs (Section 6, Phase 7). Pagination follows 5.6's envelope and
+// the same (created_at DESC, id DESC) total order db/authlog.go and
+// db/history.go already carry, proven against this table by
+// db.ListACMELogsPaged's own tied-timestamp test.
+func (h *Handler) ListACMEEvents(domain string, page, pageSize int) ([]ACMEEvent, int, error) {
+	logs, total, err := appdb.ListACMELogsPaged(context.Background(), h.db, domain, page, pageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	out := make([]ACMEEvent, 0, len(logs))
+	for _, l := range logs {
+		out = append(out, ACMEEvent{
+			ID: l.ID, Domain: l.Domain, Action: l.Action, Message: l.Message,
+			CreatedAt: l.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+		})
+	}
+	return out, total, nil
+}

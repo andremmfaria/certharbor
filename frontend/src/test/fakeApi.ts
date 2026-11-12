@@ -55,6 +55,8 @@ export interface FakeApiState {
   provisioners: { name: string; type: string }[]
   securityEvents: FakeSecurityEvent[]
   auditEvents: FakeSecurityEvent[]
+  acmeSettings: FakeAcmeSettings
+  acmeEvents: FakeAcmeEvent[]
   adminAbout: FakeAdminAbout
   adminIntegrity: FakeHealthCheck[]
   adminConsoleCommands: FakeConsoleCommand[]
@@ -72,6 +74,8 @@ export interface FakeApiState {
   // and strand these pages' tests at the Splash screen forever.
   securityEventsDown: boolean
   auditEventsDown: boolean
+  acmeSettingsDown: boolean
+  acmeEventsDown: boolean
   dashboardDown: boolean
   adminAboutDown: boolean
   adminIntegrityDown: boolean
@@ -94,6 +98,22 @@ export interface FakeHistoryEntry {
   details: string
   username: string
   role: string
+  createdAt: string
+}
+
+export interface FakeAcmeSettings {
+  email: string
+  provider: string
+  cfZoneId: string
+  r53KeyId: string
+  r53Region: string
+}
+
+export interface FakeAcmeEvent {
+  id: number
+  domain: string
+  action: string
+  message: string
   createdAt: string
 }
 
@@ -255,6 +275,22 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
         createdAt: '2026-01-01T00:00:00Z',
       },
     ],
+    acmeSettings: {
+      email: 'acme@example.com',
+      provider: 'http01',
+      cfZoneId: '',
+      r53KeyId: '',
+      r53Region: '',
+    },
+    acmeEvents: [
+      {
+        id: 1,
+        domain: 'acme.example.test',
+        action: 'issue',
+        message: 'Certificate issued successfully',
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+    ],
     adminAbout: {
       system: {
         version: '0.1.4',
@@ -308,6 +344,8 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
     provisionersDown: false,
     securityEventsDown: false,
     auditEventsDown: false,
+    acmeSettingsDown: false,
+    acmeEventsDown: false,
     dashboardDown: false,
     adminAboutDown: false,
     adminIntegrityDown: false,
@@ -517,6 +555,34 @@ export function installFakeApi(overrides: Partial<FakeApiState> = {}) {
       case 'GET /api/v1/provisioners':
         if (state.provisionersDown) return problem(500, 'Internal Server Error', 'provisioners unavailable')
         return json(state.provisioners)
+      case 'GET /api/v1/acme/settings':
+        if (state.acmeSettingsDown) return problem(500, 'Internal Server Error', 'ACME settings unavailable')
+        return json(state.acmeSettings)
+      case 'PATCH /api/v1/acme/settings': {
+        if (state.acmeSettingsDown) return problem(500, 'Internal Server Error', 'ACME settings unavailable')
+        const patch = body as Partial<FakeAcmeSettings> & { cfToken?: string; r53SecretKey?: string }
+        // Merge-style: a field absent from the patch leaves state untouched,
+        // including cfToken/r53SecretKey, which this fake never stores or
+        // echoes back (writeOnly, 5.8).
+        state.acmeSettings = { ...state.acmeSettings, ...patch }
+        return json(state.acmeSettings)
+      }
+      case 'GET /api/v1/acme/events': {
+        if (state.acmeEventsDown) return problem(500, 'Internal Server Error', 'ACME events unavailable')
+        const domain = url.searchParams.get('domain') ?? ''
+        const page = Number(url.searchParams.get('page') ?? '1')
+        const pageSize = Number(url.searchParams.get('pageSize') ?? '25')
+        const filtered = state.acmeEvents.filter((e) => !domain || e.domain === domain)
+        const start = (page - 1) * pageSize
+        const items = filtered.slice(start, start + pageSize)
+        return json({
+          items,
+          page,
+          pageSize,
+          total: filtered.length,
+          totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
+        })
+      }
       case 'GET /api/v1/security/events': {
         if (state.securityEventsDown)
           return problem(500, 'Internal Server Error', 'security events unavailable')

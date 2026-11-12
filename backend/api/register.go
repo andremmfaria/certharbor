@@ -468,8 +468,8 @@ func Register(humaAPI huma.API, h *handlers.Handler) {
 
 	// Phase 7, step 2 (plans/frontend-backend-split.md Section 8 "### ACME"
 	// / Section 6 "### ACME"): certificates CRUD, options and downloads.
-	// Every row here is manager. ACME settings (PATCH) and events are a
-	// sibling step on a separate branch and are not registered here.
+	// Every row here is manager. ACME settings (PATCH) and events follow
+	// immediately below (step 3).
 	huma.Register(humaAPI, roleOp("manager", huma.Operation{
 		OperationID: "listACMECertificates",
 		Method:      http.MethodGet,
@@ -537,4 +537,33 @@ func Register(humaAPI huma.API, h *handlers.Handler) {
 		Summary:     "Download an ACME certificate's private key",
 		Responses:   binaryResponses("The ACME certificate's private key, PEM-encoded."),
 	}), getACMECertificateKey(h))
+
+	// Phase 7, step 3 (plans/frontend-backend-split.md Section 8, "### ACME"):
+	// settings as PATCH with writeOnly provider secrets, and events with
+	// the same pagination convention history/security-events/audit-events
+	// already proved. Every row here is manager, matching the le_* chi
+	// group's current gate.
+	huma.Register(humaAPI, roleOp("manager", huma.Operation{
+		OperationID: "getAcmeSettings",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/acme/settings",
+		Tags:        []string{"acme"},
+		Summary:     "Get ACME provider settings",
+	}), getAcmeSettings(h))
+
+	huma.Register(humaAPI, roleOp("manager", huma.Operation{
+		OperationID: "patchAcmeSettings",
+		Method:      http.MethodPatch,
+		Path:        BasePath + "/acme/settings",
+		Tags:        []string{"acme"},
+		Summary:     "Update ACME provider settings",
+	}), patchAcmeSettings(h))
+
+	huma.Register(humaAPI, roleOp("manager", huma.Operation{
+		OperationID: "listAcmeEvents",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/acme/events",
+		Tags:        []string{"acme"},
+		Summary:     "List ACME certificate lifecycle events",
+	}), listAcmeEvents(h))
 }

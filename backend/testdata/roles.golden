@@ -71,10 +71,10 @@ GET  /api/v1/admin/notifications auth=required role=admin   tag=admin       csrf
 PATCH /api/v1/admin/notifications auth=required role=admin   tag=admin       csrf=yes ratelimit=no templateRouteRetired=false
 POST /api/v1/admin/notifications/test auth=required role=admin   tag=admin       csrf=yes ratelimit=no templateRouteRetired=false
 
-# Phase 7, step 2 (plans/frontend-backend-split.md Section 8 "### ACME"):
-# certificates CRUD, options and downloads. Every row is manager, same as
-# the template chain's /le/* tree today. Settings (PATCH) and events are a
-# sibling step on a separate branch and are not in this table yet.
+# Phase 7 (plans/frontend-backend-split.md Section 8 "### ACME"): the full
+# ACME surface across its three steps (#53 rename, #54 certificates/options/
+# downloads, #55 settings/events). Every row is manager, same as the
+# template chain's /le/* tree today.
 GET  /api/v1/acme/certificates auth=required role=manager tag=acme         csrf=no  ratelimit=no templateRouteRetired=false
 GET  /api/v1/acme/options  auth=required role=manager tag=acme         csrf=no  ratelimit=no templateRouteRetired=false
 POST /api/v1/acme/certificates auth=required role=manager tag=acme         csrf=yes ratelimit=no templateRouteRetired=false
@@ -83,3 +83,6 @@ DELETE /api/v1/acme/certificates/{id} auth=required role=manager tag=acme  csrf=
 PATCH /api/v1/acme/certificates/{id} auth=required role=manager tag=acme   csrf=yes ratelimit=no templateRouteRetired=false
 GET  /api/v1/acme/certificates/{id}/certificate auth=required role=manager tag=acme csrf=no ratelimit=no templateRouteRetired=false
 GET  /api/v1/acme/certificates/{id}/key auth=required role=manager tag=acme csrf=no ratelimit=no templateRouteRetired=false
+GET  /api/v1/acme/settings auth=required role=manager tag=acme         csrf=no  ratelimit=no templateRouteRetired=false
+PATCH /api/v1/acme/settings auth=required role=manager tag=acme         csrf=yes ratelimit=no templateRouteRetired=false
+GET  /api/v1/acme/events  auth=required role=manager tag=acme         csrf=no  ratelimit=no templateRouteRetired=false

@@ -6,7 +6,9 @@ import { Splash } from '../components/Splash'
 import { AppLayout } from '../layouts/AppLayout'
 import { AuthLayout } from '../layouts/AuthLayout'
 import { AcmeCertificatesPage } from './AcmeCertificatesPage'
+import { AcmeEventsPage } from './AcmeEventsPage'
 import { AcmeIssuePage } from './AcmeIssuePage'
+import { AcmeSettingsPage } from './AcmeSettingsPage'
 import { CertificateDetailPage } from './CertificateDetailPage'
 import { CertificatesPage } from './CertificatesPage'
 import { DashboardPage } from './DashboardPage'
@@ -36,6 +38,8 @@ const BUILT_PAGES: Record<string, ComponentType> = {
   provisioners: ProvisionersPage,
   acme: AcmeCertificatesPage,
   'acme-issue': AcmeIssuePage,
+  'acme-settings': AcmeSettingsPage,
+  'acme-logs': AcmeEventsPage,
 }
 
 function leaf(route: RouteEntry): RouteObject {

@@ -3,6 +3,7 @@
 package db
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -102,6 +103,40 @@ func TestGetAuthLogs_TiedTimestampPaginationHasNoRepeatOrOmission(t *testing.T) 
 		ids := make([]int, 0, len(rows))
 		for _, r := range rows {
 			ids = append(ids, r.ID)
+		}
+		return ids, gotTotal, nil
+	})
+}
+
+// TestListACMELogsPaged_TiedTimestampPaginationHasNoRepeatOrOmission is
+// le_logs' half of the same exit criterion (Phase 7: GET
+// /api/v1/acme/events joins history, security/events and audit-events on
+// this shared convention): 60 rows sharing one created_at, paged at 10,
+// must produce 60 distinct ids across 6 pages with no repeat or omission.
+func TestListACMELogsPaged_TiedTimestampPaginationHasNoRepeatOrOmission(t *testing.T) {
+	d := openTestDB(t)
+	if err := InitACMESchema(d); err != nil {
+		t.Fatalf("InitACMESchema: %v", err)
+	}
+	tied := time.Now().UTC().Truncate(time.Second)
+	const total = 60
+	for i := 0; i < total; i++ {
+		if _, err := d.Exec( //nolint:noctx // test setup
+			`INSERT INTO le_logs (domain,action,message,created_at) VALUES ($1,$2,$3,$4)`,
+			"tied.example.com", "issue", "", tied,
+		); err != nil {
+			t.Fatalf("insert row %d: %v", i, err)
+		}
+	}
+
+	assertTiedTimestampPagination(t, total, 10, func(page, pageSize int) ([]int, int, error) {
+		logs, gotTotal, err := ListACMELogsPaged(context.Background(), d, "", page, pageSize)
+		if err != nil {
+			return nil, 0, err
+		}
+		ids := make([]int, 0, len(logs))
+		for _, l := range logs {
+			ids = append(ids, l.ID)
 		}
 		return ids, gotTotal, nil
 	})
