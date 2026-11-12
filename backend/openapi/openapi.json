@@ -682,6 +682,30 @@
         ],
         "type": "object"
       },
+      "ChangePasswordBody": {
+        "additionalProperties": false,
+        "properties": {
+          "currentPassword": {
+            "description": "The account's current password, required to authorise this change.",
+            "maxLength": 1024,
+            "minLength": 1,
+            "type": "string",
+            "writeOnly": true
+          },
+          "newPassword": {
+            "description": "The new password to set.",
+            "maxLength": 1024,
+            "minLength": 1,
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ],
+        "type": "object"
+      },
       "ConfigBody": {
         "additionalProperties": false,
         "properties": {
@@ -1636,6 +1660,66 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "PatchProfileBody": {
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "maxLength": 255,
+            "type": "string"
+          },
+          "email": {
+            "maxLength": 255,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PatchProfilePreferencesBody": {
+        "additionalProperties": false,
+        "properties": {
+          "theme": {
+            "enum": [
+              "dark",
+              "light",
+              "blue",
+              "auto"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ProfileBody": {
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "role": {
+            "type": "string"
+          },
+          "theme": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "role",
+          "theme"
+        ],
         "type": "object"
       },
       "ProvisionerBody": {
@@ -4263,6 +4347,183 @@
         "summary": "List certificate lifecycle history entries",
         "tags": [
           "system"
+        ],
+        "x-required-role": "viewer"
+      }
+    },
+    "/api/v1/profile": {
+      "get": {
+        "operationId": "getProfile",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "viewer"
+            ]
+          }
+        ],
+        "summary": "Get the signed-in user's own profile",
+        "tags": [
+          "profile"
+        ],
+        "x-required-role": "viewer"
+      },
+      "patch": {
+        "operationId": "patchProfile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchProfileBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "viewer"
+            ]
+          }
+        ],
+        "summary": "Update the signed-in user's display name and email",
+        "tags": [
+          "profile"
+        ],
+        "x-required-role": "viewer"
+      }
+    },
+    "/api/v1/profile/password": {
+      "post": {
+        "operationId": "changePassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "viewer"
+            ]
+          }
+        ],
+        "summary": "Change the signed-in user's password",
+        "tags": [
+          "profile"
+        ],
+        "x-required-role": "viewer"
+      }
+    },
+    "/api/v1/profile/preferences": {
+      "patch": {
+        "operationId": "patchProfilePreferences",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchProfilePreferencesBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "viewer"
+            ]
+          }
+        ],
+        "summary": "Update the signed-in user's theme preference",
+        "tags": [
+          "profile"
         ],
         "x-required-role": "viewer"
       }
