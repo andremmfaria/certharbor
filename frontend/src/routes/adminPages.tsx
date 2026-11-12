@@ -1,5 +1,8 @@
 import type { ComponentType } from 'react'
+import { AboutPage } from './AboutPage'
 import { ActivityPage } from './ActivityPage'
+import { ConsolePage } from './ConsolePage'
+import { IntegrityPage } from './IntegrityPage'
 import { placeholderFor } from './Placeholder'
 import { routeList } from './routeList'
 import { SecurityPage } from './SecurityPage'
@@ -9,6 +12,9 @@ import { SecurityPage } from './SecurityPage'
 const BUILT_ADMIN_PAGES: Record<string, ComponentType> = {
   'admin-security': SecurityPage,
   'admin-activity': ActivityPage,
+  'admin-console': ConsolePage,
+  'admin-about': AboutPage,
+  'admin-integrity': IntegrityPage,
 }
 
 // One lazy chunk for every admin leaf (D12.7).
