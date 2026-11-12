@@ -551,6 +551,112 @@
         ],
         "type": "object"
       },
+      "CreateTemporaryUserInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "note": {
+            "maxLength": 500,
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "manager",
+              "admin"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "expiresAt"
+        ],
+        "type": "object"
+      },
+      "CreateTemporaryUserOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "note": {
+            "type": "string"
+          },
+          "passphrase": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "manager",
+              "admin"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "expired",
+              "blocked"
+            ],
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "passphrase",
+          "id",
+          "username",
+          "role",
+          "createdAt",
+          "status"
+        ],
+        "type": "object"
+      },
+      "CreateUserInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "minLength": 1,
+            "type": "string",
+            "writeOnly": true
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "manager",
+              "admin"
+            ],
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password",
+          "role"
+        ],
+        "type": "object"
+      },
       "DashboardBody": {
         "additionalProperties": false,
         "properties": {
@@ -986,6 +1092,53 @@
         ],
         "type": "object"
       },
+      "PageUserBody": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UserBody"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "page": {
+            "description": "1-based page number",
+            "format": "int64",
+            "type": "integer"
+          },
+          "pageSize": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "description": "null when the server declined to count",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "totalPages": {
+            "description": "null whenever total is null",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total",
+          "totalPages"
+        ],
+        "type": "object"
+      },
       "ProvisionerBody": {
         "additionalProperties": false,
         "properties": {
@@ -999,6 +1152,20 @@
         "required": [
           "name",
           "type"
+        ],
+        "type": "object"
+      },
+      "ResetUserPasswordInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "newPassword": {
+            "minLength": 1,
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "newPassword"
         ],
         "type": "object"
       },
@@ -1220,6 +1387,141 @@
           "provisioner",
           "stepCaImage",
           "sessionSecure"
+        ],
+        "type": "object"
+      },
+      "TempUserBody": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "note": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "manager",
+              "admin"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "expired",
+              "blocked"
+            ],
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "role",
+          "createdAt",
+          "status"
+        ],
+        "type": "object"
+      },
+      "UpdateUserInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "isActive": {
+            "type": "boolean"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "manager",
+              "admin"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "UserBody": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "failCount24h": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "lastIp": {
+            "type": "string"
+          },
+          "lastLogin": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "manager",
+              "admin"
+            ],
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "role",
+          "isActive",
+          "failCount24h"
+        ],
+        "type": "object"
+      },
+      "UserDetailBody": {
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "ipBlocked": {
+            "type": "boolean"
+          },
+          "theme": {
+            "type": "string"
+          },
+          "totpEnabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "totpEnabled",
+          "ipBlocked"
         ],
         "type": "object"
       }
@@ -2955,6 +3257,472 @@
           "dashboard"
         ],
         "x-required-role": "viewer"
+      }
+    },
+    "/api/v1/temporary-users": {
+      "get": {
+        "operationId": "listTemporaryUsers",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TempUserBody"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "List temporary user accounts",
+        "tags": [
+          "users"
+        ],
+        "x-required-role": "admin"
+      },
+      "post": {
+        "operationId": "createTemporaryUser",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTemporaryUserInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateTemporaryUserOutputBody"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Create a temporary user account",
+        "tags": [
+          "users"
+        ],
+        "x-required-role": "admin"
+      }
+    },
+    "/api/v1/temporary-users/{id}": {
+      "delete": {
+        "operationId": "deleteTemporaryUser",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Delete a temporary user account",
+        "tags": [
+          "users"
+        ],
+        "x-required-role": "admin"
+      }
+    },
+    "/api/v1/users": {
+      "get": {
+        "operationId": "listUsers",
+        "parameters": [
+          {
+            "description": "Filter by a case-insensitive username substring.",
+            "explode": false,
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "description": "Filter by a case-insensitive username substring.",
+              "maxLength": 255,
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "default": 1,
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "default": 25,
+              "format": "int64",
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageUserBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "List user accounts",
+        "tags": [
+          "users"
+        ],
+        "x-required-role": "admin"
+      },
+      "post": {
+        "operationId": "createUser",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserBody"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Create a user account",
+        "tags": [
+          "users"
+        ],
+        "x-required-role": "admin"
+      }
+    },
+    "/api/v1/users/{id}": {
+      "delete": {
+        "operationId": "deleteUser",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Delete a user account",
+        "tags": [
+          "users"
+        ],
+        "x-required-role": "admin"
+      },
+      "get": {
+        "operationId": "getUser",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetailBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Get one user account",
+        "tags": [
+          "users"
+        ],
+        "x-required-role": "admin"
+      },
+      "patch": {
+        "operationId": "updateUser",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Update a user's role and/or active state",
+        "tags": [
+          "users"
+        ],
+        "x-required-role": "admin"
+      }
+    },
+    "/api/v1/users/{id}/password-reset": {
+      "post": {
+        "operationId": "resetUserPassword",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetUserPasswordInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Reset a user's password",
+        "tags": [
+          "users"
+        ],
+        "x-required-role": "admin"
       }
     }
   }
