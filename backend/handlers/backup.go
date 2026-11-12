@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -16,8 +17,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
+
+	appdb "certharbor/db"
 )
 
 // PGDumpTimeout is the longest operation any handler runs. It is exported so
@@ -45,6 +50,157 @@ type backupComponent struct {
 	SHA256 string `json:"sha256"`
 	Status string `json:"status"`
 	Detail string `json:"detail,omitempty"`
+}
+
+// backupIDPattern is the same charset the API layer's path parameter
+// schema constrains POST /api/v1/admin/backups' returned id to (Section
+// 6, 5.7's downloadUrl pattern): safe to use as a bare filename component
+// with no path-traversal risk, so BackupFilePath never needs filepath.Clean
+// to defend against a caller-controlled id.
+var backupIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+// BackupRecord is one persisted backup bundle: the handler-layer row
+// GET/POST /api/v1/admin/backups and GET .../{id}/download build their
+// response from, kept separate from any wire DTO (Section 2).
+type BackupRecord struct {
+	ID        string
+	SizeBytes int64
+	CreatedAt time.Time
+}
+
+func (h *Handler) backupFilename(id string) string { return id + ".tgz" }
+
+// newBackupID mints a filesystem-safe, collision-resistant id: a sortable
+// UTC timestamp (matching the legacy bundle filename convention above)
+// plus a random suffix, since two backups requested within the same
+// second must not collide.
+func newBackupID() (string, error) {
+	suffix := make([]byte, 6)
+	if _, err := rand.Read(suffix); err != nil {
+		return "", fmt.Errorf("generating backup id: %w", err)
+	}
+	return fmt.Sprintf("%s-%s", time.Now().UTC().Format("20060102T150405Z"), hex.EncodeToString(suffix)), nil
+}
+
+// CreateBackup implements POST /api/v1/admin/backups' data half (Section
+// 6, replacing POST /admin/backup/download): it builds the same bundle
+// buildBackupBundle already produces, then persists it under cfg.BackupDir
+// under a fresh id so a later, separate request (GET .../{id}/download)
+// can still serve it — the create-then-navigate pattern 5.7 asks for needs
+// the bundle to outlive the request that created it, unlike the legacy
+// route's stream-then-delete-tmp-dir.
+func (h *Handler) CreateBackup(ctx context.Context) (*BackupRecord, error) {
+	bundlePath, _, err := h.buildBackupBundle(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = os.RemoveAll(filepath.Dir(bundlePath)) }()
+
+	id, err := newBackupID()
+	if err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(h.cfg.BackupDir, 0o750); err != nil { //nolint:gosec // G301: app data dir, restrictive perms appropriate for non-root service user
+		return nil, fmt.Errorf("creating backup directory: %w", err)
+	}
+	dest := filepath.Join(h.cfg.BackupDir, h.backupFilename(id))
+	if err := copyFile(bundlePath, dest); err != nil {
+		return nil, fmt.Errorf("persisting backup bundle: %w", err)
+	}
+	info, err := os.Stat(dest)
+	if err != nil {
+		return nil, err
+	}
+	return &BackupRecord{ID: id, SizeBytes: info.Size(), CreatedAt: info.ModTime().UTC()}, nil
+}
+
+// ListBackups implements GET /api/v1/admin/backups (Section 6, replacing
+// GET /admin/backup), newest first, by stat'ing cfg.BackupDir directly:
+// backups are infrequent, admin-only, and not expected to reach a count
+// where a directory listing becomes the bottleneck.
+func (h *Handler) ListBackups() ([]BackupRecord, error) {
+	entries, err := os.ReadDir(h.cfg.BackupDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []BackupRecord{}, nil
+		}
+		return nil, err
+	}
+	records := make([]BackupRecord, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tgz") {
+			continue
+		}
+		id := strings.TrimSuffix(e.Name(), ".tgz")
+		if !backupIDPattern.MatchString(id) {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		records = append(records, BackupRecord{ID: id, SizeBytes: info.Size(), CreatedAt: info.ModTime().UTC()})
+	}
+	sort.Slice(records, func(i, j int) bool { return records[i].CreatedAt.After(records[j].CreatedAt) })
+	return records, nil
+}
+
+// errBackupNotFound is BackupFilePath's not-found sentinel, so the api
+// layer can tell "no such backup" apart from "the directory is
+// unreadable" without inspecting os.IsNotExist on an already-wrapped error.
+var errBackupNotFound = NewValidationError("no backup with that id")
+
+// BackupFilePath implements GET /api/v1/admin/backups/{id}/download's
+// lookup half (Section 6, **new**): id is re-validated against
+// backupIDPattern independently of the api layer's path-parameter schema,
+// because a handler that trusts its caller's validation is a handler that
+// breaks silently the day that validation moves.
+func (h *Handler) BackupFilePath(id string) (path string, err error) {
+	if !backupIDPattern.MatchString(id) {
+		return "", errBackupNotFound
+	}
+	path = filepath.Join(h.cfg.BackupDir, h.backupFilename(id))
+	if _, statErr := os.Stat(path); statErr != nil {
+		return "", errBackupNotFound
+	}
+	return path, nil
+}
+
+// IsBackupNotFound reports whether err is BackupFilePath's not-found
+// sentinel, letting the api layer map it to 404 without a direct
+// comparison against an unexported value.
+func IsBackupNotFound(err error) bool { return err == errBackupNotFound } //nolint:errorlint // sentinel comparison by design, never wrapped
+
+// AuditBackupCreate is CreateBackup's h.auditSecurity call site, adapted
+// for the api layer exactly as AuditKeyDownload is (ca_api.go's comment):
+// the huma session middleware never populates the gorilla-session
+// "username" key h.auditSecurity reads, so the authenticated username is
+// passed in explicitly from context instead.
+func (h *Handler) AuditBackupCreate(r *http.Request, username, id string) {
+	if r == nil || username == "" {
+		return
+	}
+	_ = appdb.LogAuth(h.db, username, clientIP(r), true, auditPrefix+"backup.create id="+id)
+}
+
+// copyFile copies src to dest, creating dest with 0600 permissions: a
+// backup bundle contains a full pg_dump and is exactly as sensitive as the
+// database it was taken from.
+func copyFile(src, dest string) error {
+	//nolint:gosec // G304: src is the tmp bundle path buildBackupBundle itself created, not user input
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = in.Close() }()
+	//nolint:gosec // G304: dest is built from cfg.BackupDir joined with a generated, pattern-validated id
+	out, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = out.Close() }()
+	_, err = io.Copy(out, in)
+	return err
 }
 
 // AdminBackupGet renders the backup download page.

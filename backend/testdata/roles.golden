@@ -63,3 +63,10 @@ POST /api/v1/users/{id}/password-reset auth=required role=admin tag=users csrf=y
 GET  /api/v1/temporary-users auth=required role=admin tag=users      csrf=no  ratelimit=no templateRouteRetired=false
 POST /api/v1/temporary-users auth=required role=admin tag=users      csrf=yes ratelimit=no templateRouteRetired=false
 DELETE /api/v1/temporary-users/{id} auth=required role=admin tag=users csrf=yes ratelimit=no templateRouteRetired=true
+
+GET  /api/v1/admin/backups auth=required role=admin   tag=admin       csrf=no  ratelimit=no templateRouteRetired=false
+POST /api/v1/admin/backups auth=required role=admin   tag=admin       csrf=yes ratelimit=no templateRouteRetired=false
+GET  /api/v1/admin/backups/{id}/download auth=required role=admin   tag=admin       csrf=no  ratelimit=no templateRouteRetired=true
+GET  /api/v1/admin/notifications auth=required role=admin   tag=admin       csrf=no  ratelimit=no templateRouteRetired=false
+PATCH /api/v1/admin/notifications auth=required role=admin   tag=admin       csrf=yes ratelimit=no templateRouteRetired=false
+POST /api/v1/admin/notifications/test auth=required role=admin   tag=admin       csrf=yes ratelimit=no templateRouteRetired=false

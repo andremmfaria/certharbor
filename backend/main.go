@@ -121,6 +121,18 @@ func init() {
 // attributed its own address rather than the client's.
 const trustedProxyRefresh = 5 * time.Second
 
+// serverWriteTimeout must comfortably exceed handlers.PGDumpTimeout (2
+// minutes): a backup download holds the response open for the entire
+// pg_dump plus archive-write, and Go's own WriteTimeout cuts the
+// connection off regardless of what nginx's proxy_read_timeout allows
+// (plans/frontend-backend-split.md, Phase 6's "Owed from Phase 3b" note).
+// 180s matches nginx's proxy_read_timeout (frontend/nginx.conf.template),
+// which TestNginxReadTimeoutExceedsBackendOperations already asserts
+// exceeds PGDumpTimeout; TestGoWriteTimeoutExceedsBackendOperations
+// (nginx_timeout_test.go) asserts this constant does too, so the two
+// ceilings cannot silently drift back out of agreement.
+const serverWriteTimeout = 180 * time.Second
+
 func main() {
 	handlers.StartedAt = time.Now()
 	// An unregistered type makes sessions.Save fail and write no cookie at
@@ -379,7 +391,7 @@ func main() {
 	}
 	r.Handle("/static/*", http.StripPrefix("/static/", staticHandlerFromFS(staticFS)))
 	// ─── Start server ─────────────────────────────────────────────────────────
-	for _, dir := range []string{cfg.CertsDir, cfg.UploadDir, "/opt/certharbor/ssl", "/opt/certharbor/web-ssl", "/opt/certharbor/data"} {
+	for _, dir := range []string{cfg.CertsDir, cfg.UploadDir, cfg.BackupDir, "/opt/certharbor/ssl", "/opt/certharbor/web-ssl", "/opt/certharbor/data"} {
 		_ = os.MkdirAll(dir, 0o750) //nolint:gosec // G301: app data dirs; restrictive perms appropriate for non-root service user
 	}
 
@@ -457,7 +469,7 @@ func main() {
 		Handler:           r,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
+		WriteTimeout:      serverWriteTimeout,
 		IdleTimeout:       120 * time.Second,
 	}
 

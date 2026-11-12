@@ -411,4 +411,58 @@ func Register(humaAPI huma.API, h *handlers.Handler) {
 		Summary:       "Delete a temporary user account",
 		DefaultStatus: http.StatusNoContent,
 	}), deleteTemporaryUser(h))
+
+	// Phase 6, step 3 (plans/frontend-backend-split.md Section 8): backups
+	// with the create-then-navigate pattern (5.7) and notifications as
+	// PATCH with writeOnly secrets (5.8). Every row here is admin.
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID: "listBackups",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/admin/backups",
+		Tags:        []string{"admin"},
+		Summary:     "List persisted backup bundles",
+	}), listBackups(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID:   "createBackup",
+		Method:        http.MethodPost,
+		Path:          BasePath + "/admin/backups",
+		Tags:          []string{"admin"},
+		Summary:       "Create a new backup bundle",
+		DefaultStatus: http.StatusCreated,
+	}), createBackup(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID: "downloadBackup",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/admin/backups/{id}/download",
+		Tags:        []string{"admin"},
+		Summary:     "Download a backup bundle",
+		Responses:   binaryResponses("The backup bundle, gzip-compressed tar."),
+	}), downloadBackup(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID: "getNotifications",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/admin/notifications",
+		Tags:        []string{"admin"},
+		Summary:     "Get notification settings",
+	}), getNotifications(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID: "patchNotifications",
+		Method:      http.MethodPatch,
+		Path:        BasePath + "/admin/notifications",
+		Tags:        []string{"admin"},
+		Summary:     "Update notification settings",
+	}), patchNotifications(h))
+
+	huma.Register(humaAPI, roleOp("admin", huma.Operation{
+		OperationID:   "testNotifications",
+		Method:        http.MethodPost,
+		Path:          BasePath + "/admin/notifications/test",
+		Tags:          []string{"admin"},
+		Summary:       "Send a test webhook notification",
+		DefaultStatus: http.StatusNoContent,
+	}), testNotifications(h))
 }

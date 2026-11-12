@@ -36,3 +36,23 @@ func TestNginxReadTimeoutExceedsBackendOperations(t *testing.T) {
 		}
 	}
 }
+
+// TestGoWriteTimeoutExceedsBackendOperations is Phase 6's regression test
+// for the backup timeout defect: nginx's proxy_read_timeout exceeding
+// PGDumpTimeout (asserted above) is not enough on its own, because the Go
+// http.Server's own WriteTimeout cuts a long-running response off first if
+// it is shorter. A backup that takes more than WriteTimeout is severed by
+// Go regardless of what nginx would have tolerated. This test compares
+// serverWriteTimeout (main.go) directly against handlers.PGDumpTimeout,
+// which is exactly the comparison nginx_timeout_test.go's existing test
+// never made, and which let the original 60s-vs-2min mismatch ship.
+func TestGoWriteTimeoutExceedsBackendOperations(t *testing.T) {
+	operations := map[string]time.Duration{
+		"handlers.PGDumpTimeout": handlers.PGDumpTimeout,
+	}
+	for name, d := range operations {
+		if serverWriteTimeout <= d {
+			t.Errorf("serverWriteTimeout %v does not exceed %s (%v)", serverWriteTimeout, name, d)
+		}
+	}
+}
