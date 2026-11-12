@@ -465,4 +465,76 @@ func Register(humaAPI huma.API, h *handlers.Handler) {
 		Summary:       "Send a test webhook notification",
 		DefaultStatus: http.StatusNoContent,
 	}), testNotifications(h))
+
+	// Phase 7, step 2 (plans/frontend-backend-split.md Section 8 "### ACME"
+	// / Section 6 "### ACME"): certificates CRUD, options and downloads.
+	// Every row here is manager. ACME settings (PATCH) and events are a
+	// sibling step on a separate branch and are not registered here.
+	huma.Register(humaAPI, roleOp("manager", huma.Operation{
+		OperationID: "listACMECertificates",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/acme/certificates",
+		Tags:        []string{"acme"},
+		Summary:     "List ACME-managed certificates",
+	}), listACMECertificates(h))
+
+	huma.Register(humaAPI, roleOp("manager", huma.Operation{
+		OperationID: "getACMEOptions",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/acme/options",
+		Tags:        []string{"acme"},
+		Summary:     "Get ACME issuance options and defaults",
+	}), getACMEOptions(h))
+
+	huma.Register(humaAPI, roleOp("manager", huma.Operation{
+		OperationID:   "createACMECertificate",
+		Method:        http.MethodPost,
+		Path:          BasePath + "/acme/certificates",
+		Tags:          []string{"acme"},
+		Summary:       "Issue a new ACME certificate",
+		DefaultStatus: http.StatusCreated,
+	}), createACMECertificate(h))
+
+	huma.Register(humaAPI, roleOp("manager", huma.Operation{
+		OperationID: "renewACMECertificate",
+		Method:      http.MethodPost,
+		Path:        BasePath + "/acme/certificates/{id}/renew",
+		Tags:        []string{"acme"},
+		Summary:     "Manually renew an ACME certificate",
+	}), renewACMECertificate(h))
+
+	huma.Register(humaAPI, roleOp("manager", huma.Operation{
+		OperationID:   "deleteACMECertificate",
+		Method:        http.MethodDelete,
+		Path:          BasePath + "/acme/certificates/{id}",
+		Tags:          []string{"acme"},
+		Summary:       "Delete an ACME certificate record",
+		DefaultStatus: http.StatusNoContent,
+	}), deleteACMECertificate(h))
+
+	huma.Register(humaAPI, roleOp("manager", huma.Operation{
+		OperationID: "patchACMECertificate",
+		Method:      http.MethodPatch,
+		Path:        BasePath + "/acme/certificates/{id}",
+		Tags:        []string{"acme"},
+		Summary:     "Toggle auto-renewal for an ACME certificate",
+	}), patchACMECertificate(h))
+
+	huma.Register(humaAPI, roleOp("manager", huma.Operation{
+		OperationID: "getACMECertificateCertificate",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/acme/certificates/{id}/certificate",
+		Tags:        []string{"acme"},
+		Summary:     "Download an ACME certificate's certificate file",
+		Responses:   binaryResponses("The ACME certificate file, PEM-encoded."),
+	}), getACMECertificateCertificate(h))
+
+	huma.Register(humaAPI, roleOp("manager", huma.Operation{
+		OperationID: "getACMECertificateKey",
+		Method:      http.MethodGet,
+		Path:        BasePath + "/acme/certificates/{id}/key",
+		Tags:        []string{"acme"},
+		Summary:     "Download an ACME certificate's private key",
+		Responses:   binaryResponses("The ACME certificate's private key, PEM-encoded."),
+	}), getACMECertificateKey(h))
 }
