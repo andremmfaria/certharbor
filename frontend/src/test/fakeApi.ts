@@ -827,8 +827,7 @@ export function installFakeApi(
       }
       case 'POST /api/v1/profile/mfa/disable': {
         const { currentPassword, code } = body as { currentPassword: string; code: string }
-        if (currentPassword !== state.password)
-          return problem(401, 'Unauthorized', 'Invalid credentials.')
+        if (currentPassword !== state.password) return problem(401, 'Unauthorized', 'Invalid credentials.')
         if (code !== state.mfaConfirmCode) return problem(422, 'Unprocessable Entity', 'invalid code')
         state.mfaEnabled = false
         return new Response(null, { status: 204 })
