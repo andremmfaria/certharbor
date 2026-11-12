@@ -8,8 +8,8 @@ import (
 	"certharbor/models"
 )
 
-// InitLESchema creates the ACME/Let's Encrypt certificate tables if absent.
-func InitLESchema(d *sql.DB) error {
+// InitACMESchema creates the ACME/Let's Encrypt certificate tables if absent.
+func InitACMESchema(d *sql.DB) error {
 	schema := `
 	CREATE TABLE IF NOT EXISTS le_certificates (
 		id         SERIAL PRIMARY KEY,
@@ -55,10 +55,10 @@ func InitLESchema(d *sql.DB) error {
 	return err
 }
 
-// ─── LE Certificates ──────────────────────────────────────────────────────────
+// ─── ACME Certificates ──────────────────────────────────────────────────────────
 
-// GetLECerts returns all ACME certificates ordered by creation time.
-func GetLECerts(ctx context.Context, d *sql.DB) ([]*models.LECertificate, error) {
+// GetACMECerts returns all ACME certificates ordered by creation time.
+func GetACMECerts(ctx context.Context, d *sql.DB) ([]*models.ACMECertificate, error) {
 	rows, err := d.QueryContext(ctx, `SELECT id,domain,COALESCE(email,''),COALESCE(provider,'http01'),
 		COALESCE(cert_path,''),COALESCE(key_path,''),issued_at,expires_at,
 		auto_renew,COALESCE(status,'pending'),COALESCE(last_error,''),created_at,updated_at
@@ -67,9 +67,9 @@ func GetLECerts(ctx context.Context, d *sql.DB) ([]*models.LECertificate, error)
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	var certs []*models.LECertificate
+	var certs []*models.ACMECertificate
 	for rows.Next() {
-		c := &models.LECertificate{}
+		c := &models.ACMECertificate{}
 		if err := rows.Scan(&c.ID, &c.Domain, &c.Email, &c.Provider,
 			&c.CertPath, &c.KeyPath, &c.IssuedAt, &c.ExpiresAt,
 			&c.AutoRenew, &c.Status, &c.LastError, &c.CreatedAt, &c.UpdatedAt); err != nil {
@@ -80,9 +80,9 @@ func GetLECerts(ctx context.Context, d *sql.DB) ([]*models.LECertificate, error)
 	return certs, nil
 }
 
-// GetLECert returns the ACME certificate with the given ID, or nil if not found.
-func GetLECert(ctx context.Context, d *sql.DB, id int) (*models.LECertificate, error) {
-	c := &models.LECertificate{}
+// GetACMECert returns the ACME certificate with the given ID, or nil if not found.
+func GetACMECert(ctx context.Context, d *sql.DB, id int) (*models.ACMECertificate, error) {
+	c := &models.ACMECertificate{}
 	err := d.QueryRowContext(ctx, `SELECT id,domain,COALESCE(email,''),COALESCE(provider,'http01'),
 		COALESCE(cert_path,''),COALESCE(key_path,''),issued_at,expires_at,
 		auto_renew,COALESCE(status,'pending'),COALESCE(last_error,''),created_at,updated_at
@@ -96,8 +96,8 @@ func GetLECert(ctx context.Context, d *sql.DB, id int) (*models.LECertificate, e
 	return c, err
 }
 
-// CreateLECert inserts a new pending ACME certificate record and returns its ID.
-func CreateLECert(ctx context.Context, d *sql.DB, domain, email, provider string, autoRenew bool) (int, error) {
+// CreateACMECert inserts a new pending ACME certificate record and returns its ID.
+func CreateACMECert(ctx context.Context, d *sql.DB, domain, email, provider string, autoRenew bool) (int, error) {
 	var id int
 	err := d.QueryRowContext(ctx, `INSERT INTO le_certificates (domain,email,provider,auto_renew,status)
 		VALUES ($1,$2,$3,$4,'pending') RETURNING id`,
@@ -105,35 +105,35 @@ func CreateLECert(ctx context.Context, d *sql.DB, domain, email, provider string
 	return id, err
 }
 
-// UpdateLECertStatus updates the status and last error message for an ACME certificate.
-func UpdateLECertStatus(ctx context.Context, d *sql.DB, id int, status, lastError string) error {
+// UpdateACMECertStatus updates the status and last error message for an ACME certificate.
+func UpdateACMECertStatus(ctx context.Context, d *sql.DB, id int, status, lastError string) error {
 	_, err := d.ExecContext(ctx, `UPDATE le_certificates SET status=$1,last_error=$2,updated_at=NOW() WHERE id=$3`,
 		status, lastError, id)
 	return err
 }
 
-// UpdateLECertPaths stores the file paths and validity timestamps for an issued certificate.
-func UpdateLECertPaths(ctx context.Context, d *sql.DB, id int, certPath, keyPath string, issuedAt, expiresAt *time.Time) error {
+// UpdateACMECertPaths stores the file paths and validity timestamps for an issued certificate.
+func UpdateACMECertPaths(ctx context.Context, d *sql.DB, id int, certPath, keyPath string, issuedAt, expiresAt *time.Time) error {
 	_, err := d.ExecContext(ctx, `UPDATE le_certificates SET cert_path=$1,key_path=$2,issued_at=$3,expires_at=$4,
 		status='active',last_error='',updated_at=NOW() WHERE id=$5`,
 		certPath, keyPath, issuedAt, expiresAt, id)
 	return err
 }
 
-// UpdateLECertAutoRenew toggles the auto-renewal flag for an ACME certificate.
-func UpdateLECertAutoRenew(ctx context.Context, d *sql.DB, id int, autoRenew bool) error {
+// UpdateACMECertAutoRenew toggles the auto-renewal flag for an ACME certificate.
+func UpdateACMECertAutoRenew(ctx context.Context, d *sql.DB, id int, autoRenew bool) error {
 	_, err := d.ExecContext(ctx, `UPDATE le_certificates SET auto_renew=$1,updated_at=NOW() WHERE id=$2`, autoRenew, id)
 	return err
 }
 
-// DeleteLECert removes an ACME certificate record by ID.
-func DeleteLECert(ctx context.Context, d *sql.DB, id int) error {
+// DeleteACMECert removes an ACME certificate record by ID.
+func DeleteACMECert(ctx context.Context, d *sql.DB, id int) error {
 	_, err := d.ExecContext(ctx, `DELETE FROM le_certificates WHERE id=$1`, id)
 	return err
 }
 
-// GetLECertsForRenewal returns active certificates expiring within 30 days that have auto-renew enabled.
-func GetLECertsForRenewal(ctx context.Context, d *sql.DB) ([]*models.LECertificate, error) {
+// GetACMECertsForRenewal returns active certificates expiring within 30 days that have auto-renew enabled.
+func GetACMECertsForRenewal(ctx context.Context, d *sql.DB) ([]*models.ACMECertificate, error) {
 	rows, err := d.QueryContext(ctx, `SELECT id,domain,COALESCE(email,''),COALESCE(provider,'http01'),
 		COALESCE(cert_path,''),COALESCE(key_path,''),issued_at,expires_at,
 		auto_renew,COALESCE(status,'pending'),COALESCE(last_error,''),created_at,updated_at
@@ -144,9 +144,9 @@ func GetLECertsForRenewal(ctx context.Context, d *sql.DB) ([]*models.LECertifica
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	var certs []*models.LECertificate
+	var certs []*models.ACMECertificate
 	for rows.Next() {
-		c := &models.LECertificate{}
+		c := &models.ACMECertificate{}
 		if err := rows.Scan(&c.ID, &c.Domain, &c.Email, &c.Provider,
 			&c.CertPath, &c.KeyPath, &c.IssuedAt, &c.ExpiresAt,
 			&c.AutoRenew, &c.Status, &c.LastError, &c.CreatedAt, &c.UpdatedAt); err != nil {
@@ -157,11 +157,11 @@ func GetLECertsForRenewal(ctx context.Context, d *sql.DB) ([]*models.LECertifica
 	return certs, nil
 }
 
-// ─── LE Settings ──────────────────────────────────────────────────────────────
+// ─── ACME Settings ──────────────────────────────────────────────────────────────
 
-// GetLESettings returns the single ACME provider settings row.
-func GetLESettings(ctx context.Context, d *sql.DB) (*models.LESettings, error) {
-	s := &models.LESettings{}
+// GetACMESettings returns the single ACME provider settings row.
+func GetACMESettings(ctx context.Context, d *sql.DB) (*models.ACMESettings, error) {
+	s := &models.ACMESettings{}
 	err := d.QueryRowContext(ctx, `SELECT id,COALESCE(email,''),COALESCE(provider,'http01'),
 		COALESCE(cf_token,''),COALESCE(cf_zone_id,''),
 		COALESCE(r53_key_id,''),COALESCE(r53_secret,''),COALESCE(r53_region,'us-east-1'),
@@ -169,13 +169,13 @@ func GetLESettings(ctx context.Context, d *sql.DB) (*models.LESettings, error) {
 		Scan(&s.ID, &s.Email, &s.Provider, &s.CFToken, &s.CFZoneID,
 			&s.R53KeyID, &s.R53SecretKey, &s.R53Region, &s.UpdatedAt)
 	if err == sql.ErrNoRows {
-		return &models.LESettings{Provider: "http01"}, nil
+		return &models.ACMESettings{Provider: "http01"}, nil
 	}
 	return s, err
 }
 
-// SaveLESettings upserts the ACME provider settings.
-func SaveLESettings(ctx context.Context, d *sql.DB, s *models.LESettings) error {
+// SaveACMESettings upserts the ACME provider settings.
+func SaveACMESettings(ctx context.Context, d *sql.DB, s *models.ACMESettings) error {
 	_, err := d.ExecContext(ctx, `INSERT INTO le_settings (id,email,provider,cf_token,cf_zone_id,r53_key_id,r53_secret,r53_region,updated_at)
 		VALUES (1,$1,$2,$3,$4,$5,$6,$7,NOW())
 		ON CONFLICT (id) DO UPDATE SET
@@ -186,15 +186,15 @@ func SaveLESettings(ctx context.Context, d *sql.DB, s *models.LESettings) error 
 	return err
 }
 
-// ─── LE Logs ──────────────────────────────────────────────────────────────────
+// ─── ACME Logs ──────────────────────────────────────────────────────────────────
 
-// AddLELog appends a log entry for an ACME domain event (best-effort; errors are discarded).
-func AddLELog(ctx context.Context, d *sql.DB, domain, action, message string) {
+// AddACMELog appends a log entry for an ACME domain event (best-effort; errors are discarded).
+func AddACMELog(ctx context.Context, d *sql.DB, domain, action, message string) {
 	_, _ = d.ExecContext(ctx, `INSERT INTO le_logs (domain,action,message) VALUES ($1,$2,$3)`, domain, action, message)
 }
 
-// GetLELogs returns up to limit log entries for the given domain (or all domains if domain is empty).
-func GetLELogs(ctx context.Context, d *sql.DB, domain string, limit int) ([]*models.LELog, error) {
+// GetACMELogs returns up to limit log entries for the given domain (or all domains if domain is empty).
+func GetACMELogs(ctx context.Context, d *sql.DB, domain string, limit int) ([]*models.ACMELog, error) {
 	var rows *sql.Rows
 	var err error
 	if domain != "" {
@@ -208,9 +208,9 @@ func GetLELogs(ctx context.Context, d *sql.DB, domain string, limit int) ([]*mod
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	var logs []*models.LELog
+	var logs []*models.ACMELog
 	for rows.Next() {
-		l := &models.LELog{}
+		l := &models.ACMELog{}
 		if err := rows.Scan(&l.ID, &l.Domain, &l.Action, &l.Message, &l.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -221,8 +221,8 @@ func GetLELogs(ctx context.Context, d *sql.DB, domain string, limit int) ([]*mod
 
 // ─── Stats ────────────────────────────────────────────────────────────────────
 
-// GetLEStats returns aggregate counts of ACME certificates by state.
-func GetLEStats(ctx context.Context, d *sql.DB) (total, active, expiringSoon, expired int) {
+// GetACMEStats returns aggregate counts of ACME certificates by state.
+func GetACMEStats(ctx context.Context, d *sql.DB) (total, active, expiringSoon, expired int) {
 	_ = d.QueryRowContext(ctx, `SELECT COUNT(*) FROM le_certificates`).Scan(&total)
 	_ = d.QueryRowContext(ctx, `SELECT COUNT(*) FROM le_certificates WHERE status='active'`).Scan(&active)
 	_ = d.QueryRowContext(ctx, `SELECT COUNT(*) FROM le_certificates WHERE status='active' AND expires_at < NOW() + INTERVAL '30 days'`).Scan(&expiringSoon)
@@ -232,16 +232,16 @@ func GetLEStats(ctx context.Context, d *sql.DB) (total, active, expiringSoon, ex
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
-// LECertExists returns true when a certificate for the given domain already exists.
-func LECertExists(ctx context.Context, d *sql.DB, domain string) bool {
+// ACMECertExists returns true when a certificate for the given domain already exists.
+func ACMECertExists(ctx context.Context, d *sql.DB, domain string) bool {
 	var n int
 	_ = d.QueryRowContext(ctx, `SELECT COUNT(*) FROM le_certificates WHERE domain=$1`, domain).Scan(&n)
 	return n > 0
 }
 
-// GetLECertByDomain returns the certificate for the given domain, or nil if not found.
-func GetLECertByDomain(ctx context.Context, d *sql.DB, domain string) (*models.LECertificate, error) {
-	c := &models.LECertificate{}
+// GetACMECertByDomain returns the certificate for the given domain, or nil if not found.
+func GetACMECertByDomain(ctx context.Context, d *sql.DB, domain string) (*models.ACMECertificate, error) {
+	c := &models.ACMECertificate{}
 	err := d.QueryRowContext(ctx, `SELECT id,domain,COALESCE(email,''),COALESCE(provider,'http01'),
 		COALESCE(cert_path,''),COALESCE(key_path,''),issued_at,expires_at,
 		auto_renew,COALESCE(status,'pending'),COALESCE(last_error,''),created_at,updated_at
@@ -255,8 +255,8 @@ func GetLECertByDomain(ctx context.Context, d *sql.DB, domain string) (*models.L
 	return c, err
 }
 
-// GetLECertCount returns the total number of ACME certificate records.
-func GetLECertCount(ctx context.Context, d *sql.DB) int {
+// GetACMECertCount returns the total number of ACME certificate records.
+func GetACMECertCount(ctx context.Context, d *sql.DB) int {
 	var n int
 	_ = d.QueryRowContext(ctx, `SELECT COUNT(*) FROM le_certificates`).Scan(&n)
 	return n

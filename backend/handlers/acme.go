@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"certharbor/le"
+	"certharbor/acme"
 	"certharbor/models"
 
 	appdb "certharbor/db"
@@ -13,13 +13,13 @@ import (
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
-// LEDashboard renders the ACME/Let's Encrypt certificate management dashboard.
-func (h *Handler) LEDashboard(w http.ResponseWriter, r *http.Request) {
+// ACMEDashboard renders the ACME/Let's Encrypt certificate management dashboard.
+func (h *Handler) ACMEDashboard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	certs, _ := appdb.GetLECerts(ctx, h.db)
-	total, active, expiringSoon, expired := appdb.GetLEStats(ctx, h.db)
-	logs, _ := appdb.GetLELogs(ctx, h.db, "", 20)
-	settings, _ := appdb.GetLESettings(ctx, h.db)
+	certs, _ := appdb.GetACMECerts(ctx, h.db)
+	total, active, expiringSoon, expired := appdb.GetACMEStats(ctx, h.db)
+	logs, _ := appdb.GetACMELogs(ctx, h.db, "", 20)
+	settings, _ := appdb.GetACMESettings(ctx, h.db)
 	data := h.base(w, r, "le")
 	data["LECerts"] = certs
 	data["LETotal"] = total
@@ -33,16 +33,16 @@ func (h *Handler) LEDashboard(w http.ResponseWriter, r *http.Request) {
 
 // ─── Issue ────────────────────────────────────────────────────────────────────
 
-// LEIssueGet renders the ACME certificate issuance form.
-func (h *Handler) LEIssueGet(w http.ResponseWriter, r *http.Request) {
-	settings, _ := appdb.GetLESettings(r.Context(), h.db)
+// ACMEIssueGet renders the ACME certificate issuance form.
+func (h *Handler) ACMEIssueGet(w http.ResponseWriter, r *http.Request) {
+	settings, _ := appdb.GetACMESettings(r.Context(), h.db)
 	data := h.base(w, r, "le-issue")
 	data["LESettings"] = settings
 	h.render(w, "le_issue", data)
 }
 
-// LEIssuePost handles ACME certificate issuance form submission.
-func (h *Handler) LEIssuePost(w http.ResponseWriter, r *http.Request) {
+// ACMEIssuePost handles ACME certificate issuance form submission.
+func (h *Handler) ACMEIssuePost(w http.ResponseWriter, r *http.Request) {
 	if !h.requireCSRF(w, r, "/le/issue") {
 		return
 	}
@@ -64,16 +64,16 @@ func (h *Handler) LEIssuePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if appdb.LECertExists(r.Context(), h.db, domain) {
+	if appdb.ACMECertExists(r.Context(), h.db, domain) {
 		h.flash(w, r, "err", "A certificate for this domain already exists")
 		http.Redirect(w, r, "/le/issue", http.StatusFound)
 		return
 	}
 
-	settings, _ := appdb.GetLESettings(r.Context(), h.db)
+	settings, _ := appdb.GetACMESettings(r.Context(), h.db)
 
 	// Create a DB record with status pending
-	id, err := appdb.CreateLECert(r.Context(), h.db, domain, email, provider, autoRenew)
+	id, err := appdb.CreateACMECert(r.Context(), h.db, domain, email, provider, autoRenew)
 	if err != nil {
 		h.flash(w, r, "err", "Failed to create record: "+err.Error())
 		http.Redirect(w, r, "/le/issue", http.StatusFound)
@@ -82,13 +82,13 @@ func (h *Handler) LEIssuePost(w http.ResponseWriter, r *http.Request) {
 
 	// The directory URL is recorded per issuance so the value actually in
 	// effect is DB-visible, not only a startup log line.
-	appdb.AddLELog(r.Context(), h.db, domain, "issue",
-		fmt.Sprintf("Certificate issuance started (directory: %s)", h.cfg.LEACMEDirectoryURL))
+	appdb.AddACMELog(r.Context(), h.db, domain, "issue",
+		fmt.Sprintf("Certificate issuance started (directory: %s)", h.cfg.ACMEDirectoryURL))
 
 	// Issue in the background, use Background so the goroutine outlives the request.
 	bgCtx := context.Background()
 	safeGo("le-issue:"+domain, func() {
-		result, err := le.IssueCert(&le.LEConfig{
+		result, err := acme.IssueCert(&acme.ACMEConfig{
 			Email:        email,
 			Domain:       domain,
 			Provider:     provider,
@@ -97,15 +97,15 @@ func (h *Handler) LEIssuePost(w http.ResponseWriter, r *http.Request) {
 			R53KeyID:     settings.R53KeyID,
 			R53Secret:    settings.R53SecretKey,
 			R53Region:    settings.R53Region,
-			DirectoryURL: h.cfg.LEACMEDirectoryURL,
+			DirectoryURL: h.cfg.ACMEDirectoryURL,
 		})
 		if err != nil {
-			_ = appdb.UpdateLECertStatus(bgCtx, h.db, id, "error", err.Error())
-			appdb.AddLELog(bgCtx, h.db, domain, "error", fmt.Sprintf("Error: %v", err))
+			_ = appdb.UpdateACMECertStatus(bgCtx, h.db, id, "error", err.Error())
+			appdb.AddACMELog(bgCtx, h.db, domain, "error", fmt.Sprintf("Error: %v", err))
 			return
 		}
-		_ = appdb.UpdateLECertPaths(bgCtx, h.db, id, result.CertPath, result.KeyPath, result.IssuedAt, result.ExpiresAt)
-		appdb.AddLELog(bgCtx, h.db, domain, "issue", "Certificate issued successfully")
+		_ = appdb.UpdateACMECertPaths(bgCtx, h.db, id, result.CertPath, result.KeyPath, result.IssuedAt, result.ExpiresAt)
+		appdb.AddACMELog(bgCtx, h.db, domain, "issue", "Certificate issued successfully")
 	})
 
 	h.flash(w, r, "ok", fmt.Sprintf("Certificate issuance for %s started. Status will update in about a minute.", domain))
@@ -114,12 +114,12 @@ func (h *Handler) LEIssuePost(w http.ResponseWriter, r *http.Request) {
 
 // ─── Renew ────────────────────────────────────────────────────────────────────
 
-// LERenew handles a manual ACME certificate renewal POST request.
-func (h *Handler) LERenew(w http.ResponseWriter, r *http.Request) {
+// ACMERenew handles a manual ACME certificate renewal POST request.
+func (h *Handler) ACMERenew(w http.ResponseWriter, r *http.Request) {
 	if !h.requireCSRF(w, r, "/le") {
 		return
 	}
-	cert, ok := h.leCertFromURL(w, r)
+	cert, ok := h.acmeCertFromURL(w, r)
 	if !ok {
 		return
 	}
@@ -135,28 +135,28 @@ func (h *Handler) LERenew(w http.ResponseWriter, r *http.Request) {
 	}
 	id := cert.ID
 
-	settings, _ := appdb.GetLESettings(r.Context(), h.db)
-	_ = appdb.UpdateLECertStatus(r.Context(), h.db, id, "pending", "")
-	appdb.AddLELog(r.Context(), h.db, cert.Domain, "renew", "Manual renewal started")
+	settings, _ := appdb.GetACMESettings(r.Context(), h.db)
+	_ = appdb.UpdateACMECertStatus(r.Context(), h.db, id, "pending", "")
+	appdb.AddACMELog(r.Context(), h.db, cert.Domain, "renew", "Manual renewal started")
 
 	// Use Background so the goroutine outlives the request.
 	bgCtx := context.Background()
 	safeGo("le-renew:"+cert.Domain, func() {
-		result, err := le.IssueCert(&le.LEConfig{
+		result, err := acme.IssueCert(&acme.ACMEConfig{
 			Email:        cert.Email,
 			Domain:       cert.Domain,
 			Provider:     cert.Provider,
 			CFToken:      settings.CFToken,
 			CFZoneID:     settings.CFZoneID,
-			DirectoryURL: h.cfg.LEACMEDirectoryURL,
+			DirectoryURL: h.cfg.ACMEDirectoryURL,
 		})
 		if err != nil {
-			_ = appdb.UpdateLECertStatus(bgCtx, h.db, id, "error", err.Error())
-			appdb.AddLELog(bgCtx, h.db, cert.Domain, "error", fmt.Sprintf("Renewal error: %v", err))
+			_ = appdb.UpdateACMECertStatus(bgCtx, h.db, id, "error", err.Error())
+			appdb.AddACMELog(bgCtx, h.db, cert.Domain, "error", fmt.Sprintf("Renewal error: %v", err))
 			return
 		}
-		_ = appdb.UpdateLECertPaths(bgCtx, h.db, id, result.CertPath, result.KeyPath, result.IssuedAt, result.ExpiresAt)
-		appdb.AddLELog(bgCtx, h.db, cert.Domain, "renew", "Certificate renewed successfully")
+		_ = appdb.UpdateACMECertPaths(bgCtx, h.db, id, result.CertPath, result.KeyPath, result.IssuedAt, result.ExpiresAt)
+		appdb.AddACMELog(bgCtx, h.db, cert.Domain, "renew", "Certificate renewed successfully")
 	})
 
 	h.flash(w, r, "ok", "Renewal started!")
@@ -165,18 +165,18 @@ func (h *Handler) LERenew(w http.ResponseWriter, r *http.Request) {
 
 // ─── Delete ───────────────────────────────────────────────────────────────────
 
-// LEDelete handles deletion of an ACME certificate record.
-func (h *Handler) LEDelete(w http.ResponseWriter, r *http.Request) {
+// ACMEDelete handles deletion of an ACME certificate record.
+func (h *Handler) ACMEDelete(w http.ResponseWriter, r *http.Request) {
 	if !h.requireCSRF(w, r, "/le") {
 		return
 	}
-	cert, ok := h.leCertFromURL(w, r)
+	cert, ok := h.acmeCertFromURL(w, r)
 	if !ok {
 		return
 	}
 	if cert != nil {
-		appdb.AddLELog(r.Context(), h.db, cert.Domain, "delete", "Certificate removed from the system")
-		_ = appdb.DeleteLECert(r.Context(), h.db, cert.ID)
+		appdb.AddACMELog(r.Context(), h.db, cert.Domain, "delete", "Certificate removed from the system")
+		_ = appdb.DeleteACMECert(r.Context(), h.db, cert.ID)
 	}
 	h.flash(w, r, "ok", "Certificate deleted")
 	http.Redirect(w, r, "/le", http.StatusFound)
@@ -184,17 +184,17 @@ func (h *Handler) LEDelete(w http.ResponseWriter, r *http.Request) {
 
 // ─── Toggle AutoRenew ─────────────────────────────────────────────────────────
 
-// LEToggleAutoRenew toggles the auto-renewal flag for an ACME certificate.
-func (h *Handler) LEToggleAutoRenew(w http.ResponseWriter, r *http.Request) {
+// ACMEToggleAutoRenew toggles the auto-renewal flag for an ACME certificate.
+func (h *Handler) ACMEToggleAutoRenew(w http.ResponseWriter, r *http.Request) {
 	if !h.requireCSRF(w, r, "/le") {
 		return
 	}
-	cert, ok := h.leCertFromURL(w, r)
+	cert, ok := h.acmeCertFromURL(w, r)
 	if !ok {
 		return
 	}
 	if cert != nil {
-		_ = appdb.UpdateLECertAutoRenew(r.Context(), h.db, cert.ID, !cert.AutoRenew)
+		_ = appdb.UpdateACMECertAutoRenew(r.Context(), h.db, cert.ID, !cert.AutoRenew)
 		if !cert.AutoRenew {
 			h.flash(w, r, "ok", "Auto-renewal enabled")
 		} else {
@@ -206,9 +206,9 @@ func (h *Handler) LEToggleAutoRenew(w http.ResponseWriter, r *http.Request) {
 
 // ─── Download ─────────────────────────────────────────────────────────────────
 
-// LEDownloadCert serves the certificate file for an ACME certificate.
-func (h *Handler) LEDownloadCert(w http.ResponseWriter, r *http.Request) {
-	cert, ok := h.leCertFromURL(w, r)
+// ACMEDownloadCert serves the certificate file for an ACME certificate.
+func (h *Handler) ACMEDownloadCert(w http.ResponseWriter, r *http.Request) {
+	cert, ok := h.acmeCertFromURL(w, r)
 	if !ok {
 		return
 	}
@@ -220,9 +220,9 @@ func (h *Handler) LEDownloadCert(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, cert.CertPath)
 }
 
-// LEDownloadKey serves the private key file for an ACME certificate.
-func (h *Handler) LEDownloadKey(w http.ResponseWriter, r *http.Request) {
-	cert, ok := h.leCertFromURL(w, r)
+// ACMEDownloadKey serves the private key file for an ACME certificate.
+func (h *Handler) ACMEDownloadKey(w http.ResponseWriter, r *http.Request) {
+	cert, ok := h.acmeCertFromURL(w, r)
 	if !ok {
 		return
 	}
@@ -237,27 +237,27 @@ func (h *Handler) LEDownloadKey(w http.ResponseWriter, r *http.Request) {
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 
-// LESettingsGet renders the ACME provider settings page.
-func (h *Handler) LESettingsGet(w http.ResponseWriter, r *http.Request) {
-	settings, _ := appdb.GetLESettings(r.Context(), h.db)
+// ACMESettingsGet renders the ACME provider settings page.
+func (h *Handler) ACMESettingsGet(w http.ResponseWriter, r *http.Request) {
+	settings, _ := appdb.GetACMESettings(r.Context(), h.db)
 	data := h.base(w, r, "le-settings")
 	data["LESettings"] = settings
 	h.render(w, "le_settings", data)
 }
 
-// LESettingsPost handles saving ACME provider settings.
-func (h *Handler) LESettingsPost(w http.ResponseWriter, r *http.Request) {
+// ACMESettingsPost handles saving ACME provider settings.
+func (h *Handler) ACMESettingsPost(w http.ResponseWriter, r *http.Request) {
 	if !h.requireCSRF(w, r, "/le/settings") {
 		return
 	}
-	current, err := appdb.GetLESettings(r.Context(), h.db)
+	current, err := appdb.GetACMESettings(r.Context(), h.db)
 	if err != nil {
 		h.flash(w, r, "err", "Load error: "+err.Error())
 		http.Redirect(w, r, "/le/settings", http.StatusFound)
 		return
 	}
-	settings := parseLESettingsFields(r, current)
-	if err := appdb.SaveLESettings(r.Context(), h.db, settings); err != nil {
+	settings := parseACMESettingsFields(r, current)
+	if err := appdb.SaveACMESettings(r.Context(), h.db, settings); err != nil {
 		h.flash(w, r, "err", "Save error: "+err.Error())
 	} else {
 		h.auditSecurity(r, fmt.Sprintf("le.settings.save provider=%s email=%s cf_configured=%t r53_configured=%t",
@@ -269,11 +269,11 @@ func (h *Handler) LESettingsPost(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/le/settings", http.StatusFound)
 }
 
-// parseLESettingsFields extracts the ACME settings form fields from r into a
-// new LESettings. current is the live DB row and supplies the provider secrets
+// parseACMESettingsFields extracts the ACME settings form fields from r into a
+// new ACMESettings. current is the live DB row and supplies the provider secrets
 // when their fields come back blank.
-func parseLESettingsFields(r *http.Request, current *models.LESettings) *models.LESettings {
-	s := &models.LESettings{
+func parseACMESettingsFields(r *http.Request, current *models.ACMESettings) *models.ACMESettings {
+	s := &models.ACMESettings{
 		Email:     trimStr(r.FormValue("email")),
 		Provider:  r.FormValue("provider"),
 		CFZoneID:  trimStr(r.FormValue("cf_zone_id")),
@@ -303,10 +303,10 @@ func parseLESettingsFields(r *http.Request, current *models.LESettings) *models.
 
 // ─── Logs ─────────────────────────────────────────────────────────────────────
 
-// LELogs renders the ACME operation log page with optional domain filter.
-func (h *Handler) LELogs(w http.ResponseWriter, r *http.Request) {
+// ACMELogs renders the ACME operation log page with optional domain filter.
+func (h *Handler) ACMELogs(w http.ResponseWriter, r *http.Request) {
 	domain := r.URL.Query().Get("domain")
-	logs, _ := appdb.GetLELogs(r.Context(), h.db, domain, 100)
+	logs, _ := appdb.GetACMELogs(r.Context(), h.db, domain, 100)
 	data := h.base(w, r, "le-logs")
 	data["LELogs"] = logs
 	data["FilterDomain"] = domain

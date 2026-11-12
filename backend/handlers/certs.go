@@ -40,15 +40,15 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var leCount int
-	_ = h.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM le_certificates WHERE status='active'").Scan(&leCount)
+	var acmeCount int
+	_ = h.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM le_certificates WHERE status='active'").Scan(&acmeCount)
 
 	data := h.base(w, r, "home")
 	data["CAOnline"] = caOnline
 	data["Uptime"] = fmtUptime(time.Since(StartedAt))
 	data["ActiveCerts"] = activeCount
 	data["ExpiringCerts"] = expiringCount
-	data["LECerts"] = leCount
+	data["LECerts"] = acmeCount
 	data["Version"] = Version
 	h.render(w, "home", data)
 }
@@ -80,9 +80,9 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ── Overall statistics ──
-	var allCerts, leCerts, usersCount int
+	var allCerts, acmeCerts, usersCount int
 	_ = h.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM certificates").Scan(&allCerts)
-	_ = h.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM le_certificates").Scan(&leCerts)
+	_ = h.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM le_certificates").Scan(&acmeCerts)
 	_ = h.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users WHERE is_active = true").Scan(&usersCount)
 
 	// ── Server uptime ──
@@ -96,7 +96,7 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	data["ExpC"] = expC
 	data["Activity"] = act
 	data["AllCerts"] = allCerts
-	data["LECerts"] = leCerts
+	data["LECerts"] = acmeCerts
 	data["UsersCount"] = usersCount
 	data["Uptime"] = fmtUptime(uptime)
 	data["StartedAt"] = StartedAt.Format("2006-01-02 15:04")

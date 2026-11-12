@@ -1,4 +1,4 @@
-package le
+package acme
 
 import (
 	"crypto"
@@ -32,14 +32,14 @@ import (
 // (~seconds) so queueing is acceptable.
 var issueMu sync.Mutex
 
-// LE path and URL constants.
+// ACME path and URL constants.
 const (
-	// LEDirectory is the root directory for ACME certificate storage.
-	LEDirectory    = "/opt/certharbor/le-certs"
-	LEAccountFile  = "/opt/certharbor/le-certs/account.json"
-	LEKeyFile      = "/opt/certharbor/le-certs/account.key"
-	LEProductionCA = "https://acme-v02.api.letsencrypt.org/directory"
-	LEStagingCA    = "https://acme-staging-v02.api.letsencrypt.org/directory"
+	// ACMEDirectory is the root directory for ACME certificate storage.
+	ACMEDirectory    = "/opt/certharbor/le-certs"
+	ACMEAccountFile  = "/opt/certharbor/le-certs/account.json"
+	ACMEKeyFile      = "/opt/certharbor/le-certs/account.key"
+	ACMEProductionCA = "https://acme-v02.api.letsencrypt.org/directory"
+	ACMEStagingCA    = "https://acme-staging-v02.api.letsencrypt.org/directory"
 )
 
 // validDomain accepts hostnames, FQDNs, and wildcards (*.example.com); mirrors
@@ -49,7 +49,7 @@ const (
 var validDomain = regexp.MustCompile(`^(\*\.)?[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?)*$`)
 
 // certDirFor validates domain and returns its storage directory under
-// LEDirectory.  Single entry point so no caller can join an unchecked value.
+// ACMEDirectory.  Single entry point so no caller can join an unchecked value.
 func certDirFor(domain string) (string, error) {
 	if domain == "" {
 		return "", fmt.Errorf("domain must not be empty")
@@ -60,31 +60,31 @@ func certDirFor(domain string) (string, error) {
 	if !validDomain.MatchString(domain) {
 		return "", fmt.Errorf("domain %q contains disallowed characters", domain)
 	}
-	return filepath.Join(LEDirectory, domain), nil
+	return filepath.Join(ACMEDirectory, domain), nil
 }
 
-// LEUser implements the registration.User interface for the ACME account.
+// ACMEUser implements the registration.User interface for the ACME account.
 //
-//nolint:revive // LE prefix is intentional: these names were stable before the package prefix convention was adopted
-type LEUser struct {
+//nolint:revive // ACME prefix is intentional: these names were stable before the package prefix convention was adopted
+type ACMEUser struct {
 	Email        string
 	Registration *registration.Resource
 	key          crypto.PrivateKey
 }
 
 // GetEmail returns the ACME account email address.
-func (u *LEUser) GetEmail() string { return u.Email }
+func (u *ACMEUser) GetEmail() string { return u.Email }
 
 // GetRegistration returns the ACME registration resource.
-func (u *LEUser) GetRegistration() *registration.Resource { return u.Registration }
+func (u *ACMEUser) GetRegistration() *registration.Resource { return u.Registration }
 
 // GetPrivateKey returns the ACME account private key.
-func (u *LEUser) GetPrivateKey() crypto.PrivateKey { return u.key }
+func (u *ACMEUser) GetPrivateKey() crypto.PrivateKey { return u.key }
 
-// LEConfig holds the configuration for a single ACME certificate issuance.
+// ACMEConfig holds the configuration for a single ACME certificate issuance.
 //
-//nolint:revive // LE prefix is intentional: these names were stable before the package prefix convention was adopted
-type LEConfig struct {
+//nolint:revive // ACME prefix is intentional: these names were stable before the package prefix convention was adopted
+type ACMEConfig struct {
 	Email     string
 	Domain    string
 	Provider  string // http01, cloudflare, route53, manual
@@ -95,14 +95,14 @@ type LEConfig struct {
 	R53Region string
 	Staging   bool
 
-	// Empty falls back to the LEProductionCA/LEStagingCA selection below.
+	// Empty falls back to the ACMEProductionCA/ACMEStagingCA selection below.
 	DirectoryURL string
 }
 
-// LEResult holds the file paths and timestamps of an issued ACME certificate.
+// ACMEResult holds the file paths and timestamps of an issued ACME certificate.
 //
-//nolint:revive // LE prefix is intentional: these names were stable before the package prefix convention was adopted
-type LEResult struct {
+//nolint:revive // ACME prefix is intentional: these names were stable before the package prefix convention was adopted
+type ACMEResult struct {
 	CertPath  string
 	KeyPath   string
 	IssuedAt  *time.Time
@@ -115,7 +115,7 @@ type LEResult struct {
 // IssueCert issues or renews a Let's Encrypt certificate for the domain in cfg.
 // It is safe to call concurrently; a package-level mutex serializes access to
 // shared state (account key file, registration file, and the ACME client).
-func IssueCert(cfg *LEConfig) (*LEResult, error) {
+func IssueCert(cfg *ACMEConfig) (*ACMEResult, error) {
 	issueMu.Lock()
 	defer issueMu.Unlock()
 
@@ -129,22 +129,22 @@ func IssueCert(cfg *LEConfig) (*LEResult, error) {
 	}
 
 	// Load or create the account key (protected by issueMu)
-	privateKey, err := loadOrCreateKey(LEKeyFile)
+	privateKey, err := loadOrCreateKey(ACMEKeyFile)
 	if err != nil {
 		return nil, fmt.Errorf("account key: %w", err)
 	}
 
-	user := &LEUser{Email: cfg.Email, key: privateKey}
+	user := &ACMEUser{Email: cfg.Email, key: privateKey}
 
 	// Load existing registration if present (protected by issueMu)
-	if reg, err := loadRegistration(LEAccountFile); err == nil {
+	if reg, err := loadRegistration(ACMEAccountFile); err == nil {
 		user.Registration = reg
 	}
 
 	// Select CA
-	caURL := LEProductionCA
+	caURL := ACMEProductionCA
 	if cfg.Staging {
-		caURL = LEStagingCA
+		caURL = ACMEStagingCA
 	}
 	if cfg.DirectoryURL != "" {
 		caURL = cfg.DirectoryURL
@@ -193,7 +193,7 @@ func IssueCert(cfg *LEConfig) (*LEResult, error) {
 			return nil, fmt.Errorf("registration: %w", err)
 		}
 		user.Registration = reg
-		saveRegistration(LEAccountFile, reg)
+		saveRegistration(ACMEAccountFile, reg)
 	}
 
 	// Request the certificate
@@ -220,7 +220,7 @@ func IssueCert(cfg *LEConfig) (*LEResult, error) {
 	// Parse certificate dates
 	issued, expires := parseCertDates(certs.Certificate)
 
-	return &LEResult{
+	return &ACMEResult{
 		CertPath:  certPath,
 		KeyPath:   keyPath,
 		IssuedAt:  issued,
@@ -243,7 +243,7 @@ func parseCertDates(certPEM []byte) (issued, expires *time.Time) {
 }
 
 func loadOrCreateKey(path string) (crypto.PrivateKey, error) {
-	//nolint:gosec // G304: path is LEKeyFile constant or derived from the LE data directory
+	//nolint:gosec // G304: path is ACMEKeyFile constant or derived from the ACME data directory
 	if data, err := os.ReadFile(path); err == nil {
 		block, _ := pem.Decode(data)
 		if block != nil {
@@ -276,7 +276,7 @@ func saveRegistration(path string, reg *registration.Resource) {
 }
 
 func loadRegistration(path string) (*registration.Resource, error) {
-	//nolint:gosec // G304: path is LEAccountFile constant or derived from the LE data directory
+	//nolint:gosec // G304: path is ACMEAccountFile constant or derived from the ACME data directory
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err

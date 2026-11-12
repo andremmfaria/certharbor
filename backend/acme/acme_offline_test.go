@@ -1,5 +1,5 @@
-// Package le provides ACME/Let's Encrypt certificate management.
-package le
+// Package acme provides ACME/Let's Encrypt certificate management.
+package acme
 
 import (
 	"bytes"
@@ -184,18 +184,18 @@ func TestParseCertDates_InvalidPEM(t *testing.T) {
 	}
 }
 
-// ─── LEUser interface methods ────────────────────────────────────────────────
+// ─── ACMEUser interface methods ────────────────────────────────────────────────
 
-// TestLEUser_InterfaceMethods confirms the three registration.User interface
+// TestACMEUser_InterfaceMethods confirms the three registration.User interface
 // methods return the values stored in the struct.
-func TestLEUser_InterfaceMethods(t *testing.T) {
+func TestACMEUser_InterfaceMethods(t *testing.T) {
 	dir := t.TempDir()
 	key, err := loadOrCreateKey(filepath.Join(dir, "k.key"))
 	if err != nil {
 		t.Fatalf("create key: %v", err)
 	}
 	reg := &registration.Resource{URI: "https://acme.example.com/account/1"}
-	u := &LEUser{
+	u := &ACMEUser{
 		Email:        "test@example.com",
 		Registration: reg,
 		key:          key,
@@ -211,9 +211,9 @@ func TestLEUser_InterfaceMethods(t *testing.T) {
 	}
 }
 
-// TestLEConfig_Fields confirms the LEConfig struct holds all expected fields.
-func TestLEConfig_Fields(t *testing.T) {
-	cfg := LEConfig{
+// TestACMEConfig_Fields confirms the ACMEConfig struct holds all expected fields.
+func TestACMEConfig_Fields(t *testing.T) {
+	cfg := ACMEConfig{
 		Email:    "admin@example.com",
 		Domain:   "example.com",
 		Provider: "cloudflare",
@@ -233,10 +233,10 @@ func TestLEConfig_Fields(t *testing.T) {
 // the switch-default branch inside IssueCert (everything before any I/O).
 func TestIssueCert_UnknownProvider(t *testing.T) {
 	dir := t.TempDir()
-	// Patch LEDirectory to the temp dir so MkdirAll works.
-	origDir := LEDirectory
-	// LEDirectory is a package-level const, so we can't patch it.  Instead,
-	// use a domain path that os.MkdirAll will create under the real LEDirectory.
+	// Patch ACMEDirectory to the temp dir so MkdirAll works.
+	origDir := ACMEDirectory
+	// ACMEDirectory is a package-level const, so we can't patch it.  Instead,
+	// use a domain path that os.MkdirAll will create under the real ACMEDirectory.
 	// We just test the error message from the unknown-provider branch.
 	_ = dir // used to verify we reach the provider branch
 	_ = origDir
@@ -244,9 +244,9 @@ func TestIssueCert_UnknownProvider(t *testing.T) {
 	// The unknown-provider path is reached only after key/registration setup.
 	// We test it by calling IssueCert directly, the switch default fires
 	// before any ACME network call.  The call will fail at MkdirAll if
-	// LEDirectory doesn't exist, so we skip the directory creation part and
+	// ACMEDirectory doesn't exist, so we skip the directory creation part and
 	// just confirm validateIdentifier + provider logic.
-	cfg := LEConfig{
+	cfg := ACMEConfig{
 		Email:    "test@example.com",
 		Domain:   "le-test.example.com",
 		Provider: "unknown-provider-xyz",
@@ -256,7 +256,7 @@ func TestIssueCert_UnknownProvider(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for unknown provider")
 	}
-	// The error may come from MkdirAll (LEDirectory not writable) or from the
+	// The error may come from MkdirAll (ACMEDirectory not writable) or from the
 	// provider switch, either is acceptable; we just confirm an error is returned.
 }
 
@@ -275,7 +275,7 @@ func TestParseCertDates_ValidPEMBadCert(t *testing.T) {
 // ─── renewal-due logic ────────────────────────────────────────────────────────
 
 // TestRenewalDue_Logic confirms the renewal threshold (certs expiring within
-// 30 days are due).  GetLECertsForRenewal queries the DB, so we test the
+// 30 days are due).  GetACMECertsForRenewal queries the DB, so we test the
 // date arithmetic inline.
 func TestRenewalDue_Logic(t *testing.T) {
 	now := time.Now()
@@ -291,7 +291,7 @@ func TestRenewalDue_Logic(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// The renewal threshold used by GetLECertsForRenewal is
+			// The renewal threshold used by GetACMECertsForRenewal is
 			// expires_at <= NOW() + 30 days.
 			threshold := now.Add(30 * 24 * time.Hour)
 			isDue := !tc.expires.After(threshold)

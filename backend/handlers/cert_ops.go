@@ -40,14 +40,14 @@ func (h *Handler) certFromURL(w http.ResponseWriter, r *http.Request) (*models.C
 	return c, true
 }
 
-// leCertFromURL is the LE-certificate equivalent of certFromURL.
+// acmeCertFromURL is the ACME-certificate equivalent of certFromURL.
 // Returns (cert, true) on success; on DB error it writes 500 and returns (nil, false).
 // A missing cert returns (nil, true), callers redirect to /le.
-func (h *Handler) leCertFromURL(w http.ResponseWriter, r *http.Request) (*models.LECertificate, bool) {
+func (h *Handler) acmeCertFromURL(w http.ResponseWriter, r *http.Request) (*models.ACMECertificate, bool) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
-	c, err := appdb.GetLECert(r.Context(), h.db, id)
+	c, err := appdb.GetACMECert(r.Context(), h.db, id)
 	if err != nil {
-		slog.Error("leCertFromURL: DB error", "id", id, "err", err)
+		slog.Error("acmeCertFromURL: DB error", "id", id, "err", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return nil, false
 	}
