@@ -103,6 +103,11 @@ export interface FakeApiState {
   resetToken: string
   resetTokenConsumed: boolean
   requestPasswordResetDown: boolean
+  mfaEnabled: boolean
+  mfaPendingEnrollment: boolean
+  mfaSecret: string
+  mfaConfirmCode: string
+  mfaRecoveryCodes: string[]
 }
 
 export interface FakeHistoryEntry {
@@ -388,6 +393,11 @@ export function installFakeApi(
     resetToken: 'valid-reset-token',
     resetTokenConsumed: false,
     requestPasswordResetDown: false,
+    mfaEnabled: false,
+    mfaPendingEnrollment: false,
+    mfaSecret: 'FAKESECRETFAKESECRET',
+    mfaConfirmCode: '654321',
+    mfaRecoveryCodes: ['AAAA-BBBB-CCCC', 'DDDD-EEEE-FFFF'],
     ...overrides,
     // Re-applied after the ...overrides spread above: that spread would
     // otherwise overwrite the merged user back to overrides.user verbatim,
@@ -796,6 +806,31 @@ export function installFakeApi(
         }
         state.tempUsers.push(tempUser)
         return json({ ...tempUser, passphrase: 'fake-one-time-passphrase' }, 201)
+      }
+      case 'GET /api/v1/profile/mfa':
+        return json({ enabled: state.mfaEnabled, pendingEnrollment: state.mfaPendingEnrollment })
+      case 'POST /api/v1/profile/mfa/enrollment':
+        state.mfaPendingEnrollment = true
+        return json({ manualEntryKey: state.mfaSecret }, 201)
+      case 'GET /api/v1/profile/mfa/enrollment/qr':
+        if (!state.mfaPendingEnrollment)
+          return problem(422, 'Unprocessable Entity', 'no enrollment is pending')
+        return new Response('fake-qr-png-bytes', { status: 200, headers: { 'Content-Type': 'image/png' } })
+      case 'POST /api/v1/profile/mfa/enrollment/confirm': {
+        const { code } = body as { code: string }
+        if (!state.mfaPendingEnrollment)
+          return problem(422, 'Unprocessable Entity', 'no enrollment is pending')
+        if (code !== state.mfaConfirmCode) return problem(422, 'Unprocessable Entity', 'invalid code')
+        state.mfaEnabled = true
+        state.mfaPendingEnrollment = false
+        return json({ recoveryCodes: state.mfaRecoveryCodes })
+      }
+      case 'POST /api/v1/profile/mfa/disable': {
+        const { currentPassword, code } = body as { currentPassword: string; code: string }
+        if (currentPassword !== state.password) return problem(401, 'Unauthorized', 'Invalid credentials.')
+        if (code !== state.mfaConfirmCode) return problem(422, 'Unprocessable Entity', 'invalid code')
+        state.mfaEnabled = false
+        return new Response(null, { status: 204 })
       }
       case 'POST /api/v1/certificates/import/upload': {
         const form = await request.formData()

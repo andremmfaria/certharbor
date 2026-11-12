@@ -53,7 +53,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['src/api/downloadBlob.ts'],
+    files: ['src/api/downloadBlob.ts', 'src/api/blobObjectUrl.ts'],
     rules: { 'no-restricted-properties': 'off' },
   },
   {
