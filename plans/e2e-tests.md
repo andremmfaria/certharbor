@@ -2683,7 +2683,7 @@ The duplicate flash blocks in `admin_notifications.html` and `admin_console.html
 Reviewed against source with no action required: the path-containment helpers (`containedPath`, `containedAbsPath`, `safeName`), `csrfOK`'s constant-time comparison and empty-token guard, the OIDC state, nonce and PKCE handling, `resetLink`'s refusal to derive an origin from the request, password-reset token storage, single use and TTL, the provisioner password being read per call, the admin console's argv being wholly server-side, `pg_dump` receiving its password through `PGPASSFILE`, uniformly parameterised SQL, the static handler's embedded sub-FS boundary, the TOTP replay guard, and the Let's Encrypt domain validation.
 ## Appendix A: test index
 
-All 83 tests, sorted by ID. "Stack" is the CI job or nightly leg that runs it.
+All 87 tests, sorted by ID. "Stack" is the CI job or nightly leg that runs it. (83 plus the four E2E-MFA-* rows this file's own commit added, closing the browser-level MFA gap Phase 8's closeout flagged — see this plan's note and plans/frontend-backend-split.md's Phase 8 section.)
 
 | ID | Property | Tier | Stack | Section |
 |---|---|---|---|---|
@@ -2751,6 +2751,10 @@ All 83 tests, sorted by ID. "Stack" is the CI job or nightly leg that runs it.
 | E2E-LE-02 | LE issuance against a local ACME server | nightly | nightly `le` | 3.14 |
 | E2E-LE-03 | auto-renew toggle and delete | nightly | nightly `le` | 3.14 |
 | E2E-LE-04 | DNS-provider credentials are never echoed to the client | nightly | nightly `le` | 3.14 |
+| E2E-MFA-01 | browser-level MFA enroll, confirm, one-time recovery codes, then disable with dual reauth | PR | `e2e-main` | 3.2 |
+| E2E-MFA-02 | a wrong confirmation code is refused, enrollment stays pending, no recovery codes shown | PR | `e2e-main` | 3.2 |
+| E2E-MFA-03 | disabling MFA with the correct password but a wrong/stale code is refused | PR | `e2e-main` | 3.2 |
+| E2E-MFA-04 | disabling MFA with a wrong password but a fresh code is refused | PR | `e2e-main` | 3.2 |
 | E2E-NOTIF-01 | notification settings round-trip and test send | nightly | nightly `oidc-mail` | 3.15 |
 | E2E-ORIGIN-01 | **retired, Phase 9.** asserted every server-rendered route and `/static` asset reached the backend through the origin; both are gone with the template routes | — | — | 3.16 |
 | E2E-PROV-01 | the provisioner list matches the CA's own configuration | PR | `e2e-main` | 3.5 |
