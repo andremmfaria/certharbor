@@ -3023,10 +3023,21 @@ The nightly workflow is the same shape with `on: schedule`, a four-value `leg` m
 
 ## Appendix C: test ID contract changes by phase
 
-Per Section 10, each phase that changes a test's target, path, or contract records it here. Phases 4-8 did not append entries when they should have; that backlog is not backfilled by this entry — see the phase's own closeout note for the gap.
+Per Section 10, each phase that changes a test's target, path, or contract records it here. Phases 4-8 originally did not append entries when they should have; backfilled below from each phase's own closeout note in `plans/frontend-backend-split.md`.
 
 | Phase | Test ID(s) | Change | New shape |
 |---|---|---|---|
+| 4 | E2E-CERT-01, E2E-CERT-02, E2E-CERT-03, E2E-CERT-04, E2E-CERT-05, E2E-CERT-06, E2E-CERT-07, E2E-CERT-08, E2E-CERT-09 | rewritten to target new API | specs now drive `GET/POST /api/v1/certificates*` and `/api/v1/ca*` through the generated client, replacing the old template routes; `cert-01.ui.spec.ts` is a deliberate exception that still drives the legacy `issue.html` picker directly |
+| 4 | E2E-CERT-14 | added | new spec for `POST /api/v1/certificates/import/paths`'s per-item `BulkResult`, replacing the old scan tab's one-shot import-all with a swallowed count |
+| 5 | E2E-HIST-01, E2E-HIST-02, E2E-HIST-03, E2E-HIST-04, E2E-HIST-05 | rewritten to target new API, two IDs added | `hist.api.spec.ts` drives `GET /api/v1/history`, replacing `GET /history`; E2E-HIST-04/05 (422 page-size bounds) are new — the old route clamped silently |
+| 5 | E2E-PROV-01, E2E-PROV-02, E2E-PROV-03 | rewritten to target new API, one ID added | `prov.api.spec.ts` drives `GET /api/v1/provisioners`, replacing `GET /provisioners`; E2E-PROV-03 (401 unauthenticated) is new |
+| 5 | E2E-SEC-EVENTS-01, E2E-SEC-EVENTS-02, E2E-SEC-EVENTS-03, E2E-SEC-EVENTS-04, E2E-SEC-EVENTS-05 | renamed from E2E-SEC-* and rewritten (PR #49) | `sec-events.api.spec.ts` drives `GET /api/v1/security/events`, replacing `GET /admin/security`; -04/-05 add the `::1` unblock round trip through the generated client against `DELETE /api/v1/security/ip-blocks/{ip}` |
+| 5 | E2E-AUDIT-01 | added (PR #49) | `audit-events.api.spec.ts` drives `GET /api/v1/audit-events`, the first real implementation of `GET /admin/activity` (previously a stub) |
+| 5 | E2E-DASH-01, E2E-DASH-02, E2E-DASH-03 | added | new aggregate spec for `GET /api/v1/dashboard`, replacing `GET /` and `GET /dashboard`; no ACME field yet, added once Phase 7 lands `GET /api/v1/acme/*` |
+| 6 | — | no e2e ID changes | users/console/about/integrity/backups/notifications (PRs #50-#52) are covered by Go unit/integration tests only (`backend/api/users_test.go`, `admin_test.go`, `health_bench_test.go`, `nginx_timeout_test.go`, `notifications_test.go`); no Playwright spec IDs added or retargeted |
+| 7 | E2E-LE-01, E2E-LE-02, E2E-LE-03, E2E-LE-04 | rewritten to target new API (PRs #53-#55) | ACME `api` e2e specs now drive `GET/POST/PATCH/DELETE /api/v1/acme/*` via the generated client, replacing `GET /le*`; the two download operations route filenames through `safeName`, fixing the old unquoted-domain defect |
+| 7 | — | pagination convention extended, no e2e ID | `acme/events` joins the shared tied-timestamp pagination convention already proven for `history`/`audit-events`/`security/events`; proven via `backend/db/pagination_integration_test.go`, not a new Playwright ID |
+| 8 | — | no e2e ID added, gap flagged | profile/MFA/password-reset (PRs #56-#58) are covered by Go unit/integration tests only (`backend/api/profile_test.go`, `profile_mfa_integration_test.go`, `password_reset_integration_test.go`); no Playwright spec exists under `test/e2e/specs/profile/` or `mfa/`; carried as an open item, not silently dropped |
 | 9 | E2E-STATIC-01 | retired, not repathed | the Go handler it tested (`staticHandlerFromFS`, `mimeByExt`) no longer exists; no replacement test, nothing left to assert |
 | 9 | E2E-ORIGIN-01 | retired, not repathed | asserted server-rendered routes and `/static` reached the backend through the origin; both the routes and `/static` are gone with the template routes |
 | 9 | E2E-SPA-01, E2E-SPA-02, E2E-SPA-03, CSP-01 | repathed | SPA base path flipped `/app/` → `/`; `CSP-01`'s `SPA_BASE` constant updated to match. Code change already landed; this row is the doc record only |
