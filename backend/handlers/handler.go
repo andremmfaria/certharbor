@@ -4,8 +4,6 @@ import (
 	"context"
 	"crypto/subtle"
 	"database/sql"
-	"fmt"
-	"html/template"
 	"io/fs"
 	"log"
 	"log/slog"
@@ -16,7 +14,6 @@ import (
 	"certharbor/config"
 	"certharbor/middleware"
 	"certharbor/models"
-	"certharbor/security"
 	"certharbor/stepca"
 
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
@@ -42,11 +39,6 @@ type Handler struct {
 	cfg   *config.Config
 	store *sessions.CookieStore
 	auth  AuthStore
-	tmpls map[string]*template.Template
-	// assets is the embedded FS rooted at the module root (contains templates/
-	// and static/ sub-trees).  When nil, loadTemplates falls back to reading
-	// from the filesystem at the current working directory.
-	assets fs.FS
 
 	// OIDC fields, non-nil only when cfg.OIDCEnabled is true
 	oidcOAuth2Config *oauth2.Config
@@ -105,12 +97,12 @@ func (h *Handler) UserLoader() middleware.UserLoader {
 	return func(id int) (*models.User, error) { return appdb.GetUserByID(h.db, id) }
 }
 
-// NewWithFS creates a Handler that reads templates from the provided FS.
-// Pass the module-root embed.FS so templates and static files are baked into
-// the binary and the working directory no longer matters at runtime.
+// NewWithFS creates a Handler. The assets parameter is retained for caller
+// compatibility (main.go's embed.FS, tests passing nil) but is no longer
+// consulted: templates were retired in Phase 9 now that the SPA owns the UI.
 func NewWithFS(db *sql.DB, cfg *config.Config, store *sessions.CookieStore, assets fs.FS) *Handler {
-	h := &Handler{db: db, cfg: cfg, store: store, tmpls: make(map[string]*template.Template), assets: assets}
-	h.loadTemplates()
+	_ = assets
+	h := &Handler{db: db, cfg: cfg, store: store}
 	if cfg.OIDCEnabled {
 		h.initOIDC()
 	}
@@ -166,148 +158,6 @@ func (h *Handler) caClient() (stepca.CA, error) {
 	h.ca = c
 	h.caErr = nil
 	return h.ca, nil
-}
-
-func (h *Handler) loadTemplates() {
-	funcs := h.templateFuncs()
-	pages := []string{
-		"home",
-		"dashboard",
-		"certificates",
-		"certificate_detail",
-		"issue",
-		"import",
-		"provisioners",
-		"history",
-		"admin",
-		"profile",
-		"le_dashboard",
-		"le_issue",
-		"le_settings",
-		"le_logs",
-		"admin_users",
-		"admin_user_profile",
-		"admin_users_temp",
-		"admin_activity",
-		"admin_security",
-		"admin_console",
-		"admin_about",
-		"admin_integrity",
-		"admin_backup",
-		"admin_notifications",
-		"profile_2fa",
-	}
-	for _, page := range pages {
-		baseFile := "templates/base.html"
-		baseName := "base.html"
-		if len(page) >= 6 && page[:6] == "admin_" || page == "admin" {
-			baseFile = "templates/admin_base.html"
-			baseName = "admin_base.html"
-		}
-		pageFile := fmt.Sprintf("templates/%s.html", page)
-		var (
-			t   *template.Template
-			err error
-		)
-		if h.assets != nil {
-			t, err = template.New(baseName).Funcs(funcs).ParseFS(h.assets, baseFile, pageFile)
-		} else {
-			t, err = template.New(baseName).Funcs(funcs).ParseFiles(baseFile, pageFile)
-		}
-		if err != nil {
-			slog.Error("template parse error", "page", page, "err", err)
-			continue
-		}
-		h.tmpls[page] = t
-	}
-	// Standalone auth pages (no base layout, same pattern as login).
-	for _, authPage := range []string{"login", "forgot_password", "reset_password"} {
-		file := fmt.Sprintf("templates/%s.html", authPage)
-		name := authPage + ".html"
-		var (
-			t   *template.Template
-			err error
-		)
-		if h.assets != nil {
-			t, err = template.New(name).Funcs(funcs).ParseFS(h.assets, file)
-		} else {
-			t, err = template.New(name).Funcs(funcs).ParseFiles(file)
-		}
-		if err == nil {
-			h.tmpls[authPage] = t
-		} else {
-			slog.Error("auth template parse error", "page", authPage, "err", err)
-		}
-	}
-}
-
-func (h *Handler) templateFuncs() template.FuncMap {
-	return template.FuncMap{
-		"daysLeft": func(t *time.Time) int {
-			if t == nil {
-				return 999
-			}
-			return int(time.Until(*t).Hours() / 24)
-		},
-		// badgeClass maps CertExpiryStatus's three values onto this
-		// template's CSS classes rather than carrying its own copy of the
-		// threshold (Phase 4 retires the duplication; Phase 9 retires the
-		// template function itself once the SPA is the only consumer).
-		"badgeClass": func(t *time.Time) string {
-			switch CertExpiryStatus(t) {
-			case "expired":
-				return "danger"
-			case "warning":
-				return "warn"
-			default:
-				return "ok"
-			}
-		},
-		"fmtTime": func(t *time.Time) string {
-			if t == nil {
-				return "-"
-			}
-			return t.Local().Format("2006-01-02 15:04")
-		},
-		"fmtLog": func(t time.Time) string {
-			return t.Local().Format("2006-01-02 15:04:05")
-		},
-		"hasRole": func(role, minRole string) bool {
-			levels := map[string]int{"viewer": 1, "manager": 2, "admin": 3}
-			return levels[role] >= levels[minRole]
-		},
-		"isActive": func(page, current string) string {
-			if page == current {
-				return "active"
-			}
-			return ""
-		},
-		"add": func(a, b int) int { return a + b },
-		"sub": func(a, b int) int { return a - b },
-		"deref": func(s *string) string {
-			if s == nil {
-				return "-"
-			}
-			return *s
-		},
-		"contains": func(arr []string, v string) bool {
-			for _, s := range arr {
-				if s == v {
-					return true
-				}
-			}
-			return false
-		},
-		"seq": func(start, end int) []int {
-			var s []int
-			for i := start; i <= end; i++ {
-				s = append(s, i)
-			}
-			return s
-		},
-		"securityEventLabel": securityEventLabel,
-		"securityEventBadge": securityEventBadge,
-	}
 }
 
 func (h *Handler) sess(r *http.Request) *sessions.Session {
@@ -385,40 +235,6 @@ func (h *Handler) sessionInfo(r *http.Request) *models.SessionInfo {
 	return &models.SessionInfo{UserID: id, Username: username, Role: role, Theme: theme}
 }
 
-func (h *Handler) flash(w http.ResponseWriter, r *http.Request, t, text string) {
-	s := h.sess(r)
-	s.AddFlash(models.FlashMsg{Type: t, Text: text})
-	_ = s.Save(r, w)
-}
-
-func (h *Handler) popFlash(w http.ResponseWriter, r *http.Request) []models.FlashMsg {
-	s := h.sess(r)
-	flashes := s.Flashes()
-	_ = s.Save(r, w)
-	var msgs []models.FlashMsg
-	for _, f := range flashes {
-		if m, ok := f.(models.FlashMsg); ok {
-			msgs = append(msgs, m)
-		}
-	}
-	return msgs
-}
-
-func (h *Handler) csrf(w http.ResponseWriter, r *http.Request) string {
-	s, err := h.store.Get(r, h.SessionCookieName())
-	if err != nil {
-		slog.Warn("session reset after decode failure", "remote", r.RemoteAddr, "host", r.Host, "path", r.URL.Path, "err", err)
-		s, _ = h.store.New(r, h.SessionCookieName())
-	}
-	token, ok := s.Values["csrf_token"].(string)
-	if !ok || token == "" {
-		token = security.GenerateToken()
-		s.Values["csrf_token"] = token
-		_ = s.Save(r, w)
-	}
-	return token
-}
-
 func (h *Handler) csrfOK(r *http.Request) bool {
 	s := h.sess(r)
 	token := r.FormValue("csrf_token")
@@ -426,41 +242,4 @@ func (h *Handler) csrfOK(r *http.Request) bool {
 	// Guard against empty tokens before the constant-time comparison so an
 	// empty session token cannot be matched by an empty form value.
 	return token != "" && subtle.ConstantTimeCompare([]byte(token), []byte(sess)) == 1
-}
-
-func (h *Handler) requireCSRF(w http.ResponseWriter, r *http.Request, redirectTo string) bool {
-	if h.csrfOK(r) {
-		return true
-	}
-	h.flash(w, r, "err", "Session error. Please refresh the page.")
-	http.Redirect(w, r, redirectTo, http.StatusSeeOther)
-	return false
-}
-
-func (h *Handler) base(w http.ResponseWriter, r *http.Request, activePage string) map[string]interface{} {
-	return map[string]interface{}{
-		"Session":    h.sessionInfo(r),
-		"Msgs":       h.popFlash(w, r),
-		"ActivePage": activePage,
-		"CSRFToken":  h.csrf(w, r),
-	}
-}
-
-func (h *Handler) render(w http.ResponseWriter, page string, data map[string]interface{}) {
-	tmpl, ok := h.tmpls[page]
-	if !ok {
-		http.Error(w, "template not found: "+page, http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	name := "layout"
-	switch {
-	case page == "login" || page == "forgot_password" || page == "reset_password":
-		name = page + ".html"
-	case page == "admin" || (len(page) >= 6 && page[:6] == "admin_"):
-		name = "admin_layout"
-	}
-	if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
-		slog.Error("template render failed", "page", page, "err", err)
-	}
 }

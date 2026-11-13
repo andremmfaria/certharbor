@@ -29,8 +29,6 @@ RUN addgroup -g 10001 -S certharbor && \
 RUN apk add --no-cache curl openssl ca-certificates netcat-openbsd tzdata postgresql-client
 
 COPY --from=builder /build/certharbor .
-COPY templates/ templates/
-COPY static/ static/
 
 RUN mkdir -p data certs uploads ssl web-ssl && \
     chown -R certharbor:certharbor /opt/certharbor

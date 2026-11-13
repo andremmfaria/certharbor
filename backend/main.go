@@ -4,20 +4,15 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"embed"
 	"encoding/gob"
 	"errors"
 	"fmt"
-	"io"
-	"io/fs"
 	"log"
 	"log/slog"
-	"mime"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -37,85 +32,6 @@ import (
 
 	mw "certharbor/middleware"
 )
-
-//go:embed templates static
-var embeddedAssets embed.FS
-
-// mimeByExt maps file extensions to correct Content-Type values.
-// http.FileServer/ServeContent may use system /etc/mime.types which maps .css
-// to text/plain on some distros, this table overrides that.
-var mimeByExt = map[string]string{
-	".css":   "text/css; charset=utf-8",
-	".js":    "application/javascript; charset=utf-8",
-	".mjs":   "application/javascript; charset=utf-8",
-	".json":  "application/json; charset=utf-8",
-	".svg":   "image/svg+xml",
-	".png":   "image/png",
-	".jpg":   "image/jpeg",
-	".jpeg":  "image/jpeg",
-	".gif":   "image/gif",
-	".webp":  "image/webp",
-	".ico":   "image/x-icon",
-	".woff":  "font/woff",
-	".woff2": "font/woff2",
-	".ttf":   "font/ttf",
-	".otf":   "font/otf",
-	".map":   "application/json; charset=utf-8",
-	".html":  "text/html; charset=utf-8",
-	".txt":   "text/plain; charset=utf-8",
-}
-
-// staticHandlerFromFS serves static files from an fs.FS with enforced MIME types
-// and path-traversal protection.  The FS should be rooted at the "static/"
-// sub-tree (use fs.Sub to strip the prefix before passing here).
-func staticHandlerFromFS(fsys fs.FS) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Clean the path and reject traversal attempts.
-		clean := filepath.Clean("/" + r.URL.Path)
-		// Strip leading slash, fs.FS paths are relative.
-		relPath := strings.TrimPrefix(clean, "/")
-		if relPath == "" || strings.HasPrefix(relPath, "..") {
-			http.NotFound(w, r)
-			return
-		}
-		f, err := fsys.Open(relPath)
-		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-		defer func() { _ = f.Close() }()
-		st, err := fs.Stat(fsys, relPath)
-		if err != nil || st.IsDir() {
-			http.NotFound(w, r)
-			return
-		}
-		ext := strings.ToLower(filepath.Ext(relPath))
-		if mt, ok := mimeByExt[ext]; ok {
-			w.Header().Set("Content-Type", mt)
-		} else {
-			w.Header().Set("Content-Type", "application/octet-stream")
-		}
-		w.Header().Set("Cache-Control", "public, max-age=3600")
-		_, _ = io.Copy(w, f)
-	})
-}
-
-func init() {
-	// Forcibly register correct MIME types for static assets.
-	// http.ServeContent uses mime.TypeByExtension() and overwrites any
-	// previously set Content-Type, so this is the only reliable approach.
-	_ = mime.AddExtensionType(".css", "text/css; charset=utf-8")
-	_ = mime.AddExtensionType(".js", "application/javascript; charset=utf-8")
-	_ = mime.AddExtensionType(".mjs", "application/javascript; charset=utf-8")
-	_ = mime.AddExtensionType(".json", "application/json; charset=utf-8")
-	_ = mime.AddExtensionType(".svg", "image/svg+xml")
-	_ = mime.AddExtensionType(".webp", "image/webp")
-	_ = mime.AddExtensionType(".woff", "font/woff")
-	_ = mime.AddExtensionType(".woff2", "font/woff2")
-	_ = mime.AddExtensionType(".ttf", "font/ttf")
-	_ = mime.AddExtensionType(".otf", "font/otf")
-	_ = mime.AddExtensionType(".map", "application/json; charset=utf-8")
-}
 
 // trustedProxyRefresh bounds how long a recreated nginx container is
 // attributed its own address rather than the client's.
@@ -249,9 +165,7 @@ func main() {
 	}
 
 	// ─── Handlers ────────────────────────────────────────────────────────────
-	// Pass the embedded FS so templates and static files are read from the
-	// binary rather than from the working directory at runtime.
-	h := handlers.NewWithFS(conn, cfg, store, embeddedAssets)
+	h := handlers.NewWithFS(conn, cfg, store, nil)
 
 	// ─── Let's Encrypt auto-renewer ──────────────────────────────────────────
 	h.StartRenewer()
@@ -271,125 +185,19 @@ func main() {
 	// Public routes
 	r.Get("/health", h.Liveness)
 	r.Get("/ready", h.Readiness)
-	r.Get("/login", h.LoginGet)
-	r.Post("/login", h.LoginPost)
-	r.Get("/forgot-password", h.ForgotPasswordGet)
-	r.Post("/forgot-password", h.ForgotPasswordPost)
-	r.Get("/reset-password", h.ResetPasswordGet)
-	r.Post("/reset-password", h.ResetPasswordPost)
-	r.Get("/logout", h.LogoutGet)
-	r.Post("/logout", h.Logout)
+	// OIDC's browser-redirect login/callback flow is not yet migrated to the
+	// SPA/JSON API (no huma replacement exists), so it stays mounted here
+	// rather than being deleted with the other template routes (Phase 9).
 	if cfg.OIDCEnabled {
 		r.Get("/auth/oidc/login", h.OIDCLogin)
 		r.Get("/auth/oidc/callback", h.OIDCCallback)
 	}
-
-	// Authenticated routes
-	r.Group(func(r chi.Router) {
-		r.Use(mw.RequireLogin(store, func(id int) (*models.User, error) {
-			return appdb.GetUserByID(conn, id)
-		}))
-
-		r.Get("/", h.Home)
-		r.Get("/dashboard", h.Dashboard)
-		r.Get("/api/status", h.APIStatus)
-
-		// Certificates (viewer+)
-		r.Get("/certificates", h.Certificates)
-		r.Get("/certificates/{id}", h.CertificateDetails)
-		r.Get("/history", h.History)
-		r.Get("/provisioners", h.Provisioners)
-
-		// Download CA cert (admin)
-		r.Group(func(r chi.Router) {
-			r.Use(mw.RequireRole("admin"))
-			r.Get("/download/ca", h.DownloadCA)
-			r.Get("/download/intermediate-ca", h.DownloadIntermediateCA)
-			r.Get("/download/full-chain", h.DownloadFullChain)
-		})
-
-		// Certificate operations (manager+)
-		r.Group(func(r chi.Router) {
-			r.Use(mw.RequireRole("manager"))
-			r.Get("/issue", h.IssueGet)
-			r.Post("/issue", h.IssuePost)
-			r.Post("/renew/{id}", h.Renew)
-			r.Get("/import", h.ImportGet)
-			r.Post("/import", h.ImportPost)
-			r.Get("/download/cert/{id}", h.DownloadCert)
-			r.Get("/download/key/{id}", h.DownloadKey)
-		})
-
-		// Revocation (admin)
-		r.Group(func(r chi.Router) {
-			r.Use(mw.RequireRole("admin"))
-			r.Post("/revoke/{id}", h.Revoke)
-		})
-
-		// User management (admin)
-		r.Group(func(r chi.Router) {
-			r.Use(mw.RequireRole("admin"))
-			// Admin namespace
-			r.Get("/admin", h.AdminGet)
-			r.Get("/admin/users", h.Users)
-			r.Post("/admin/users", h.UsersPost)
-			r.Get("/admin/users/{id}", h.UserProfile)
-			r.Get("/admin/users-temp", h.AdminUsersTempGet)
-			r.Post("/admin/users-temp", h.AdminUsersTempPost)
-			r.Get("/admin/activity", h.AdminActivityGet)
-			r.Get("/admin/security", h.SecurityLog)
-			r.Get("/admin/console", h.AdminConsoleGet)
-			r.Post("/admin/console", h.AdminConsolePost)
-			r.Get("/admin/about", h.AdminAboutGet)
-			r.Get("/admin/integrity", h.AdminIntegrityGet)
-			r.Get("/admin/backup", h.AdminBackupGet)
-			r.Post("/admin/backup/download", h.AdminBackupDownload)
-			r.Get("/admin/notifications", h.AdminNotificationsGet)
-			r.Post("/admin/notifications", h.AdminNotificationsPost)
-			r.Post("/admin/notifications/test", h.AdminNotificationsTest)
-		})
-
-		// Let's Encrypt (manager+)
-		r.Group(func(r chi.Router) {
-			r.Use(mw.RequireRole("manager"))
-			r.Get("/le", h.ACMEDashboard)
-			r.Get("/le/issue", h.ACMEIssueGet)
-			r.Post("/le/issue", h.ACMEIssuePost)
-			r.Post("/le/{id}/renew", h.ACMERenew)
-			r.Post("/le/{id}/delete", h.ACMEDelete)
-			r.Post("/le/{id}/autorenew", h.ACMEToggleAutoRenew)
-			r.Get("/le/download/cert/{id}", h.ACMEDownloadCert)
-			r.Get("/le/download/key/{id}", h.ACMEDownloadKey)
-			r.Get("/le/settings", h.ACMESettingsGet)
-			r.Post("/le/settings", h.ACMESettingsPost)
-			r.Get("/le/logs", h.ACMELogs)
-		})
-
-		// Profile (any authenticated user)
-		r.Get("/profile", h.ProfileGet)
-		r.Post("/profile", h.ProfilePost)
-		r.Get("/profile/2fa", h.Profile2FAGet)
-		r.Post("/profile/2fa/start", h.Profile2FAStart)
-		r.Get("/profile/2fa/qr", h.Profile2FAQR)
-		r.Post("/profile/2fa/confirm", h.Profile2FAConfirm)
-		r.Post("/profile/2fa/disable", h.Profile2FADisable)
-	})
 
 	// ─── JSON API (Phase 0 of plans/frontend-backend-split.md) ──────────────
 	// Mounted on the same router as every route above: huma operation paths
 	// carry the /api/v1 prefix themselves (5.1).
 	humaapi.Mount(r, h, h.UserLoader())
 
-	// ─── Static files ─────────────────────────────────────────────────────────
-	// Use the embedded FS sub-tree for static files so the binary is self-contained
-	// and does not depend on the working directory.  staticHandlerFromFS enforces
-	// MIME types and path-traversal protection on top of the embed.FS boundary.
-	staticFS, fsErr := fs.Sub(embeddedAssets, "static")
-	if fsErr != nil {
-		// conn.Close() defer will run before this panic.
-		panic("cannot create static sub-FS: " + fsErr.Error())
-	}
-	r.Handle("/static/*", http.StripPrefix("/static/", staticHandlerFromFS(staticFS)))
 	// ─── Start server ─────────────────────────────────────────────────────────
 	for _, dir := range []string{cfg.CertsDir, cfg.UploadDir, cfg.BackupDir, "/opt/certharbor/ssl", "/opt/certharbor/web-ssl", "/opt/certharbor/data"} {
 		_ = os.MkdirAll(dir, 0o750) //nolint:gosec // G301: app data dirs; restrictive perms appropriate for non-root service user

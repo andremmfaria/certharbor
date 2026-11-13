@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"html/template"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,7 +12,7 @@ import (
 	"github.com/gorilla/sessions"
 )
 
-// newMinimalHandler builds a Handler with no DB, no templates, and the given config.
+// newMinimalHandler builds a Handler with no DB and the given config.
 func newMinimalHandler(cfg *config.Config) *Handler {
 	store := sessions.NewCookieStore(
 		[]byte("test-hash-key-32charsXXXXXXXXXXX"),
@@ -23,7 +22,6 @@ func newMinimalHandler(cfg *config.Config) *Handler {
 		db:    nil,
 		cfg:   cfg,
 		store: store,
-		tmpls: make(map[string]*template.Template),
 	}
 }
 

@@ -64,8 +64,9 @@ func SecurityHeaders() func(http.Handler) http.Handler {
 				w.Header().Set("Content-Security-Policy", documentCSP)
 			}
 			// Global, not per-route: an allowlist goes stale every time a
-			// sensitive route is added. main.go's static handler runs after
-			// this chain and overwrites it for assets, which is intended.
+			// sensitive route is added. nginx overwrites this for static
+			// assets (immutable Cache-Control on /assets/), which is
+			// intended; this backend no longer serves any assets itself.
 			w.Header().Set("Cache-Control", "no-store")
 			w.Header().Del("Server")
 			next.ServeHTTP(w, r)

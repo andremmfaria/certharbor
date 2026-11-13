@@ -9,9 +9,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
-	"log/slog"
 	"mime/multipart"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -21,38 +19,9 @@ import (
 	"certharbor/config"
 	"certharbor/models"
 	"certharbor/stepca"
-	"github.com/go-chi/chi/v5"
 
 	appdb "certharbor/db"
 )
-
-// certFromURL parses the chi "id" URL param, fetches the certificate from the
-// DB, and writes an appropriate HTTP error if something goes wrong.  It returns
-// (cert, true) on success or (nil, false) when the handler should return early.
-func (h *Handler) certFromURL(w http.ResponseWriter, r *http.Request) (*models.Certificate, bool) {
-	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
-	c, err := appdb.GetCert(h.db, id)
-	if err != nil {
-		slog.Error("certFromURL: DB error", "id", id, "err", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return nil, false
-	}
-	return c, true
-}
-
-// acmeCertFromURL is the ACME-certificate equivalent of certFromURL.
-// Returns (cert, true) on success; on DB error it writes 500 and returns (nil, false).
-// A missing cert returns (nil, true), callers redirect to /le.
-func (h *Handler) acmeCertFromURL(w http.ResponseWriter, r *http.Request) (*models.ACMECertificate, bool) {
-	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
-	c, err := appdb.GetACMECert(r.Context(), h.db, id)
-	if err != nil {
-		slog.Error("acmeCertFromURL: DB error", "id", id, "err", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return nil, false
-	}
-	return c, true
-}
 
 // IssuePolicy holds the resolved certificate template and duration for issuance.
 type IssuePolicy struct {

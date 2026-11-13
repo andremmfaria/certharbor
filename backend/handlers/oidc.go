@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"net/url"
 
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
@@ -19,6 +20,15 @@ func oidcRandomString(n int) string {
 	b := make([]byte, n)
 	rand.Read(b)
 	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+// oidcLoginError redirects to /login with a closed-enum error code the SPA
+// (frontend/src/auth/oidcErrors.ts) maps to display text. Codes outside its
+// three-item list ("denied", "expired", "disabled") fall through to its
+// generic fallback message, which is why most failures below share
+// "auth_failed" rather than inventing a bespoke code each.
+func oidcLoginError(w http.ResponseWriter, r *http.Request, code string) {
+	http.Redirect(w, r, "/login?error="+url.QueryEscape(code), http.StatusFound)
 }
 
 // mapGroupsToRole returns the highest-privilege role that matches one of the
@@ -90,8 +100,7 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 	savedState, _ := s.Values["oidc_state"].(string)
 	if savedState == "" || r.URL.Query().Get("state") != savedState {
 		_ = appdb.LogAuth(h.db, "", ip, false, "OIDC callback: state mismatch")
-		h.flash(w, r, "err", "OIDC state mismatch, possible CSRF attack")
-		http.Redirect(w, r, "/login", http.StatusFound)
+		oidcLoginError(w, r, "auth_failed")
 		return
 	}
 
@@ -109,8 +118,7 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		// so that raw tokens or error payloads from the IdP are never persisted.
 		log.Printf("[oidc] token exchange failed ip=%q: %v", ip, err) //nolint:gosec // G706: ip already stored in auth_log; error value is from the IdP library
 		_ = appdb.LogAuth(h.db, "", ip, false, "OIDC token exchange failed")
-		h.flash(w, r, "err", "OIDC authentication failed")
-		http.Redirect(w, r, "/login", http.StatusFound)
+		oidcLoginError(w, r, "auth_failed")
 		return
 	}
 
@@ -118,8 +126,7 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok {
 		_ = appdb.LogAuth(h.db, "", ip, false, "OIDC: no id_token in response")
-		h.flash(w, r, "err", "OIDC authentication failed: missing id_token")
-		http.Redirect(w, r, "/login", http.StatusFound)
+		oidcLoginError(w, r, "auth_failed")
 		return
 	}
 	idToken, err := h.oidcVerifier.Verify(ctx, rawIDToken)
@@ -127,16 +134,14 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		// Raw JWT content may appear in verification errors, keep it server-side.
 		log.Printf("[oidc] id_token verification failed ip=%q: %v", ip, err) //nolint:gosec // G706: ip already stored in auth_log
 		_ = appdb.LogAuth(h.db, "", ip, false, "OIDC id_token verification failed")
-		h.flash(w, r, "err", "OIDC token verification failed")
-		http.Redirect(w, r, "/login", http.StatusFound)
+		oidcLoginError(w, r, "auth_failed")
 		return
 	}
 
 	// --- check nonce ---
 	if idToken.Nonce != savedNonce {
 		_ = appdb.LogAuth(h.db, "", ip, false, "OIDC nonce mismatch")
-		h.flash(w, r, "err", "OIDC nonce mismatch, replay attack detected")
-		http.Redirect(w, r, "/login", http.StatusFound)
+		oidcLoginError(w, r, "auth_failed")
 		return
 	}
 
@@ -146,8 +151,7 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		// Claim values from the IdP may contain PII, log server-side only.
 		log.Printf("[oidc] claims parse failed ip=%q: %v", ip, err) //nolint:gosec // G706: ip already stored in auth_log
 		_ = appdb.LogAuth(h.db, "", ip, false, "OIDC claims parse failed")
-		h.flash(w, r, "err", "OIDC claims error")
-		http.Redirect(w, r, "/login", http.StatusFound)
+		oidcLoginError(w, r, "auth_failed")
 		return
 	}
 
@@ -187,8 +191,7 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	if role == "" {
 		_ = appdb.LogAuth(h.db, username, ip, false, "OIDC: no matching group, access denied")
-		h.flash(w, r, "err", "Access denied: your account is not in an authorised group")
-		http.Redirect(w, r, "/login", http.StatusFound)
+		oidcLoginError(w, r, "denied")
 		return
 	}
 
@@ -196,8 +199,7 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 	user, err := appdb.UpsertOIDCUser(h.db, username, displayName, role, h.cfg.OIDCSyncRole)
 	if errors.Is(err, appdb.ErrOIDCLocalUser) {
 		_ = appdb.LogAuth(h.db, username, ip, false, "OIDC: username collides with a local account")
-		h.flash(w, r, "err", "Access denied: that username belongs to a local account. Contact an administrator.")
-		http.Redirect(w, r, "/login", http.StatusFound)
+		oidcLoginError(w, r, "denied")
 		return
 	}
 	if err != nil || user == nil {
@@ -206,15 +208,13 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[oidc] upsert failed username=%q: %v", username, err) //nolint:gosec // G706: username from IdP token already written to DB on this path
 		}
 		_ = appdb.LogAuth(h.db, username, ip, false, "OIDC upsert failed")
-		h.flash(w, r, "err", "OIDC login error: could not create/update user account")
-		http.Redirect(w, r, "/login", http.StatusFound)
+		oidcLoginError(w, r, "auth_failed")
 		return
 	}
 
 	if !user.IsActive {
 		_ = appdb.LogAuth(h.db, username, ip, false, "OIDC: account inactive")
-		h.flash(w, r, "err", "Account is disabled. Contact an administrator.")
-		http.Redirect(w, r, "/login", http.StatusFound)
+		oidcLoginError(w, r, "disabled")
 		return
 	}
 

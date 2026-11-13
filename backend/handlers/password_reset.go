@@ -25,9 +25,6 @@ const (
 	passwordResetTTL         = 30 * time.Minute
 	passwordResetLimitCount  = 3
 	passwordResetLimitWindow = 15 * time.Minute
-	// genericResetInfo is the identical response shown regardless of
-	// whether an account was found, prevents user enumeration via response differences.
-	genericResetInfo = "If an account with that login or email exists, a password reset link has been sent."
 )
 
 // passwordResetRL is a dedicated per-IP sliding-window rate limiter for the
@@ -36,11 +33,6 @@ var passwordResetRL = struct { //nolint:gochecknoglobals // package-level single
 	sync.Mutex
 	attempts map[string][]time.Time
 }{attempts: make(map[string][]time.Time)}
-
-// ForgotPasswordGet renders the "forgot password" form.
-func (h *Handler) ForgotPasswordGet(w http.ResponseWriter, r *http.Request) {
-	h.render(w, "forgot_password", h.base(w, r, ""))
-}
 
 // ErrPasswordResetTokenInvalid reports that a submitted password-reset token
 // does not correspond to a valid, unexpired, unused record. It is returned by
@@ -159,175 +151,6 @@ func (h *Handler) ConfirmPasswordReset(r *http.Request, token, newPassword strin
 	_ = appdb.LogAuth(h.db, user.Username, clientIP(r), true, "Password reset completed")
 
 	return nil
-}
-
-// ForgotPasswordPost handles submission of the forgot-password form.
-// It always shows the generic response to prevent user enumeration.
-func (h *Handler) ForgotPasswordPost(w http.ResponseWriter, r *http.Request) {
-	data := h.base(w, r, "")
-
-	if !h.csrfOK(r) {
-		// Even a CSRF mismatch shows the generic message to avoid leaking state.
-		data["Error"] = "Session error. Please refresh the page and try again."
-		h.render(w, "forgot_password", data)
-		return
-	}
-
-	ip := clientIP(r)
-	if !passwordResetAllowed(ip) {
-		_ = appdb.LogAuth(h.db, "password-reset", ip, false, "Password reset rate limited")
-		data["Info"] = genericResetInfo
-		h.render(w, "forgot_password", data)
-		return
-	}
-
-	identifier := trimStr(r.FormValue("identifier"))
-	if identifier == "" {
-		data["Error"] = "Please enter your username or email address."
-		h.render(w, "forgot_password", data)
-		return
-	}
-
-	// All branches below show the same generic Info, only the audit log
-	// captures the real outcome to preserve no-enumeration.
-	user, err := appdb.GetUserByLoginOrEmail(h.db, identifier)
-	if err != nil || user == nil {
-		_ = appdb.LogAuth(h.db, identifier, ip, false, "Password reset requested for unknown account")
-		data["Info"] = genericResetInfo
-		h.render(w, "forgot_password", data)
-		return
-	}
-	if !user.IsActive {
-		_ = appdb.LogAuth(h.db, user.Username, ip, false, "Password reset requested for inactive account")
-		data["Info"] = genericResetInfo
-		h.render(w, "forgot_password", data)
-		return
-	}
-	if strings.TrimSpace(user.Email) == "" {
-		_ = appdb.LogAuth(h.db, user.Username, ip, false, "Password reset requested but user has no email address")
-		data["Info"] = genericResetInfo
-		h.render(w, "forgot_password", data)
-		return
-	}
-
-	settings, err := appdb.GetNotificationSettings(r.Context(), h.db)
-	if err != nil || !settings.SMTPEnabled || strings.TrimSpace(settings.SMTPHost) == "" || strings.TrimSpace(settings.SMTPFrom) == "" {
-		_ = appdb.LogAuth(h.db, user.Username, ip, false, "Password reset requested but SMTP is not configured")
-		data["Info"] = genericResetInfo
-		h.render(w, "forgot_password", data)
-		return
-	}
-
-	// Generate a raw token; store only the SHA-256 hash (token never touches DB).
-	rawToken := security.GenerateToken()
-	tokenHash := passwordResetTokenHash(rawToken)
-	_ = appdb.InvalidatePasswordResetTokens(h.db, user.ID) // invalidate any prior tokens
-	if err := appdb.CreatePasswordResetToken(h.db, user.ID, tokenHash, ip, time.Now().Add(passwordResetTTL)); err != nil {
-		_ = appdb.LogAuth(h.db, user.Username, ip, false, "Password reset token creation failed")
-		data["Info"] = genericResetInfo
-		h.render(w, "forgot_password", data)
-		return
-	}
-
-	link, err := resetLink(h.cfg.PublicBaseURL, rawToken)
-	if err != nil {
-		slog.Error("password reset link could not be built", "user", user.Username, "err", err)
-		_ = appdb.LogAuth(h.db, user.Username, ip, false, "Password reset link not built: "+err.Error())
-		data["Info"] = genericResetInfo
-		h.render(w, "forgot_password", data)
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-	defer cancel()
-	if err := sendPasswordResetMail(
-		ctx,
-		settings.SMTPHost, settings.SMTPPort, settings.SMTPSecurity,
-		settings.SMTPUsername, settings.SMTPPassword,
-		settings.SMTPFrom, user.Email, link,
-	); err != nil {
-		slog.Error("password reset email failed", "user", user.Username, "err", err)
-		_ = appdb.LogAuth(h.db, user.Username, ip, false, "Password reset email send failed: "+err.Error())
-	} else {
-		_ = appdb.LogAuth(h.db, user.Username, ip, true, "Password reset email sent")
-	}
-	data["Info"] = genericResetInfo
-	h.render(w, "forgot_password", data)
-}
-
-// ResetPasswordGet renders the new-password form, validating the token in the URL.
-func (h *Handler) ResetPasswordGet(w http.ResponseWriter, r *http.Request) {
-	data := h.base(w, r, "")
-	token := trimStr(r.URL.Query().Get("token"))
-	if !h.passwordResetTokenOK(token) {
-		data["Error"] = "This reset link is invalid or has expired. Please request a new one."
-	} else {
-		data["Token"] = token
-	}
-	h.render(w, "reset_password", data)
-}
-
-// ResetPasswordPost handles the new-password submission.
-func (h *Handler) ResetPasswordPost(w http.ResponseWriter, r *http.Request) {
-	data := h.base(w, r, "")
-
-	if !h.csrfOK(r) {
-		data["Error"] = "Session error. Please refresh the page."
-		h.render(w, "reset_password", data)
-		return
-	}
-
-	token := trimStr(r.FormValue("token"))
-	resetToken, err := appdb.GetValidPasswordResetToken(h.db, passwordResetTokenHash(token))
-	if err != nil || resetToken == nil {
-		data["Error"] = "This reset link is invalid or has expired. Please request a new one."
-		h.render(w, "reset_password", data)
-		return
-	}
-
-	newPW := trimStr(r.FormValue("new_password"))
-	confirm := trimStr(r.FormValue("confirm_password"))
-	if newPW != confirm {
-		data["Error"] = "Passwords do not match."
-		data["Token"] = token
-		h.render(w, "reset_password", data)
-		return
-	}
-
-	if ok, msg := security.ValidatePassword(newPW); !ok {
-		data["Error"] = msg
-		data["Token"] = token
-		h.render(w, "reset_password", data)
-		return
-	}
-
-	user, err := appdb.GetUserByID(h.db, resetToken.UserID)
-	if err != nil || user == nil || !user.IsActive {
-		data["Error"] = "Account is not available. Please contact an administrator."
-		h.render(w, "reset_password", data)
-		return
-	}
-
-	if err := appdb.UpdateUserPassword(h.db, user.ID, security.HashPassword(newPW)); err != nil {
-		data["Error"] = "Could not update password. Please try again."
-		data["Token"] = token
-		h.render(w, "reset_password", data)
-		return
-	}
-
-	// A reset is the recovery path for a compromised account, so every session
-	// predating it dies (V8).
-	if err := appdb.BumpSessionEpoch(h.db, user.ID); err != nil {
-		slog.Error("bumping session epoch after password reset failed", "user_id", user.ID, "err", err)
-	}
-
-	// Invalidate on use: mark this token used AND invalidate any others for the user.
-	_ = appdb.MarkPasswordResetTokenUsed(h.db, resetToken.ID)
-	_ = appdb.InvalidatePasswordResetTokens(h.db, user.ID)
-	_ = appdb.LogAuth(h.db, user.Username, clientIP(r), true, "Password reset completed")
-
-	h.flash(w, r, "ok", "Password updated. Please sign in with your new password.")
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
 // passwordResetTokenOK validates that a raw token corresponds to a valid,
