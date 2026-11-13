@@ -88,7 +88,7 @@ FROM nginx:1.31-alpine AS runtime-base
 RUN apk upgrade --no-cache \
  && apk add --no-cache curl openssl \
  && rm -f /etc/nginx/conf.d/default.conf \
- && rm -rf /usr/share/nginx/html/* \
+ && find /usr/share/nginx/html -mindepth 1 -delete \
  && mkdir -p /etc/certharbor/ephemeral
 COPY frontend/nginx.conf.template frontend/nginx.waiting.conf.template frontend/conf.d/doc-headers.conf.template /etc/certharbor/
 COPY frontend/conf.d/proxy-headers.conf /etc/nginx/conf.d/

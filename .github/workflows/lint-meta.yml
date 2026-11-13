@@ -83,6 +83,10 @@ jobs:
             --config-basedir "$(pwd)" \
             "frontend/src/styles/**/*.css"
 
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
       - name: frontend lint (eslint + prettier)
         run: make frontend-lint
 

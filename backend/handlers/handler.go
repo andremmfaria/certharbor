@@ -1,3 +1,4 @@
+// Package handlers implements the HTTP handler layer for the Certharbor.
 package handlers
 
 import (
