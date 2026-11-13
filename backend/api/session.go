@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	appdb "certharbor/db"
 	"certharbor/handlers"
 	appmw "certharbor/middleware"
 	"certharbor/security"
@@ -134,7 +133,7 @@ func deleteSession(h *handlers.Handler) func(context.Context, *struct{}) (*delet
 			// db-optional call sites (acme_api.go, notifications.go,
 			// health.go) already guard against.
 			if uid, ok := s.Values["user_id"].(int); ok && uid > 0 && h.DB() != nil {
-				if err := appdb.BumpSessionEpoch(h.DB(), uid); err != nil {
+				if err := h.BumpSessionEpoch(uid); err != nil {
 					return nil, err
 				}
 			}

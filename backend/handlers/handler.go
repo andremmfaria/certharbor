@@ -88,6 +88,14 @@ func (h *Handler) DB() *sql.DB { return h.db }
 // Store exposes the session store to backend/api.
 func (h *Handler) Store() *sessions.CookieStore { return h.store }
 
+// BumpSessionEpoch revokes every session for a user. backend/api must not
+// import certharbor/db directly (depguard, Section 2: api/ reaches the
+// database only through handlers), so this wraps db.BumpSessionEpoch for
+// logout's server-side revocation.
+func (h *Handler) BumpSessionEpoch(userID int) error {
+	return appdb.BumpSessionEpoch(h.db, userID)
+}
+
 // Cfg exposes the loaded configuration to backend/api.
 func (h *Handler) Cfg() *config.Config { return h.cfg }
 
