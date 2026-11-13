@@ -18,14 +18,17 @@ export async function newJar(baseURL = BASE_URL): Promise<APIRequestContext> {
 }
 
 /**
- * The CSRF token a server-rendered page embeds, for the specs that post its
- * form. Those pages leave with their template routes, and nothing a fixture
- * needs depends on them (see loginOrThrow).
+ * Mint or read the session-bound CSRF pair through the API. The url argument is
+ * retained temporarily so legacy callers compile while their endpoint-specific
+ * form requests are migrated; it is deliberately not fetched because SPA
+ * document routes never render a token.
  */
-export async function csrfTokenFrom(ctx: APIRequestContext, url: string): Promise<string> {
-  const res = await ctx.get(url);
-  const body = await res.text();
-  return extractCSRF(body, url);
+export async function csrfTokenFrom(ctx: APIRequestContext, _url = "/api/v1/session"): Promise<string> {
+  const res = await ctx.get("/api/v1/session");
+  if (res.status() !== 200) {
+    throw new Error(`GET /api/v1/session for CSRF returned ${res.status()}: ${(await res.text()).slice(0, 400)}`);
+  }
+  return csrfToken(ctx);
 }
 
 export function extractCSRF(html: string, whence = "<page>"): string {
@@ -76,8 +79,22 @@ export async function loginOrThrow(ctx: APIRequestContext, creds: Credentials): 
   }
 }
 
+export async function apiMutation(
+  ctx: APIRequestContext,
+  method: "POST" | "PUT" | "PATCH" | "DELETE",
+  url: string,
+  data: unknown = {},
+  token?: string,
+): Promise<APIResponse> {
+  return ctx.fetch(url, {
+    method,
+    data,
+    headers: { "X-CSRF-Token": token ?? (await csrfToken(ctx)) },
+  });
+}
+
 export async function logout(ctx: APIRequestContext): Promise<APIResponse> {
-  return ctx.delete("/api/v1/session", { headers: { "X-CSRF-Token": await csrfToken(ctx) } });
+  return apiMutation(ctx, "DELETE", "/api/v1/session");
 }
 
 /**
