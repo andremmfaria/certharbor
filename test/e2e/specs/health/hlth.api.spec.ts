@@ -148,9 +148,16 @@ test("E2E-HLTH-05: /ready reports the database down", async ({ admin }) => {
   // A session established before the outage and left untouched throughout it.
   // The one that is used during the outage is destroyed by rejectSession, so
   // only an untouched session can show that a cookie survives the outage.
+  // GET /api/v1/dashboard replaces the legacy GET /dashboard page: both sit
+  // behind RequireLogin's API-side equivalent (sessionMiddleware), but the
+  // API answers a rejected session with 401, never a 302 to a /login page
+  // that no longer exists (api/middleware.go:70-84).
   const untouched = await newJar();
   await loginOrThrow(untouched, admin.creds);
-  expect((await untouched.get("/dashboard")).status(), "the untouched session works before the outage").toBe(200);
+  expect(
+    (await untouched.get("/api/v1/dashboard")).status(),
+    "the untouched session works before the outage",
+  ).toBe(200);
 
   try {
     await composeOrThrow("stop", "postgres");
@@ -164,12 +171,12 @@ test("E2E-HLTH-05: /ready reports the database down", async ({ admin }) => {
     expect(observed.body.status).toBe("not ready");
     expect(observed.body.db).toBe("unreachable");
 
-    // Fail-closed by design: RequireLogin re-reads the user row on every
-    // request and treats a load error as a rejected session, so an outage logs
-    // everyone out rather than serving stale sessions.
-    const authed = await admin.ctx.get("/dashboard");
-    expect(authed.status(), "an authenticated request during the outage").toBe(302);
-    expect(authed.headers()["location"]).toBe("/login");
+    // Fail-closed by design: sessionMiddleware's ValidateSession call
+    // re-reads the user row on every request and treats a load error as a
+    // rejected session, so an outage logs everyone out rather than serving
+    // stale sessions.
+    const authed = await admin.ctx.get("/api/v1/dashboard");
+    expect(authed.status(), "an authenticated request during the outage").toBe(401);
   } finally {
     await composeOrThrow("start", "postgres");
     await waitHealthy("postgres");
@@ -183,14 +190,14 @@ test("E2E-HLTH-05: /ready reports the database down", async ({ admin }) => {
   // cookie, so the session used during the outage is gone for good and its
   // holder must log in again. A change to leave the cookie intact through a
   // transient outage would invert this assertion.
-  const stillRejected = await admin.ctx.get("/dashboard");
-  expect(stillRejected.status(), "the session used during the outage stays dead").toBe(302);
+  const stillRejected = await admin.ctx.get("/api/v1/dashboard");
+  expect(stillRejected.status(), "the session used during the outage stays dead").toBe(401);
 
   // The untouched cookie, never presented during the outage, still works with
   // no re-login: it aged past neither the idle nor the absolute limit.
   const survivor = await pollUntil(
     "the untouched pre-outage session to work again without a re-login",
-    async () => (await untouched.get("/dashboard")).status(),
+    async () => (await untouched.get("/api/v1/dashboard")).status(),
     (s) => s === 200,
     { timeoutMs: 60_000, intervalMs: 2000 },
   );
