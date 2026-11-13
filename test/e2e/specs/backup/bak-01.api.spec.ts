@@ -92,7 +92,7 @@ test("E2E-BAK-01: the bundle is valid, complete and self-verifying", async ({ ad
       expect(new RegExp(`(COPY|INSERT INTO) (public\\.)?${table}\\b`).test(dump), `the dump carries ${table} as plain SQL`).toBe(true);
     }
 
-    const audited = await psql(`SELECT count(*) FROM auth_log WHERE reason = 'backup.create id=${backup.id}'`);
+    const audited = await psql(`SELECT count(*) FROM auth_log WHERE reason = 'Audit: backup.create id=${backup.id}'`);
     expect(Number(audited), "the create is audited").toBeGreaterThan(0);
   } finally {
     await fs.rm(dir, { recursive: true, force: true });

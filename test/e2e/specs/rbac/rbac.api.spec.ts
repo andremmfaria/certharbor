@@ -159,7 +159,7 @@ test.describe("E2E-RBAC-01: the route-by-role matrix, driven from backend/testda
     }) => {
       const ctx: AuthedContext = { viewer, manager, admin }[role];
       const started = await ctx.send(() => apiMutation(ctx.ctx, "POST", "/api/v1/profile/mfa/enrollment"));
-      expect(started.status(), `${role} POST /api/v1/profile/mfa/enrollment precondition`).toBe(200);
+      expect(started.status(), `${role} POST /api/v1/profile/mfa/enrollment precondition`).toBe(201);
 
       const res = await ctx.send(() => ctx.ctx.get(MFA_QR_PATTERN));
       expect(res.status(), `${role} GET ${MFA_QR_PATTERN}`).toBe(200);
