@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	appdb "certharbor/db"
 	"certharbor/handlers"
 	appmw "certharbor/middleware"
 	"certharbor/security"
@@ -116,6 +117,27 @@ func deleteSession(h *handlers.Handler) func(context.Context, *struct{}) (*delet
 		r, w := httpFrom(ctx)
 
 		if s, err := h.Store().Get(r, h.SessionCookieName()); err == nil {
+			// Clearing the cookie here only stops *this* client from
+			// presenting it again; a copy captured before logout (proxy
+			// log, XSS, shared terminal) is a separate string the server
+			// never sees, so it keeps validating under ValidateSession
+			// (middleware/session.go) until SessionMaxLifetime/
+			// SessionTimeout elapse on their own. session_epoch is "the
+			// only real revocation available to a client-side cookie
+			// store" (plans/frontend-backend-split.md 5.3) and until now
+			// logout never bumped it — a security regression this fixes.
+			// Bumping revokes every session for this user, not just this
+			// one; that coarseness is inherent to a pure cookie store with
+			// no server-side session table. h.DB() is nil in some chain
+			// tests that stand up the middleware without a database
+			// (api/mount_test.go), the same condition handlers.go's own
+			// db-optional call sites (acme_api.go, notifications.go,
+			// health.go) already guard against.
+			if uid, ok := s.Values["user_id"].(int); ok && uid > 0 && h.DB() != nil {
+				if err := appdb.BumpSessionEpoch(h.DB(), uid); err != nil {
+					return nil, err
+				}
+			}
 			s.Options.MaxAge = -1
 			s.Values = map[interface{}]interface{}{}
 			if err := s.Save(r, w); err != nil {

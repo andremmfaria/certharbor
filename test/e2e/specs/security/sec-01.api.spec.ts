@@ -83,6 +83,11 @@ test("E2E-SEC-02: audited privileged actions carry the Audit prefix and the righ
 
   const page = await admin.send(() => admin.ctx.get("/api/v1/security/events?pageSize=200"));
   const body = (await page.json()) as SecurityPage;
-  expect(body.items.some((event) => event.reason === `certificate.key_download id=${certificate.id} name=${name} domain=${domain}`)).toBe(true);
-  expect(body.items.some((event) => event.reason === "console.run id=app.version")).toBe(true);
+  // Both reasons carry the "Audit: " prefix handlers/audit.go's auditPrefix
+  // writes (handlers/ca_api.go:178, handlers/admin_console.go:376). The
+  // console.run reason also appends command/exit/timeout/duration fields
+  // this test does not control, so it is a startsWith match; the key
+  // download reason has no such variable suffix, so it is exact.
+  expect(body.items.some((event) => event.reason === `Audit: certificate.key_download id=${certificate.id} name=${name} domain=${domain}`)).toBe(true);
+  expect(body.items.some((event) => event.reason?.startsWith("Audit: console.run id=app.version"))).toBe(true);
 });

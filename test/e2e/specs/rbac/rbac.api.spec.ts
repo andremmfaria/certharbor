@@ -50,7 +50,18 @@ const REQUIRED_ROUTES = goldenRoutes().filter((route) => route.auth === "require
 // The static (placeholder-free) GETs below are the ones where 200 vs 403 is
 // an unambiguous role-gate signal; the id-bearing boundary case
 // (/certificates/{id} vs .../key) gets its own dedicated test further down.
-const STATIC_GETS = REQUIRED_ROUTES.filter((route) => route.method === "GET" && !route.pattern.includes("{"));
+//
+// GET /api/v1/profile/mfa/enrollment/qr carries no {id} placeholder but is
+// excluded the same way: MfaEnrollmentQR (handlers/totp_api.go) 404s by
+// design whenever the caller has no pending TOTP enrollment, so a bare
+// "every sufficient role gets 200" assertion is false regardless of role —
+// it needs POST /api/v1/profile/mfa/enrollment first. It gets its own
+// dedicated setup+assert test below, same pattern as the key-download
+// boundary case.
+const MFA_QR_PATTERN = "/api/v1/profile/mfa/enrollment/qr";
+const STATIC_GETS = REQUIRED_ROUTES.filter(
+  (route) => route.method === "GET" && !route.pattern.includes("{") && route.pattern !== MFA_QR_PATTERN,
+);
 const MUTATIONS = REQUIRED_ROUTES.filter((route) => route.method !== "GET");
 
 test.describe("E2E-RBAC-01: the route-by-role matrix, driven from backend/testdata/roles.golden", () => {
@@ -131,6 +142,31 @@ test.describe("E2E-RBAC-01: the route-by-role matrix, driven from backend/testda
     const key = await viewer.send(() => viewer.ctx.get(`/api/v1/certificates/${id}/key`));
     expect(key.status(), "viewer may not obtain its key").toBe(403);
   });
+
+  /**
+   * GET /api/v1/profile/mfa/enrollment/qr's role requirement (role=viewer,
+   * so every fixture role is sufficient) only shows through once a pending
+   * enrollment exists: MfaEnrollmentQR 404s with none (handlers/
+   * totp_api.go), which is a setup precondition, not a role gate. Each
+   * role starts its own enrollment first — profile/mfa state is per-user,
+   * so the three fixture accounts don't collide.
+   */
+  for (const role of ROLES) {
+    test(`E2E-RBAC-01: ${role} GET ${MFA_QR_PATTERN} is 200 once enrollment is pending`, async ({
+      viewer,
+      manager,
+      admin,
+    }) => {
+      const ctx: AuthedContext = { viewer, manager, admin }[role];
+      const started = await ctx.send(() => apiMutation(ctx.ctx, "POST", "/api/v1/profile/mfa/enrollment"));
+      expect(started.status(), `${role} POST /api/v1/profile/mfa/enrollment precondition`).toBe(200);
+
+      const res = await ctx.send(() => ctx.ctx.get(MFA_QR_PATTERN));
+      expect(res.status(), `${role} GET ${MFA_QR_PATTERN}`).toBe(200);
+      const body = await res.body();
+      expect(body.length, `${role} GET ${MFA_QR_PATTERN} returned a non-empty image`).toBeGreaterThan(0);
+    });
+  }
 });
 
 test.describe("E2E-RBAC-01: public and optional-auth routes stay reachable with no session", () => {

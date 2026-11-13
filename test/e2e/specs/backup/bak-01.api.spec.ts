@@ -38,7 +38,11 @@ test("E2E-BAK-01: the bundle is valid, complete and self-verifying", async ({ ad
     // API contract is create-then-download, rather than the removed form POST
     // which streamed an archive immediately.
     const created = await admin.send(() => apiMutation(admin.ctx, "POST", "/api/v1/admin/backups"));
-    expect(created.status()).toBe(200);
+    // createBackup's registration sets DefaultStatus: http.StatusCreated
+    // (backend/api/register.go) — 201 is correct for a creation endpoint,
+    // and nothing in plans/frontend-backend-split.md's endpoint map (5.7,
+    // Section 6) specifies 200 here.
+    expect(created.status()).toBe(201);
     const backup = (await created.json()) as Backup;
     expect(backup.id).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(backup.sizeBytes).toBeGreaterThan(0);

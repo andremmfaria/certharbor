@@ -19,5 +19,9 @@ test("E2E-ADM-01: app.version pins the certificates library", async ({ admin }) 
   const security = await admin.send(() => admin.ctx.get("/api/v1/security/events?pageSize=200"));
   expect(security.status()).toBe(200);
   const events = (await security.json()) as { items: Array<{ reason?: string }> };
-  expect(events.items.some((event) => event.reason === "console.run id=app.version")).toBe(true);
+  // The audit row carries the "Audit: " prefix (handlers/audit.go's
+  // auditPrefix) plus the command/exit/timeout/duration fields
+  // RunAdminConsoleCommand appends (handlers/admin_console.go), so only the
+  // leading "id=app.version" segment is a stable, non-timing-dependent match.
+  expect(events.items.some((event) => event.reason?.startsWith("Audit: console.run id=app.version"))).toBe(true);
 });
