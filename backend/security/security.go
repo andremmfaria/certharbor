@@ -26,7 +26,18 @@ func HashPassword(pw string) string {
 	return string(hash)
 }
 
+// legacySHA256 is used ONLY to verify hashes written before the bcrypt
+// migration (see VerifyPassword below); it is never called to create a
+// stored hash — HashPassword (bcrypt) is the sole write path for both new
+// accounts and password changes. Verification against a legacy hash also
+// triggers an immediate rehash to bcrypt (handlers.APILogin, gated by
+// NeedsPasswordRehash), so each legacy hash is read via this function at
+// most once per user before being replaced — it is a one-shot migration
+// shim, not an ongoing weak-hashing scheme.
 func legacySHA256(pw string) string {
+	// codeql[go/weak-sensitive-data-hashing] Read-only legacy verification path;
+	// every write goes through bcrypt (HashPassword) and a successful legacy
+	// verification immediately rehashes to bcrypt (see session_login.go).
 	h := sha256.Sum256([]byte(pw))
 	return hex.EncodeToString(h[:])
 }
