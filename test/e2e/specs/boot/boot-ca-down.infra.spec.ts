@@ -7,7 +7,7 @@ import { setEnvKeys } from "../../helpers/envfile.js";
 import { pollUntil } from "../../helpers/poll.js";
 import { adminCredentials } from "../../fixtures/test.js";
 import { probeTLS } from "../../helpers/openssl.js";
-import { csrfTokenFrom, loginOrThrow, newJar } from "../../helpers/session.js";
+import { apiMutation, loginOrThrow, newJar } from "../../helpers/session.js";
 
 function timestampOf(line: string): Date {
   const m = /\|\s*(\S+)/.exec(line);
@@ -24,12 +24,9 @@ interface ConsoleResult {
 
 /** Mirrors specs/admin/adm-console.api.spec.ts's runCommand, duplicated rather than shared, since that one runs through the worker-scoped admin fixture this file cannot use (it targets BASE_URL, the container-network origin; infra runs on the host and dials the backend's address). */
 async function runConsoleCommand(ctx: APIRequestContext, commandID: string): Promise<ConsoleResult> {
-  const token = await csrfTokenFrom(ctx, "/admin/console");
-  const res = await ctx.post("/admin/console", { form: { command_id: commandID, csrf_token: token } });
-  const body = res.status() === 200 ? await res.text() : await (await ctx.get("/admin/console")).text();
-  const exit = /<span class="badge danger">exit (\d+)<\/span>/.exec(body);
-  const output = /<pre class="admin-console-output">([\s\S]*?)<\/pre>/.exec(body)?.[1] ?? "";
-  return { success: exit === null, output: output.trim() };
+  const res = await apiMutation(ctx, "POST", "/api/v1/admin/console/run", { commandId: commandID });
+  const body = (await res.json()) as { success: boolean; output: string };
+  return { success: body.success, output: body.output };
 }
 
 test.describe.serial("bootstrap: ca-down scenario", () => {

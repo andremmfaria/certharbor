@@ -13,13 +13,14 @@ import { expect, test } from "@playwright/test";
 // Rewritten against the JSON admin operations (backend/api/admin.go):
 // GET /api/v1/admin/about, GET /api/v1/admin/integrity,
 // GET /api/v1/admin/console/commands and POST /api/v1/admin/console/run.
-// adm-01.api.spec.ts and adm-console.api.spec.ts keep covering the
-// still-live template routes (/admin/console, templateRouteRetired=false);
-// this file is the new operations' own coverage, not a replacement for it.
+// adm-01.api.spec.ts and adm-console.api.spec.ts cover the same operations
+// through the apiClient/apiMutation helpers instead of the generated
+// @kantharos-ai/certharbor-client used here; this file is additional
+// coverage of the generated client, not a replacement for either.
 //
 // The 19-row preflight check-name list and the serial CA-up/CA-down pair
 // below are the same calibrated values Section 2.7.5 and E2E-HLTH-06
-// record for the template routes; only the transport changed.
+// record; only the transport (generated client vs. raw fetch) differs.
 
 let admin: ApiSession;
 
