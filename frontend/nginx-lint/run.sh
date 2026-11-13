@@ -62,8 +62,9 @@ gen_leaf "$pki/evil-upstream" "$pki/evil" "certharbor-control"
 cp "$pki/web.crt" "$work/web/web.crt"
 cp "$pki/web.key" "$work/web/web.key"
 cp "$pki/root.crt" "$work/web/root_ca.crt"
-# Three 4 KiB cookies, the most a server-rendered redirect sets at once.
-printf 'location = /login-big-headers {\n  add_header Set-Cookie "a=%s";\n  add_header Set-Cookie "b=%s";\n  add_header Set-Cookie "c=%s";\n  return 303 /login;\n}\n' \
+# Three 4 KiB cookies, the most a redirect sets at once, under an API prefix
+# so nginx actually proxies the request to this stub location.
+printf 'location = /api/v1/login-big-headers {\n  add_header Set-Cookie "a=%s";\n  add_header Set-Cookie "b=%s";\n  add_header Set-Cookie "c=%s";\n  return 303 /api/v1/x;\n}\n' \
   "$(head -c 3000 /dev/zero | tr '\0' a)" "$(head -c 3000 /dev/zero | tr '\0' b)" "$(head -c 3000 /dev/zero | tr '\0' c)" \
   >"$work/stub/big-headers.conf"
 cp "$pki/upstream.crt" "$work/stub/upstream.crt"
@@ -80,29 +81,11 @@ alternation=$(jq -r '[.[] | ltrimstr("/") | gsub("\\."; "\\.")] | join("|")' "$r
 want_regex="^/($alternation)(/|\$)"
 check "proxy location regex is derived from frontend/proxy-prefixes.json ($want_regex)" \
   grep -qF "location ~ $want_regex {" "$template"
-# Phase 9 deletes the migration window by deleting every block whose leading
-# comment carries the marker, so a temporary block without it would survive,
-# and a /app/ outside one would be left pointing at a path that no longer exists.
-marked_blocks() { # prints offending lines, exits non-zero on any
-  awk '
-    /^[ \t]*#/ { if ($0 ~ /PHASE9-DELETE/) marked = 1; next }
-    /^[ \t]*location[ \t]/ && !inloc { inloc = 1; depth = 0; m = marked; name = $0; pp = 0; app = 0 }
-    { if (!inloc) marked = 0 }
-    inloc {
-      line = $0; sub(/#.*/, "", line)
-      if (line ~ /proxy_pass[ \t]/) pp = 1
-      if (line ~ /\/app/) app = 1
-      o = gsub(/\{/, "{", line); c = gsub(/\}/, "}", line); depth += o - c
-      if ((o || c) && depth == 0) {
-        if (app && !m) { print "/app/ outside a PHASE9-DELETE block:" name; bad = 1 }
-        if (pp && !m && name !~ /location ~ \^\/\(/) { print "proxying block with no PHASE9-DELETE marker:" name; bad = 1 }
-        inloc = 0; marked = 0
-      }
-    }
-    END { exit bad }' "$template"
-}
-check "two proxy_pass blocks: the prefix list and the PHASE9-DELETE passthrough" test "$(grep -cE '^[[:space:]]*proxy_pass ' "$template")" -eq 2
-check "every /app/ block and the legacy passthrough carry the PHASE9-DELETE marker" marked_blocks
+# The SPA owns the root: exactly one proxy_pass location exists, the prefix
+# regex above, and the config names no base path under the document root,
+# which left with the migration window.
+check "exactly one proxy_pass location, the prefix regex" test "$(grep -cE '^[[:space:]]*proxy_pass ' "$template")" -eq 1
+check "the config names no SPA base path" bash -c '! grep -qF "html/app" "$1"' _ "$template"
 
 # ── Images and network ──────────────────────────────────────────────────────
 docker build -q --target nginx-fixture -t "$image" -f "$repo_root/frontend/Dockerfile" "$repo_root" >/dev/null
@@ -181,7 +164,7 @@ locations_ok() {
         }
       }
     }
-    END { if (proxied != 2) { print "want 2 proxying locations, found " proxied; bad = 1 } exit bad }'
+    END { if (proxied != 1) { print "want 1 proxying location, found " proxied; bad = 1 } exit bad }'
 }
 check "every proxy_pass location includes conf.d/proxy-headers.conf and verifies the upstream" locations_ok
 for directive in "proxy_ssl_verify on;" "proxy_ssl_verify_depth 2;" "proxy_ssl_name certharbor-control;" \
@@ -199,10 +182,6 @@ forged=(-H "X-Forwarded-For: 1.2.3.4" -H "X-Real-IP: 5.6.7.8" -H "True-Client-IP
   -H "Forwarded: for=13.14.15.16" -H "X-Request-Id: forged-request-id" -H "Origin: https://evil.example")
 probe_paths=()
 while IFS= read -r p; do probe_paths+=("$p" "$p/lint-probe"); done < <(jq -r '.[]' "$routes")
-# PHASE9-DELETE: the server-rendered pages and /static/ through the
-# passthrough, which carries POST /login and so needs the same forgery table.
-legacy_paths=(/ /login /certificates/12 /reset-password /apiary /healthz /readyz /openapi.jsonx /authority /static/css/pages.css /application)
-probe_paths+=("${legacy_paths[@]}")
 for path in "${probe_paths[@]}"; do
   req "${forged[@]}" -D "$work/hdrs" -o "$work/body" "$path"
   body=$(<"$work/body")
@@ -221,24 +200,21 @@ for path in "${probe_paths[@]}"; do
   check "$path: no Access-Control-* header" bash -c '! grep -qi "^access-control-" <<<"$1"' _ "$hdrs"
 done
 
-check "a backend response with 9 KiB of cookies passes through, not a 502" test "$(status_of /login-big-headers)" = 303
-check "/certificates/12 reaches the backend unchanged" test "$(jq -r .uri <<<"$(req /certificates/12?x=1)")" = "/certificates/12?x=1"
-for path in /app/ /app/certificates/12 /app/reset-password /app/login /app/api /app/health; do
+check "a backend response with 9 KiB of cookies passes through, not a 502" test "$(status_of /api/v1/login-big-headers)" = 303
+check "/api/v1/x reaches the backend unchanged" test "$(jq -r .uri <<<"$(req /api/v1/x?x=1)")" = "/api/v1/x?x=1"
+for path in / /certificates/12 /reset-password /admin/users/1; do
   body=$(req "$path")
   check "$path falls back to the SPA shell" grep -q 'data-testid="nginx-lint-shell"' <<<"$body"
 done
-for path in /docs /docs/x /openapi.yaml /schemas/Thing /app/assets/missing-0000.js; do
+for path in /docs /docs/x /openapi.yaml /schemas/Thing /assets/missing-0000.js; do
   check "$path is 404 with no SPA fallback" test "$(status_of "$path")" = 404
 done
-check "the bundle is not served outside /app/" grep -q '"stub":"certharbor-control"' <<<"$(req /assets/index-a1b2c3d4.js)"
-app_redirect=$(headers_of /app)
-check "/app redirects to /app/ with a relative Location" bash -c '[[ "$1" == *" 301"* && "$2" == /app/ ]]' _ "$(head -n1 <<<"$app_redirect")" "$(header Location "$app_redirect")"
 check "/nginx-health is 200" test "$(status_of /nginx-health)" = 200
 
 # ── Header set and cache policy on the document ─────────────────────────────
 echo "headers"
-doc=$(headers_of -H "Origin: https://evil.example" /app/certificates/12)
-asset=$(headers_of /app/assets/index-a1b2c3d4.js)
+doc=$(headers_of -H "Origin: https://evil.example" /certificates/12)
+asset=$(headers_of /assets/index-a1b2c3d4.js)
 check "document is no-store" test "$(header Cache-Control "$doc")" = no-store
 check "asset is immutable" test "$(header Cache-Control "$asset")" = "public, max-age=31536000, immutable"
 for h in "$doc" "$asset"; do
@@ -292,12 +268,10 @@ start_stub "$work/stub"
 start_web "$run_id-hsts" "$work/web" -e WEB_TLS_MODE=provided -e WEB_HSTS_MAX_AGE=600 --health-interval=1s
 wait_healthy "$run_id-hsts"
 hsts_port=$(port_of "$run_id-hsts")
-hsts_doc=$(curl -sS --resolve "$host:$hsts_port:127.0.0.1" --cacert "$pki/root.crt" -o /dev/null -D - "https://$host:$hsts_port/app/" | tr -d '\r')
+hsts_doc=$(curl -sS --resolve "$host:$hsts_port:127.0.0.1" --cacert "$pki/root.crt" -o /dev/null -D - "https://$host:$hsts_port/" | tr -d '\r')
 hsts_api=$(curl -sS --resolve "$host:$hsts_port:127.0.0.1" --cacert "$pki/root.crt" -o /dev/null -D - "https://$host:$hsts_port/api/v1/x" | tr -d '\r')
 check "WEB_HSTS_MAX_AGE=600 sets HSTS on the document" test "$(header Strict-Transport-Security "$hsts_doc")" = "max-age=600"
-hsts_legacy=$(curl -sS --resolve "$host:$hsts_port:127.0.0.1" --cacert "$pki/root.crt" -o /dev/null -D - "https://$host:$hsts_port/login" | tr -d '\r')
 check "and not on the proxied response" test -z "$(header Strict-Transport-Security "$hsts_api")"
-check "and not on a server-rendered page through the passthrough" test -z "$(header Strict-Transport-Security "$hsts_legacy")"
 
 # ── Entrypoint modes ────────────────────────────────────────────────────────
 echo "entrypoint"

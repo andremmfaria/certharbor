@@ -8,7 +8,7 @@ Four containers, wired by `docker-compose.yml`:
 
 | Container | Image / build | Role |
 |---|---|---|
-| `certharbor-console` | built from `frontend/Dockerfile` | nginx, the only public origin. Terminates TLS for `WEB_HOSTNAME` with its own leaf, serves the React SPA under `/app/`, and proxies everything else to `certharbor-control` over TLS, verifying the backend's leaf against the CA root. Holds no session or database access |
+| `certharbor-console` | built from `frontend/Dockerfile` | nginx, the only public origin. Terminates TLS for `WEB_HOSTNAME` with its own leaf, serves the React SPA at the root, and proxies everything else to `certharbor-control` over TLS, verifying the backend's leaf against the CA root. Holds no session or database access |
 | `certharbor-control` | built from `backend/Dockerfile` | Go binary, publishing no host port. Server-rendered HTML UI (chi router, `html/template`) plus a small versioned JSON API. Owns sessions, CSRF, rate limiting, and all step-ca/database access |
 | `postgres` | `postgres:16-alpine` | Users, certificate history, Let's Encrypt state, notification settings, password-reset tokens |
 | `step-ca` | `smallstep/step-ca:0.30.2` (pinned via `STEP_CA_IMAGE`) | The actual PKI. certharbor-control never runs the `step` CLI against it: `backend/stepca/` wraps `github.com/smallstep/certificates/ca` and `github.com/smallstep/certificates/api` directly (pinned to the same v0.30.2), so certificate issuance and revocation are Go library calls, not shelled-out subprocesses. Renewal has no separate call path in `backend/stepca/`, it is a re-issue through the same `issueCert` helper handlers use for a fresh certificate (`backend/handlers/cert_ops.go:118`, `backend/handlers/certs.go:225-250`) |
@@ -23,7 +23,7 @@ Four containers, wired by `docker-compose.yml`:
    Browser ── HTTPS ──►│ certharbor-console │── HTTPS ──►│ certharbor-control │  Go, chi router, port 8443
                        │ (nginx)        │            │              │
                        └────────────────┘            └──┬───────┬───┘
-                        /app/ : the SPA bundle          │       │
+                        / : the SPA bundle               │       │
                         everything else : proxied  SQL ◄┘       └► HTTPS API (ca library)
                                                      ┌──▼──┐ ┌────▼──────┐
                                                      │ pg  │ │ step-ca   │  port 9443
@@ -36,7 +36,7 @@ Four containers, wired by `docker-compose.yml`:
    maps "9443:9443") → remove that port mapping yourself to keep it internal-only
 ```
 
-nginx sends the prefixes in `frontend/proxy-prefixes.json` (`/api`, `/auth`, `/health`, `/ready`, `/openapi.json`) to the backend, serves `/app/` from the bundle with an `index.html` fallback for deep links, and passes every other path, the server-rendered pages and `/static/` included, to the backend through a block marked `PHASE9-DELETE`. Every proxying block includes `frontend/conf.d/proxy-headers.conf`, which replaces `X-Forwarded-For` and `X-Real-IP` with the real peer and clears `True-Client-IP` and `Forwarded`. The backend trusts that header only from the address `WEB_UPSTREAM_HOST` resolves to. nginx re-resolves `certharbor-control` per request, so a restarted backend is followed without restarting nginx, and answers a problem document with type `upstream-unavailable` when the backend is unreachable.
+nginx sends the prefixes in `frontend/proxy-prefixes.json` (`/api`, `/auth`, `/health`, `/ready`, `/openapi.json`) to the backend, and serves everything else from the SPA bundle at the root with an `index.html` fallback for deep links. Every proxying block includes `frontend/conf.d/proxy-headers.conf`, which replaces `X-Forwarded-For` and `X-Real-IP` with the real peer and clears `True-Client-IP` and `Forwarded`. The backend trusts that header only from the address `WEB_UPSTREAM_HOST` resolves to. nginx re-resolves `certharbor-control` per request, so a restarted backend is followed without restarting nginx, and answers a problem document with type `upstream-unavailable` when the backend is unreachable.
 
 Inside `certharbor-control`, one `chi.Router` serves two things on the same port:
 
@@ -74,9 +74,7 @@ An unmatched path under `/api/v1` gets an RFC 9457 problem document instead of a
 
 ## Migration state
 
-The repository is partway through [plans/frontend-backend-split.md](../plans/frontend-backend-split.md), which replaces the server-rendered UI above with the React SPA, talking to `certharbor-control` only through the versioned JSON API. **The server-rendered UI is what serves users today**: the SPA under `/app/` has its shell, login with two-step MFA, navigation and every route, each leaf still a placeholder.
-
-The `/app/` base is temporary: `base` in `frontend/vite.config.ts` sets it, the router's `basename` follows it, and nginx's `/app/` blocks and the legacy passthrough carry `PHASE9-DELETE` markers for removal once the SPA owns the root. `/reset-password` and the OIDC callback stay at the root throughout, because reset links are emailed and the OIDC redirect URI is registered with the IdP.
+The repository has completed [plans/frontend-backend-split.md](../plans/frontend-backend-split.md)'s removal and hardening phase: the React SPA, talking to `certharbor-control` only through the versioned JSON API, owns the root. `base` in `frontend/vite.config.ts` is `/`, the router's `basename` follows it, and nginx serves the bundle from `/` with no legacy passthrough. `/reset-password` and the OIDC callback stay at the root, as they always have, because reset links are emailed and the OIDC redirect URI is registered with the IdP.
 
 `frontend/` is the Vite, React and TypeScript app (React 19.3.1, Vite 8.3.5, `@vitejs/plugin-react` 6.2.1), its nginx config (`nginx.conf.template`, `conf.d/`), its entrypoint (`entrypoint.sh`: certificate wait, reload watcher, CSP hashes of the served `index.html`'s inline blocks) and `frontend/Dockerfile`.
 

@@ -23,8 +23,8 @@ export const BASE_URL = process.env.BASE_URL ?? "https://certharbor-console:8443
  */
 export const BACKEND_URL = process.env.BACKEND_URL ?? "https://certharbor-control:8443";
 
-/** PHASE9-DELETE: "" once the SPA owns the root. The SPA's mount point under the origin, Vite's base without the trailing slash. */
-export const SPA_BASE = "/app";
+/** The SPA's mount point under the origin, Vite's base without the trailing slash. The SPA owns the root, so this is empty. */
+export const SPA_BASE = "";
 
 /**
  * Host-context runs dial nginx's published port, not the service name.

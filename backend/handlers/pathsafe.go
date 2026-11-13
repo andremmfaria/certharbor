@@ -38,8 +38,8 @@ func userReturnTarget(candidate string) string {
 // It returns the cleaned absolute path or an error if the candidate escapes.
 //
 // The separator-boundary check (absRoot + os.PathSeparator) prevents the
-// classic "sibling directory" attack where "/app/static-x" would pass a naive
-// strings.HasPrefix check against root "/app/static".
+// classic "sibling directory" attack where "/var/app-static-x" would pass a
+// naive strings.HasPrefix check against root "/var/app-static".
 //
 // Resolution strategy: clean the candidate, then join it under root and
 // resolve the combined path.  Any ".." components that would escape root are

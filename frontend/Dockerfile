@@ -100,11 +100,9 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
 ENTRYPOINT ["/usr/local/bin/certharbor-console-entrypoint"]
 
 # ── make nginx-lint's fixture: the real config over a placeholder bundle ─────
-# PHASE9-DELETE: both bundles go to /usr/share/nginx/html/ once the SPA owns
-# the root. Until then it lives under /app/, Vite's base.
 FROM runtime-base AS nginx-fixture
-COPY frontend/nginx-lint/fixture-dist/ /usr/share/nginx/html/app/
+COPY frontend/nginx-lint/fixture-dist/ /usr/share/nginx/html/
 
 # ── Final image ──────────────────────────────────────────────────────────────
 FROM runtime-base
-COPY --from=build /src/frontend/dist/ /usr/share/nginx/html/app/
+COPY --from=build /src/frontend/dist/ /usr/share/nginx/html/

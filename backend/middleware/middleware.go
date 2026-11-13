@@ -5,10 +5,8 @@ package middleware
 import (
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
-	"certharbor/apitypes"
 	"certharbor/models"
 
 	"github.com/gorilla/sessions"
@@ -34,35 +32,22 @@ const SessionTimeout = 8 * time.Hour
 // created.  This limits the blast radius of a stolen session cookie.
 const SessionMaxLifetime = 24 * time.Hour
 
-// documentCSP is the policy for the server-rendered template routes. No
-// 'unsafe-inline' anywhere: every inline <style> and <script> was moved into
-// static files. frame-ancestors, base-uri, form-action and object-src close
-// the gaps default-src does not cover.
-const documentCSP = "default-src 'self'; script-src 'self'; " +
-	"style-src 'self'; " +
-	"font-src 'self'; img-src 'self' data:; " +
-	"object-src 'none'; base-uri 'self'; " +
-	"form-action 'self'; frame-ancestors 'none';"
-
-// apiCSP is all a JSON response needs. A document policy on one would be
+// apiCSP is all a JSON response needs: Go serves no document, so every
+// response gets the same policy. A document policy on one would be
 // intersected by the browser with nginx's policy on the SPA document.
 const apiCSP = "default-src 'none'; frame-ancestors 'none'"
 
-// SecurityHeaders adds the headers that mean something on the response type
-// each route serves. It never sends Strict-Transport-Security: on one origin
-// an API response carrying max-age=0 would clear the policy nginx sets on the
-// document, so HSTS belongs to nginx alone.
+// SecurityHeaders adds the headers every JSON response needs. It never sends
+// Strict-Transport-Security: on one origin an API response carrying
+// max-age=0 would clear the policy nginx sets on the document, so HSTS
+// belongs to nginx alone.
 func SecurityHeaders() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-Frame-Options", "DENY")
 			w.Header().Set("X-Content-Type-Options", "nosniff")
 			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-			if isAPIPath(r.URL.Path) {
-				w.Header().Set("Content-Security-Policy", apiCSP)
-			} else {
-				w.Header().Set("Content-Security-Policy", documentCSP)
-			}
+			w.Header().Set("Content-Security-Policy", apiCSP)
 			// Global, not per-route: an allowlist goes stale every time a
 			// sensitive route is added. nginx overwrites this for static
 			// assets (immutable Cache-Control on /assets/), which is
@@ -72,10 +57,6 @@ func SecurityHeaders() func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
-}
-
-func isAPIPath(p string) bool {
-	return p == apitypes.BasePath || strings.HasPrefix(p, apitypes.BasePath+"/")
 }
 
 // RequireLogin is the template-route wrapper around ValidateSession: it
