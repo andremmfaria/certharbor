@@ -9,7 +9,7 @@ Four containers, wired by `docker-compose.yml`:
 | Container | Image / build | Role |
 |---|---|---|
 | `certharbor-console` | built from `frontend/Dockerfile` | nginx, the only public origin. Terminates TLS for `WEB_HOSTNAME` with its own leaf, serves the React SPA at the root, and proxies everything else to `certharbor-control` over TLS, verifying the backend's leaf against the CA root. Holds no session or database access |
-| `certharbor-control` | built from `backend/Dockerfile` | Go binary, publishing no host port. Server-rendered HTML UI (chi router, `html/template`) plus a small versioned JSON API. Owns sessions, CSRF, rate limiting, and all step-ca/database access |
+| `certharbor-control` | built from `backend/Dockerfile` | Go binary, publishing no host port. API-only (chi router): a small versioned JSON API, no server-rendered HTML, no `html/template`. Owns sessions, CSRF, rate limiting, and all step-ca/database access |
 | `postgres` | `postgres:16-alpine` | Users, certificate history, Let's Encrypt state, notification settings, password-reset tokens |
 | `step-ca` | `smallstep/step-ca:0.30.2` (pinned via `STEP_CA_IMAGE`) | The actual PKI. certharbor-control never runs the `step` CLI against it: `backend/stepca/` wraps `github.com/smallstep/certificates/ca` and `github.com/smallstep/certificates/api` directly (pinned to the same v0.30.2), so certificate issuance and revocation are Go library calls, not shelled-out subprocesses. Renewal has no separate call path in `backend/stepca/`, it is a re-issue through the same `issueCert` helper handlers use for a fresh certificate (`backend/handlers/cert_ops.go:118`, `backend/handlers/certs.go:225-250`) |
 | `certharbor-delivery` | **planned, not yet built** | A separate worker process (no HTTP listener) that pulls renewed certificates from the existing inventory and pushes cert+chain+key to external targets (AWS ACM first) under a declarative registry. The only plane that would hold target credentials (AWS roles, kubeconfigs, SSH keys, Cloudflare tokens); `certharbor-console` and `certharbor-control` never would. See [plans/distribution.md](../plans/distribution.md) |
@@ -38,12 +38,9 @@ Four containers, wired by `docker-compose.yml`:
 
 nginx sends the prefixes in `frontend/proxy-prefixes.json` (`/api`, `/auth`, `/health`, `/ready`, `/openapi.json`) to the backend, and serves everything else from the SPA bundle at the root with an `index.html` fallback for deep links. Every proxying block includes `frontend/conf.d/proxy-headers.conf`, which replaces `X-Forwarded-For` and `X-Real-IP` with the real peer and clears `True-Client-IP` and `Forwarded`. The backend trusts that header only from the address `WEB_UPSTREAM_HOST` resolves to. nginx re-resolves `certharbor-control` per request, so a restarted backend is followed without restarting nginx, and answers a problem document with type `upstream-unavailable` when the backend is unreachable.
 
-Inside `certharbor-control`, one `chi.Router` serves two things on the same port:
+Inside `certharbor-control`, one `chi.Router` serves the API only, on a single port: a versioned JSON API mounted at `/api/v1` by `humaapi.Mount` (`backend/api/`), described by an OpenAPI 3.1 document at `backend/openapi/openapi.json`. There is no server-rendered UI, no `backend/templates/`, no `html/template` — the SPA (served by `certharbor-console`/nginx, see above) is the only UI.
 
-- The server-rendered UI: `/login`, `/dashboard`, `/certificates`, `/admin/*`, `/le/*`, `/profile/*`, and so on, rendered from `backend/templates/` with `html/template`.
-- A versioned JSON API mounted at `/api/v1` by `humaapi.Mount` (`backend/api/`), described by an OpenAPI 3.1 document at `backend/openapi/openapi.json`.
-
-`/health` (liveness, always 200 while the process is up) and `/ready` (readiness, checks a database ping, step-ca reachability and both TLS leaves, reporting each leaf's `notAfter`, and answers 503 with a body naming what failed, including the self-signed fallback marker, a missing web leaf, or a leaf overdue for renewal) sit outside both, unauthenticated.
+`/health` (liveness, always 200 while the process is up) and `/ready` (readiness, checks a database ping, step-ca reachability and both TLS leaves, reporting each leaf's `notAfter`, and answers 503 with a body naming what failed, including the self-signed fallback marker, a missing web leaf, or a leaf overdue for renewal) sit outside the versioned API, unauthenticated.
 
 ## Roles
 
