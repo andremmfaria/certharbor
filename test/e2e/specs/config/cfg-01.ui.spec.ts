@@ -1,89 +1,51 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { expect, test } from "@playwright/test";
-import { BASE_URL } from "../../helpers/env.js";
+import { BASE_URL, REPO_ROOT } from "../../helpers/env.js";
 import { adminCredentials } from "../../fixtures/test.js";
 
-/**
- * The CSP header is compared exactly in `api`. That proves the policy is the
- * intended string; it cannot prove the intended string does not block an asset
- * a page actually needs. A directive that breaks a stylesheet changes no
- * status code and no header, so it is invisible to every request-level check.
- *
- * This loads each page template with a browser and asserts zero console errors
- * and zero securitypolicyviolation events.
- */
-const PAGES = [
-  "/",
-  "/certificates",
-  "/issue",
-  "/import",
-  "/provisioners",
-  "/history",
-  "/profile",
-  "/profile/2fa",
-  "/admin",
-  "/admin/users",
-  "/admin/users-temp",
-  "/admin/activity",
-  "/admin/security",
-  "/admin/console",
-  "/admin/about",
-  "/admin/integrity",
-  "/admin/backup",
-  "/admin/notifications",
-  "/le",
-  "/le/issue",
-  "/le/settings",
-  "/le/logs",
-];
+interface Route { layout: string; name: string; smokePath: string }
 
-test.describe("E2E-CFG-01: the CSP blocks nothing a page needs", () => {
-  test.beforeEach(async ({ page }) => {
-    const { username, password } = adminCredentials();
-    await page.goto(`${BASE_URL}/login`);
-    await page.fill('input[name="username"]', username);
-    await page.fill('input[name="password"]', password);
-    await Promise.all([
-      page.waitForURL(/\/(?!login)/),
-      page.click('button[type="submit"], input[type="submit"]'),
-    ]);
-  });
+function spaRoutes(): Route[] {
+  const source = fs.readFileSync(path.join(REPO_ROOT, "frontend", "src", "routes", "routeList.ts"), "utf8");
+  const routes: Route[] = [];
+  for (const call of source.matchAll(/^\s*entry\((.*)\),\s*$/gm)) {
+    const values = [...(call[1] ?? "").matchAll(/'([^']*)'|"([^"]*)"|undefined/g)].map((m) => m[1] ?? m[2] ?? "");
+    const [layout, routePath, name, , , smoke] = values;
+    if (layout === "auth" || !routePath || !name) continue;
+    routes.push({ layout: layout!, name: name!, smokePath: smoke || routePath });
+  }
+  expect(routes.length, "routeList supplies SPA application routes").toBeGreaterThan(20);
+  return routes;
+}
 
-  for (const path of PAGES) {
-    test(`E2E-CFG-01: ${path} loads with no console error and no CSP violation`, async ({ page }) => {
-      const consoleErrors: string[] = [];
-      const violations: string[] = [];
+async function signIn(page: import("@playwright/test").Page): Promise<void> {
+  const { username, password } = adminCredentials();
+  await page.goto(`${BASE_URL}/login`);
+  await page.getByLabel("Username").fill(username);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: /Sign In/ }).click();
+  await expect(page.getByTestId("page-dashboard")).toBeVisible();
+}
 
-      page.on("console", (msg) => {
-        if (msg.type() === "error") consoleErrors.push(msg.text());
-      });
-      // pageerror catches an uncaught exception, which a blocked inline script
-      // produces without ever reaching the console listener above.
-      page.on("pageerror", (err) => consoleErrors.push(String(err)));
-
-      // The violation event fires in the page, so the collector has to exist
-      // before navigation rather than being read afterwards.
+test.describe("E2E-CFG-01: the CSP blocks no current SPA route", () => {
+  for (const route of spaRoutes()) {
+    test(`${route.smokePath} renders without CSP violations or console errors`, async ({ page }) => {
+      const errors: string[] = [];
+      await signIn(page);
+      page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+      page.on("pageerror", (error) => errors.push(error.message));
       await page.addInitScript(() => {
-        (window as unknown as { __cspViolations: string[] }).__cspViolations = [];
-        document.addEventListener("securitypolicyviolation", (e) => {
-          const ev = e as SecurityPolicyViolationEvent;
-          (window as unknown as { __cspViolations: string[] }).__cspViolations.push(
-            `${ev.violatedDirective} blocked ${ev.blockedURI}`,
-          );
+        (window as unknown as { violations: string[] }).violations = [];
+        document.addEventListener("securitypolicyviolation", (event) => {
+          (window as unknown as { violations: string[] }).violations.push(`${event.violatedDirective} ${event.blockedURI}`);
         });
       });
-
-      const res = await page.goto(`${BASE_URL}${path}`, { waitUntil: "networkidle" });
-      expect(res?.status(), `${path} should render for an admin`).toBeLessThan(400);
-      expect(page.url(), `${path} should not bounce to /login`).not.toContain("/login");
-
-      violations.push(
-        ...(await page.evaluate(
-          () => (window as unknown as { __cspViolations?: string[] }).__cspViolations ?? [],
-        )),
-      );
-
-      expect(violations, `${path} triggered CSP violations`).toEqual([]);
-      expect(consoleErrors, `${path} logged console errors`).toEqual([]);
+      const response = await page.goto(`${BASE_URL}${route.smokePath}`, { waitUntil: "networkidle" });
+      expect(response?.status()).toBe(200);
+      await expect(page.getByTestId(`page-${route.name}`)).toBeVisible();
+      expect(await page.evaluate(() => (window as unknown as { violations: string[] }).violations)).toEqual([]);
+      expect(errors).toEqual([]);
     });
   }
 });

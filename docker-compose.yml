@@ -110,8 +110,8 @@ services:
       # fatal. An empty one trusts whatever WEB_UPSTREAM_HOST resolves to.
       TRUST_PROXY:         "${TRUST_PROXY:-true}"
       TRUSTED_PROXY_CIDRS: "${TRUSTED_PROXY_CIDRS:-}"
-      # Both name nginx's published origin and never a path under /app/:
-      # reset links are emailed and the redirect URI is registered with the IdP.
+      # Both name nginx's published origin with no path: reset links are
+      # emailed and the redirect URI is registered with the IdP.
       PUBLIC_BASE_URL:    "${PUBLIC_BASE_URL:-}"
       OIDC_REDIRECT_URL:  "${OIDC_REDIRECT_URL:-}"
       OIDC_ENABLED:       "${OIDC_ENABLED:-false}"

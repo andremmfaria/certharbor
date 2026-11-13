@@ -63,7 +63,7 @@ async function collectViolations(page: Page): Promise<string[]> {
 }
 
 test.describe.serial("the SPA through the origin", () => {
-  test("E2E-SPA-01: log in at /app/, navigate, hard-refresh a deep link, log out", async ({ page }) => {
+  test("E2E-SPA-01: log in, navigate, hard-refresh a deep link, log out", async ({ page }) => {
     const { username, password } = adminCredentials();
 
     const loginResponse = page.waitForResponse((r) => r.url().endsWith("/api/v1/session") && r.request().method() === "POST");

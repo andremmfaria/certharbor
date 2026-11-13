@@ -14,8 +14,6 @@ import (
 
 	"certharbor/config"
 	"certharbor/stepca"
-
-	appdb "certharbor/db"
 )
 
 const (
@@ -205,65 +203,6 @@ func findAdminConsoleCommand(cfg *config.Config, id string) (adminConsoleCommand
 	}
 
 	return adminConsoleCommand{}, false
-}
-
-// AdminConsoleGet renders the diagnostics console form.
-func (h *Handler) AdminConsoleGet(w http.ResponseWriter, r *http.Request) {
-	h.render(w, "admin_console", h.adminConsolePageData(w, r, "", nil))
-}
-
-// AdminConsolePost runs the selected allowlisted command and renders the result.
-func (h *Handler) AdminConsolePost(w http.ResponseWriter, r *http.Request) {
-	if !h.requireCSRF(w, r, "/admin/console") {
-		return
-	}
-
-	commandID := strings.TrimSpace(r.FormValue("command_id"))
-	// nil on error is fine, native commands report it as their result text
-	caClient, _ := h.caClient()
-
-	c, ok := findAdminConsoleCommand(h.cfg, commandID)
-	if !ok {
-		h.auditSecurity(r, "console.denied command_id="+commandID)
-		data := h.adminConsolePageData(w, r, commandID, nil)
-		data["ConsoleError"] = "Unknown command. Only allowlisted commands may be run."
-		h.render(w, "admin_console", data)
-
-		return
-	}
-
-	result := runAdminConsoleCommand(r.Context(), &c, caClient)
-	h.auditSecurity(r, fmt.Sprintf(
-		"console.run id=%s command=%q exit=%d timeout=%t duration=%s",
-		c.ID, result.CommandLine, result.ExitCode, result.TimedOut, result.Duration,
-	))
-
-	h.render(w, "admin_console", h.adminConsolePageData(w, r, commandID, &result))
-}
-
-// adminConsolePageData builds the template data map for the console page.
-func (h *Handler) adminConsolePageData(
-	w http.ResponseWriter,
-	r *http.Request,
-	selectedID string,
-	result *adminConsoleResult,
-) map[string]interface{} {
-	data := h.base(w, r, "admin_console")
-	data["Commands"] = adminConsoleCommands(h.cfg)
-	data["Timeout"] = adminConsoleTimeout.String()
-	data["MaxOutputKB"] = adminConsoleMaxOut / 1024
-	data["SelectedCommandID"] = selectedID
-
-	if result != nil {
-		data["Result"] = result
-	}
-
-	si := h.sessionInfo(r)
-	if u, err := appdb.GetUserByID(h.db, si.UserID); err == nil && u != nil {
-		data["TOTPEnabled"] = u.TOTPEnabled
-	}
-
-	return data
 }
 
 // runAdminConsoleCommand executes a single allowlisted command under a fixed

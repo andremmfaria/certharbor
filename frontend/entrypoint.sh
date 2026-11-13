@@ -17,8 +17,7 @@ NGINX_CONF=/etc/nginx/nginx.conf
 HSTS_CONF=/etc/nginx/conf.d/hsts.conf
 DOC_HEADERS_TEMPLATE=/etc/certharbor/doc-headers.conf.template
 DOC_HEADERS_CONF=/etc/nginx/conf.d/doc-headers.conf
-# PHASE9-DELETE: /usr/share/nginx/html/index.html once the SPA owns the root.
-INDEX_HTML=/usr/share/nginx/html/app/index.html
+INDEX_HTML=/usr/share/nginx/html/index.html
 # Seconds to let a renewal finish writing both files before hashing them.
 SETTLE=1
 

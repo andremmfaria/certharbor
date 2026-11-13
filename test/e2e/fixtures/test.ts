@@ -4,7 +4,8 @@ import { psql } from "../helpers/compose.js";
 import {
   Credentials,
   Role,
-  csrfTokenFrom,
+  apiMutation,
+  csrfToken,
   loginOrThrow,
   newJar,
   withLazyReauth,
@@ -36,7 +37,7 @@ async function authed(creds: Credentials): Promise<AuthedContext> {
     ctx,
     creds,
     send: (fn) => withLazyReauth(ctx, creds, fn),
-    csrf: (url) => csrfTokenFrom(ctx, url),
+    csrf: () => csrfToken(ctx),
   };
 }
 
@@ -51,13 +52,10 @@ export async function createUser(
   password: string,
   role: Role,
 ): Promise<Credentials> {
-  const token = await admin.csrf("/admin/users");
   const res = await admin.send(() =>
-    admin.ctx.post("/admin/users", {
-      form: { action: "create", username, password, role, csrf_token: token },
-    }),
+    apiMutation(admin.ctx, "POST", "/api/v1/users", { username, password, role }),
   );
-  if (res.status() !== 302 && res.status() !== 303) {
+  if (res.status() !== 201) {
     throw new Error(`creating ${role} ${username} returned ${res.status()}: ${(await res.text()).slice(0, 300)}`);
   }
   return { username, password };

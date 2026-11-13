@@ -124,7 +124,7 @@ Every variable below is read in `backend/config/config.go` unless noted otherwis
 | `TRUSTED_PROXY_CIDRS` | empty | Yes | Comma-separated CIDR blocks of trusted proxies, used verbatim when set. When empty, the backend resolves `WEB_UPSTREAM_HOST` instead and trusts exactly the addresses it returns, re-resolving every 5 seconds. **Failure mode:** a malformed entry is a startup fatal. A list wider than the proxy's own address lets anything inside it choose its recorded address |
 | `WEB_UPSTREAM_HOST` | `certharbor-console` | Yes | The proxy's name to resolve when `TRUSTED_PROXY_CIDRS` is empty. Resolution is not a startup fatal, because nginx only starts once the backend is healthy, so its name never resolves at boot. **Failure mode:** while the name does not resolve, forwarding headers are ignored (a warning is logged on the first failure and every minute after), so behind a misnamed proxy every client is recorded as the proxy's address |
 | `ALLOWED_DOMAIN_SUFFIXES` | empty (unrestricted) | **No**, only in `compose.e2e-config.yml` | Comma-separated domain suffixes the UI will request a signature for (internal issuance, renewal and the Let's Encrypt path). Matched on label boundaries. This is not an X.509 name constraint: a caller talking to step-ca directly bypasses it |
-| `PUBLIC_BASE_URL` | unset | Yes | Externally reachable origin, e.g. `https://ca.example.com`. **Required for password recovery**, emailed links are built from this and never from the request. Behind nginx it must name nginx's published origin, the same host as `WEB_HOSTNAME`, with no path: the reset link targets `/reset-password` at the root, never under `/app/`. **Failure mode:** unset means reset emails are not sent, and a path under `/app/` would break every link already emailed once the SPA moves to the root |
+| `PUBLIC_BASE_URL` | unset | Yes | Externally reachable origin, e.g. `https://ca.example.com`. **Required for password recovery**, emailed links are built from this and never from the request. Behind nginx it must name nginx's published origin, the same host as `WEB_HOSTNAME`, with no path: the reset link targets `/reset-password` at the root. **Failure mode:** unset means reset emails are not sent |
 
 ### Web origin (nginx)
 
@@ -132,7 +132,7 @@ Every variable below is read in `backend/config/config.go` unless noted otherwis
 
 These keys are read by `backend/config/config.go` (the `WEB_TLS_MODE`, `WEB_HOSTNAME` and `WEB_UPSTREAM_HOST` rows), by `frontend/entrypoint.sh`, or by `docker-compose.yml` itself.
 
-nginx serves the SPA under `/app/` and proxies `/api/`, `/auth/`, `/health`, `/ready` and `/openapi.json` (the list in `frontend/proxy-prefixes.json`, which the Vite dev proxy reads too) to the backend. Every other path, the server-rendered pages and `/static/` included, goes to the backend through a passthrough block marked `PHASE9-DELETE`, which is removed once the SPA owns the root. `/reset-password` and the OIDC callback stay at the root after that too. Response headers from the backend may total 16 KiB (`proxy_buffer_size`), enough for three 4 KiB cookies on one redirect.
+nginx serves the SPA at the root and proxies `/api/`, `/auth/`, `/health`, `/ready` and `/openapi.json` (the list in `frontend/proxy-prefixes.json`, which the Vite dev proxy reads too) to the backend. `/reset-password` and the OIDC callback stay at the root too. Response headers from the backend may total 16 KiB (`proxy_buffer_size`), enough for three 4 KiB cookies on one redirect.
 
 | Variable | Default | In compose | Description |
 |---|---|---|---|
@@ -168,7 +168,7 @@ nginx serves the SPA under `/app/` and proxies `/api/`, `/auth/`, `/health`, `/r
 | `OIDC_ISSUER_URL` | empty | Yes | Provider issuer URL |
 | `OIDC_CLIENT_ID` | empty | Yes | OAuth2 client ID from the IdP |
 | `OIDC_CLIENT_SECRET` | empty | Yes | OAuth2 client secret from the IdP |
-| `OIDC_REDIRECT_URL` | empty | Yes | Must be `https://<WEB_HOSTNAME>[:<UI_HTTPS_PORT>]/auth/oidc/callback`, on nginx's published origin and never under `/app/`, since the IdP holds the registered value |
+| `OIDC_REDIRECT_URL` | empty | Yes | Must be `https://<WEB_HOSTNAME>[:<UI_HTTPS_PORT>]/auth/oidc/callback`, on nginx's published origin, since the IdP holds the registered value |
 | `OIDC_GROUP_CLAIM` | `groups` | Yes | ID token claim that carries group membership |
 | `OIDC_GROUP_ADMIN` | empty | Yes | IdP group name mapped to `admin` |
 | `OIDC_GROUP_MANAGER` | empty | Yes | IdP group name mapped to `manager` |

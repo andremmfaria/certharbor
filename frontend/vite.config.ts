@@ -19,10 +19,9 @@ function contractSha(command: 'build' | 'serve'): string {
 }
 
 export default defineConfig(({ command }) => ({
-  // PHASE9-DELETE: '/' once the SPA owns the root. Until then the backend's
-  // server-rendered pages own every other path, and the router basename,
-  // nginx's /app/ blocks and the harness all follow this one value.
-  base: '/app/',
+  // The SPA owns the root. The router basename, nginx's fallback and the
+  // harness's base-path constant all follow this one value.
+  base: '/',
   plugins: [react(), operationTags(specPath)],
   define: {
     __CONTRACT_SHA__: JSON.stringify(contractSha(command)),

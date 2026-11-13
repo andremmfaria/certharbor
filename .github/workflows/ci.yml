@@ -54,7 +54,7 @@ jobs:
         run: go test -race -coverprofile=coverage.out ./...
 
       - name: Coverage gate
-        run: THRESHOLD=15 bash scripts/coverage-gate.sh
+        run: THRESHOLD=28 bash scripts/coverage-gate.sh
         env:
           COVERPROFILE: coverage.out
 

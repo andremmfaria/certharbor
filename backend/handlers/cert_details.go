@@ -12,17 +12,14 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net"
-	"net/http"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
 	"certharbor/models"
 
 	appdb "certharbor/db"
-	"github.com/go-chi/chi/v5"
 )
 
 // CertDetail holds parsed certificate metadata for the detail view.
@@ -55,23 +52,6 @@ type CertValidation struct {
 	Name   string
 	Status string
 	Detail string
-}
-
-// CertificateDetails renders the certificate detail and validation page.
-func (h *Handler) CertificateDetails(w http.ResponseWriter, r *http.Request) {
-	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
-	c, _ := appdb.GetCert(h.db, id)
-	if c == nil {
-		http.NotFound(w, r)
-		return
-	}
-
-	detail, validations := h.buildCertDetail(c)
-	data := h.base(w, r, "certs")
-	data["Cert"] = c
-	data["Detail"] = detail
-	data["Validations"] = validations
-	h.render(w, "certificate_detail", data)
 }
 
 // FetchCertificateDetail is the data half of CertificateDetails (the HTML

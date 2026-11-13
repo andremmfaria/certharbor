@@ -18,30 +18,17 @@ export async function newJar(baseURL = BASE_URL): Promise<APIRequestContext> {
 }
 
 /**
- * The CSRF token a server-rendered page embeds, for the specs that post its
- * form. Those pages leave with their template routes, and nothing a fixture
- * needs depends on them (see loginOrThrow).
+ * Mints the session-bound CSRF pair through GET /api/v1/session. There is no
+ * server-rendered document route left to scrape a token from (Phase 9
+ * deleted /login along with every other template route, main.go no longer
+ * registers it), so every caller gets its token this same way.
  */
-export async function csrfTokenFrom(ctx: APIRequestContext, url: string): Promise<string> {
-  const res = await ctx.get(url);
-  const body = await res.text();
-  return extractCSRF(body, url);
-}
-
-export function extractCSRF(html: string, whence = "<page>"): string {
-  const m = /name="csrf_token"\s+value="([^"]+)"/.exec(html);
-  if (!m || !m[1]) {
-    throw new Error(`no csrf_token rendered in ${whence}; body starts: ${html.slice(0, 400)}`);
+export async function csrfTokenFrom(ctx: APIRequestContext): Promise<string> {
+  const res = await ctx.get("/api/v1/session");
+  if (res.status() !== 200) {
+    throw new Error(`GET /api/v1/session for CSRF returned ${res.status()}: ${(await res.text()).slice(0, 400)}`);
   }
-  return m[1];
-}
-
-/** The server-rendered login form, for the specs that assert its own behaviour (re-render, flash, rate limit). */
-export async function login(ctx: APIRequestContext, creds: Credentials): Promise<APIResponse> {
-  const token = await csrfTokenFrom(ctx, "/login");
-  return ctx.post("/login", {
-    form: { username: creds.username, password: creds.password, csrf_token: token },
-  });
+  return csrfToken(ctx);
 }
 
 /**
@@ -76,8 +63,22 @@ export async function loginOrThrow(ctx: APIRequestContext, creds: Credentials): 
   }
 }
 
+export async function apiMutation(
+  ctx: APIRequestContext,
+  method: "POST" | "PUT" | "PATCH" | "DELETE",
+  url: string,
+  data: unknown = {},
+  token?: string,
+): Promise<APIResponse> {
+  return ctx.fetch(url, {
+    method,
+    data,
+    headers: { "X-CSRF-Token": token ?? (await csrfToken(ctx)) },
+  });
+}
+
 export async function logout(ctx: APIRequestContext): Promise<APIResponse> {
-  return ctx.delete("/api/v1/session", { headers: { "X-CSRF-Token": await csrfToken(ctx) } });
+  return apiMutation(ctx, "DELETE", "/api/v1/session");
 }
 
 /**

@@ -2752,7 +2752,7 @@ All 83 tests, sorted by ID. "Stack" is the CI job or nightly leg that runs it.
 | E2E-LE-03 | auto-renew toggle and delete | nightly | nightly `le` | 3.14 |
 | E2E-LE-04 | DNS-provider credentials are never echoed to the client | nightly | nightly `le` | 3.14 |
 | E2E-NOTIF-01 | notification settings round-trip and test send | nightly | nightly `oidc-mail` | 3.15 |
-| E2E-ORIGIN-01 | every server-rendered route and `/static` asset reaches the backend through the origin | PR | `e2e-main` | 3.16 |
+| E2E-ORIGIN-01 | **retired, Phase 9.** asserted every server-rendered route and `/static` asset reached the backend through the origin; both are gone with the template routes | — | — | 3.16 |
 | E2E-PROV-01 | the provisioner list matches the CA's own configuration | PR | `e2e-main` | 3.5 |
 | E2E-PROV-02 | the page degrades rather than failing when the CA is unreachable | PR | `e2e-main` | 3.5 |
 | E2E-RBAC-01 | the route-by-role matrix, driven as data | PR | `e2e-main` | 3.3 |
@@ -2764,10 +2764,10 @@ All 83 tests, sorted by ID. "Stack" is the CI job or nightly leg that runs it.
 | E2E-SEC-04 | the log artifact is safe to publish | PR | `e2e-main` | 3.6 |
 | E2E-SEC-05 | the backup bundle is CA-key-equivalent and gated accordingly | PR | `e2e-main` | 3.6 |
 | E2E-SEC-06 | sensitive pages are not cacheable | PR | `e2e-main` | 3.6 |
-| E2E-SPA-01 | log in at `/app/`, navigate, hard-refresh a deep link, log out | PR | `e2e-main` | 3.16 |
+| E2E-SPA-01 | log in, navigate, hard-refresh a deep link, log out | PR | `e2e-main` | 3.16 |
 | E2E-SPA-02 | a refresh mid-MFA resumes on the code step | PR | `e2e-main` | 3.16 |
 | E2E-SPA-03 | with the backend stopped the API answers problem+json and the SPA renders the unavailable state | PR | `e2e-main` | 3.16 |
-| E2E-STATIC-01 | static assets are served with correct MIME types and resist traversal | PR | `e2e-main` | 3.12 |
+| E2E-STATIC-01 | **retired, Phase 9.** static assets were served with correct MIME types and resisted traversal, against `mimeByExt`/`staticHandlerFromFS`, which Phase 9 deletes | — | — | 3.12 |
 | E2E-TEMP-01 | a temporary user is handed over by one-shot token and expires on the ticker | PR | `e2e-main` | 3.13 |
 | E2E-TEMP-02 | an expired temporary admin loses access immediately | PR | `e2e-main` | 3.13 |
 
@@ -3020,3 +3020,13 @@ jobs:
 `scenario.sh` generates and exports `CERTHARBOR_ADMIN_PASSWORD` for every scenario except `fatals` case (b), which requires it absent. That is why the bootstrap job's secret step does not append it to `.env` the way `e2e-main`'s does.
 
 The nightly workflow is the same shape with `on: schedule`, a four-value `leg` matrix (`renew`, `oidc-mail`, `le`, `bootstrap-extra`), and a final `report` job with `if: failure()` that opens or updates a single tracking issue.
+
+## Appendix C: test ID contract changes by phase
+
+Per Section 10, each phase that changes a test's target, path, or contract records it here. Phases 4-8 did not append entries when they should have; that backlog is not backfilled by this entry — see the phase's own closeout note for the gap.
+
+| Phase | Test ID(s) | Change | New shape |
+|---|---|---|---|
+| 9 | E2E-STATIC-01 | retired, not repathed | the Go handler it tested (`staticHandlerFromFS`, `mimeByExt`) no longer exists; no replacement test, nothing left to assert |
+| 9 | E2E-ORIGIN-01 | retired, not repathed | asserted server-rendered routes and `/static` reached the backend through the origin; both the routes and `/static` are gone with the template routes |
+| 9 | E2E-SPA-01, E2E-SPA-02, E2E-SPA-03, CSP-01 | repathed | SPA base path flipped `/app/` → `/`; `CSP-01`'s `SPA_BASE` constant updated to match. Code change already landed; this row is the doc record only |

@@ -45,13 +45,11 @@ test.describe("E2E-AUTH-16: the default role applies, and a disabled sync does n
 
       // ── A manual promotion survives a login once sync is off ─────────────
       const id = await psql(`SELECT id FROM users WHERE username = '${username}'`);
-      const token = await admin.csrf("/admin/users");
+      const csrf = await admin.csrf("");
       const promoted = await admin.send(() =>
-        admin.ctx.post("/admin/users", {
-          form: { action: "change_role", user_id: id, role: "manager", csrf_token: token },
-        }),
+        admin.ctx.patch(`/api/v1/users/${id}`, { data: { role: "manager" }, headers: { "X-CSRF-Token": csrf } }),
       );
-      expect([302, 303]).toContain(promoted.status());
+      expect(promoted.status()).toBe(200);
       expect(await psql(`SELECT role FROM users WHERE username = '${username}'`)).toBe("manager");
 
       // A restart would not apply the change: the value is read at startup, so

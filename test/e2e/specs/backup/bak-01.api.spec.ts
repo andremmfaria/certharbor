@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { psql, run } from "../../helpers/compose.js";
+import { apiMutation } from "../../helpers/session.js";
 import { expect, test } from "../../fixtures/test.js";
 
 interface BackupComponent {
@@ -17,6 +18,12 @@ interface Manifest {
   warnings?: string[];
 }
 
+interface Backup {
+  id: string;
+  sizeBytes: number;
+  downloadUrl: string;
+}
+
 // Must not run against compose.e2e-fingerprint.yml, which removes /home/step
 // and with it the step-ca-data component (Section 2.7.1).
 test("E2E-BAK-01: the bundle is valid, complete and self-verifying", async ({ admin }) => {
@@ -28,13 +35,23 @@ test("E2E-BAK-01: the bundle is valid, complete and self-verifying", async ({ ad
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "e2e-backup-"));
 
   try {
-    const token = await admin.csrf("/admin/backup");
-    const res = await admin.send(() => admin.ctx.post("/admin/backup/download", { form: { csrf_token: token } }));
+    // API contract is create-then-download, rather than the removed form POST
+    // which streamed an archive immediately.
+    const created = await admin.send(() => apiMutation(admin.ctx, "POST", "/api/v1/admin/backups"));
+    // createBackup's registration sets DefaultStatus: http.StatusCreated
+    // (backend/api/register.go) — 201 is correct for a creation endpoint,
+    // and nothing in plans/frontend-backend-split.md's endpoint map (5.7,
+    // Section 6) specifies 200 here.
+    expect(created.status()).toBe(201);
+    const backup = (await created.json()) as Backup;
+    expect(backup.id).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(backup.sizeBytes).toBeGreaterThan(0);
+    expect(backup.downloadUrl).toBe(`/api/v1/admin/backups/${backup.id}/download`);
+
+    const res = await admin.send(() => admin.ctx.get(backup.downloadUrl));
     expect(res.status()).toBe(200);
     expect(res.headers()["content-type"]).toBe("application/gzip");
-    expect(res.headers()["content-disposition"]).toMatch(
-      /^attachment; filename="certharbor-backup-[0-9A-Za-z_-]+\.tgz"$/,
-    );
+    expect(res.headers()["content-disposition"]).toBe(`attachment; filename="${backup.id}.tgz"`);
 
     const bundle = path.join(dir, "backup.tgz");
     await fs.writeFile(bundle, await res.body());
@@ -42,14 +59,7 @@ test("E2E-BAK-01: the bundle is valid, complete and self-verifying", async ({ ad
     const listed = await run(["tar", "tzf", bundle], { timeoutMs: 60_000 });
     expect(listed.code, `tar tzf: ${listed.stderr}`).toBe(0);
     const entries = listed.stdout.split("\n").map((l) => l.trim()).filter(Boolean);
-    for (const expected of [
-      "manifest.json",
-      "postgres-certharbor.sql",
-      "step-ca-data.tgz",
-      "certharbor-data.tgz",
-      "certharbor-certs.tgz",
-      "certharbor-uploads.tgz",
-    ]) {
+    for (const expected of ["manifest.json", "postgres-certharbor.sql", "step-ca-data.tgz", "certharbor-data.tgz", "certharbor-certs.tgz", "certharbor-uploads.tgz"]) {
       expect(entries, `${expected} is in the bundle`).toContain(expected);
     }
 
@@ -60,17 +70,9 @@ test("E2E-BAK-01: the bundle is valid, complete and self-verifying", async ({ ad
 
     const manifest = JSON.parse(await fs.readFile(path.join(extracted, "manifest.json"), "utf8")) as Manifest;
     expect(manifest.format).toBe("certharbor-backup-v1");
-
-    // /home/step is mounted read-only and certharbor runs as uid 10001, so the
-    // step-ca-data walk aborts on EACCES and never becomes a component.
-    expect(manifest.components.map((c) => c.name).sort()).toEqual(
-      ["postgres", "certharbor-certs", "certharbor-data", "certharbor-uploads"].sort(),
-    );
+    expect(manifest.components.map((c) => c.name).sort()).toEqual(["postgres", "certharbor-certs", "certharbor-data", "certharbor-uploads"].sort());
     expect(manifest.warnings ?? []).toEqual(["step-ca-data failed: open /home/step/config: permission denied"]);
 
-    // The only assertion in this suite that is fully independent of the code
-    // under test: the digest is re-derived from the artifact rather than the
-    // application being asked to confirm its own claim.
     for (const component of manifest.components) {
       expect(component.status, `${component.name} status`).toBe("ok");
       const bytes = await fs.readFile(path.join(extracted, path.basename(component.path)));
@@ -78,12 +80,6 @@ test("E2E-BAK-01: the bundle is valid, complete and self-verifying", async ({ ad
       expect(digest, `${component.name} (${component.path}) digest matches the manifest`).toBe(component.sha256);
     }
 
-    // Present but incomplete, not absent: WalkDir visits /home/step lexically
-    // and aborts on the EACCES reading config/, so writeDirTGZ flushes what it
-    // archived. The plan's calibration says config/ is absent; what is actually
-    // in the tarball is the bare config/ directory entry with nothing under it,
-    // since the header is written before the read that fails. secrets/, which
-    // sorts after config/, is never reached at all.
     const partial = await run(["tar", "tzf", path.join(extracted, "step-ca-data.tgz")], { timeoutMs: 60_000 });
     expect(partial.code, `step-ca-data.tgz is a readable tarball: ${partial.stderr}`).toBe(0);
     const inner = partial.stdout.split("\n").map((l) => l.trim()).filter(Boolean);
@@ -93,14 +89,11 @@ test("E2E-BAK-01: the bundle is valid, complete and self-verifying", async ({ ad
 
     const dump = await fs.readFile(path.join(extracted, "postgres-certharbor.sql"), "utf8");
     for (const table of ["certificates", "users", "cert_history"]) {
-      expect(
-        new RegExp(`(COPY|INSERT INTO) (public\\.)?${table}\\b`).test(dump),
-        `the dump carries ${table} as plain SQL`,
-      ).toBe(true);
+      expect(new RegExp(`(COPY|INSERT INTO) (public\\.)?${table}\\b`).test(dump), `the dump carries ${table} as plain SQL`).toBe(true);
     }
 
-    const audited = await psql("SELECT count(*) FROM auth_log WHERE reason LIKE '%backup.download filename=%'");
-    expect(Number(audited), "the download is audited").toBeGreaterThan(0);
+    const audited = await psql(`SELECT count(*) FROM auth_log WHERE reason = 'Audit: backup.create id=${backup.id}'`);
+    expect(Number(audited), "the create is audited").toBeGreaterThan(0);
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }

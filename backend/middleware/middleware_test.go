@@ -117,59 +117,18 @@ func TestSecurityHeaders_NoHSTSAnywhere(t *testing.T) {
 	}
 }
 
-// TestSecurityHeaders_APIScopedCSP: no /api/v1 response carries the document
-// policy, and the template routes keep it.
+// TestSecurityHeaders_APIScopedCSP: every response, regardless of path,
+// carries apiCSP. Go serves no document, so there is no second policy to
+// scope away from.
 func TestSecurityHeaders_APIScopedCSP(t *testing.T) {
 	handler := SecurityHeaders()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
-	cases := map[string]string{
-		"/api/v1":            apiCSP,
-		"/api/v1/session":    apiCSP,
-		"/api/v1/x/y":        apiCSP,
-		"/":                  documentCSP,
-		"/login":             documentCSP,
-		"/api/status":        documentCSP,
-		"/api/v10/lookalike": documentCSP,
-	}
-	for path, want := range cases {
+	for _, path := range []string{"/api/v1", "/api/v1/session", "/api/v1/x/y", "/", "/health"} {
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, newReq("GET", path))
-		if got := rr.Header().Get("Content-Security-Policy"); got != want {
-			t.Errorf("%s: CSP %q want %q", path, got, want)
-		}
-	}
-}
-
-func TestSecurityHeaders_CSP(t *testing.T) {
-	handler := SecurityHeaders()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	req := newReq("GET", "/")
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-
-	csp := rr.Header().Get("Content-Security-Policy")
-	if csp == "" {
-		t.Fatal("Content-Security-Policy header missing")
-	}
-	// unsafe-inline must not appear in script-src (P2-3 requirement).
-	for _, tok := range []string{
-		"script-src 'self'",
-		"object-src 'none'",
-		"base-uri 'self'",
-		"form-action 'self'",
-		"frame-ancestors 'none'",
-	} {
-		found := false
-		for i := range len(csp) - len(tok) + 1 {
-			if csp[i:i+len(tok)] == tok {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("CSP %q missing expected token %q", csp, tok)
+		if got := rr.Header().Get("Content-Security-Policy"); got != apiCSP {
+			t.Errorf("%s: CSP %q want %q", path, got, apiCSP)
 		}
 	}
 }

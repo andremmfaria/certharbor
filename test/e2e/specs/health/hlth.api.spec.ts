@@ -148,9 +148,16 @@ test("E2E-HLTH-05: /ready reports the database down", async ({ admin }) => {
   // A session established before the outage and left untouched throughout it.
   // The one that is used during the outage is destroyed by rejectSession, so
   // only an untouched session can show that a cookie survives the outage.
+  // GET /api/v1/dashboard replaces the legacy GET /dashboard page: both sit
+  // behind RequireLogin's API-side equivalent (sessionMiddleware), but the
+  // API answers a rejected session with 401, never a 302 to a /login page
+  // that no longer exists (api/middleware.go:70-84).
   const untouched = await newJar();
   await loginOrThrow(untouched, admin.creds);
-  expect((await untouched.get("/dashboard")).status(), "the untouched session works before the outage").toBe(200);
+  expect(
+    (await untouched.get("/api/v1/dashboard")).status(),
+    "the untouched session works before the outage",
+  ).toBe(200);
 
   try {
     await composeOrThrow("stop", "postgres");
@@ -164,12 +171,12 @@ test("E2E-HLTH-05: /ready reports the database down", async ({ admin }) => {
     expect(observed.body.status).toBe("not ready");
     expect(observed.body.db).toBe("unreachable");
 
-    // Fail-closed by design: RequireLogin re-reads the user row on every
-    // request and treats a load error as a rejected session, so an outage logs
-    // everyone out rather than serving stale sessions.
-    const authed = await admin.ctx.get("/dashboard");
-    expect(authed.status(), "an authenticated request during the outage").toBe(302);
-    expect(authed.headers()["location"]).toBe("/login");
+    // Fail-closed by design: sessionMiddleware's ValidateSession call
+    // re-reads the user row on every request and treats a load error as a
+    // rejected session, so an outage logs everyone out rather than serving
+    // stale sessions.
+    const authed = await admin.ctx.get("/api/v1/dashboard");
+    expect(authed.status(), "an authenticated request during the outage").toBe(401);
   } finally {
     await composeOrThrow("start", "postgres");
     await waitHealthy("postgres");
@@ -183,14 +190,14 @@ test("E2E-HLTH-05: /ready reports the database down", async ({ admin }) => {
   // cookie, so the session used during the outage is gone for good and its
   // holder must log in again. A change to leave the cookie intact through a
   // transient outage would invert this assertion.
-  const stillRejected = await admin.ctx.get("/dashboard");
-  expect(stillRejected.status(), "the session used during the outage stays dead").toBe(302);
+  const stillRejected = await admin.ctx.get("/api/v1/dashboard");
+  expect(stillRejected.status(), "the session used during the outage stays dead").toBe(401);
 
   // The untouched cookie, never presented during the outage, still works with
   // no re-login: it aged past neither the idle nor the absolute limit.
   const survivor = await pollUntil(
     "the untouched pre-outage session to work again without a re-login",
-    async () => (await untouched.get("/dashboard")).status(),
+    async () => (await untouched.get("/api/v1/dashboard")).status(),
     (s) => s === 200,
     { timeoutMs: 60_000, intervalMs: 2000 },
   );
@@ -198,37 +205,32 @@ test("E2E-HLTH-05: /ready reports the database down", async ({ admin }) => {
   await untouched.dispose();
 });
 
-test("E2E-HLTH-06: /admin/integrity tracks live CA availability and nothing else", async ({ admin }) => {
+interface IntegrityCheck {
+  name: string;
+  status: string;
+  detail: string;
+  critical: boolean;
+}
+
+interface IntegrityBody {
+  checks: IntegrityCheck[];
+  summary: { ok: number; warnings: number; errors: number };
+}
+
+test("E2E-HLTH-06: GET /api/v1/admin/integrity tracks live CA availability and nothing else", async ({ admin }) => {
   test.setTimeout(300_000);
 
-  // One <tr> per check: name in a <strong>, status as an OK/WARN/ERROR badge,
-  // detail in a <code> (templates/admin_integrity.html:97-110). Rows are split
-  // first and parsed one at a time, since a single regex over the whole page
-  // pairs one row's name with the next row's status. Three rows share the
-  // literal name "Disk space" and differ only by detail, so the list is
-  // compared by position, never by name lookup.
+  // GET /api/v1/admin/integrity replaces the removed GET /admin/integrity
+  // page (backend/api/admin.go): the same h.CAIntegrity checks, as JSON
+  // rather than scraped HTML. Captured by position, never by name lookup,
+  // since three checks share the literal name "Disk space" and differ only
+  // by detail.
   const capture = async (): Promise<string[]> => {
-    const res = await admin.send(() => admin.ctx.get("/admin/integrity"));
+    const res = await admin.send(() => admin.ctx.get("/api/v1/admin/integrity"));
     expect(res.status()).toBe(200);
-    const body = await res.text();
-    // The page renders two tables: a configuration summary first, then the
-    // checks. Only the second carries status badges, so it is selected by
-    // content rather than by position.
-    const tbody = body
-      .split("<tbody>")
-      .slice(1)
-      .map((chunk) => chunk.slice(0, chunk.indexOf("</tbody>")))
-      .find((chunk) => /<span class="badge [^"]*">(OK|WARN|ERROR)<\/span>/.test(chunk));
-    expect(tbody, "the integrity page renders a checks table with status badges").toBeTruthy();
-    return tbody!
-      .split("<tr>")
-      .slice(1)
-      .map((row) => {
-        const name = /<strong>([^<]+)<\/strong>/.exec(row)?.[1]?.trim() ?? "?";
-        const status = /<span class="badge [^"]*">(OK|WARN|ERROR)<\/span>/.exec(row)?.[1] ?? "none";
-        const detail = /<code>([\s\S]*?)<\/code>/.exec(row)?.[1]?.trim() ?? "";
-        return `${name}|${status}|${detail}`;
-      });
+    const body = (await res.json()) as IntegrityBody;
+    expect(body.checks.length, "the integrity endpoint returned no checks").toBeGreaterThan(0);
+    return body.checks.map((c) => `${c.name}|${c.status}|${c.detail}`);
   };
 
   const probe = await newJar();
@@ -254,8 +256,8 @@ test("E2E-HLTH-06: /admin/integrity tracks live CA availability and nothing else
       differing.map(({ before, after }) => `${before} => ${after}`),
       "exactly one row changes while the CA is down",
     ).toHaveLength(1);
-    expect(differing[0]!.before, "and it is Step-CA API, previously ok").toMatch(/^Step-CA API\|OK\|/);
-    expect(differing[0]!.after, "now in error").toMatch(/^Step-CA API\|ERROR\|/);
+    expect(differing[0]!.before, "and it is Step-CA API, previously ok").toMatch(/^Step-CA API\|ok\|/);
+    expect(differing[0]!.after, "now in error").toMatch(/^Step-CA API\|err\|/);
   } finally {
     await composeOrThrow("start", "step-ca");
     await waitHealthy("step-ca");

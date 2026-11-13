@@ -38,25 +38,18 @@ test.describe("E2E-AUTH-08: OIDC login against a mock IdP", () => {
 
     const result = await tamperedStateCallback(ctx, callback);
     expect(result.status).toBe(302);
-    expect(result.location, "a state mismatch goes back to /login").toBe("/login");
+    expect(result.location, "a state mismatch goes back to /login").toBe("/login?error=auth_failed");
 
-    // The flash is one-shot, so this GET both reads it and proves no session
-    // was created: an authenticated jar would not be redirected off /.
-    const afterwards = await ctx.get("/login");
-    expect(await afterwards.text()).toContain("OIDC state mismatch");
-
-    const home = await ctx.get("/", { maxRedirects: 0 });
-    expect(home.status(), "no session exists, so / redirects to /login").toBe(302);
+    // The SPA maps the closed error code; the callback never renders a flash.
+    const session = await ctx.get("/api/v1/session");
+    expect(((await session.json()) as { state: string }).state, "no session exists").toBe("anonymous");
   });
 
   test("E2E-AUTH-08: an unmapped subject with no default role is denied and creates no user row", async () => {
     const subject = "oidc-unmapped-denied";
     const result = await oidcLogin(subject, { groups: ["a-group-nothing-maps"] });
 
-    expect(result.location, "an unmapped subject is refused").toBe("/login");
-
-    const afterwards = await result.ctx.get("/login");
-    expect(await afterwards.text()).toContain("Access denied: your account is not in an authorised group");
+    expect(result.location, "an unmapped subject is refused").toBe("/login?error=denied");
 
     // Asserted directly against the table rather than inferred from the
     // redirect: a refusal that still created the row is the regression.
@@ -88,14 +81,12 @@ test.describe("E2E-AUTH-08: OIDC login against a mock IdP", () => {
     expect(first.location).toBe("/");
     expect(await psql(`SELECT role FROM users WHERE username = '${username}'`)).toBe("manager");
 
-    const token = await admin.csrf("/admin/users");
     const id = await psql(`SELECT id FROM users WHERE username = '${username}'`);
+    const csrf = await admin.csrf("");
     const changed = await admin.send(() =>
-      admin.ctx.post("/admin/users", {
-        form: { action: "change_role", user_id: id, role: "viewer", csrf_token: token },
-      }),
+      admin.ctx.patch(`/api/v1/users/${id}`, { data: { role: "viewer" }, headers: { "X-CSRF-Token": csrf } }),
     );
-    expect([302, 303]).toContain(changed.status());
+    expect(changed.status()).toBe(200);
     expect(await psql(`SELECT role FROM users WHERE username = '${username}'`)).toBe("viewer");
 
     // OIDC_SYNC_ROLE defaults to true, so the IdP is authoritative and the

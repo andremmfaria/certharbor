@@ -56,7 +56,7 @@ running_check() {
   origin() { curl -sk --max-time 10 --resolve "$host:$port:127.0.0.1" "$@"; }
 
   local want path code
-  for want in "/app/ 200" "/app/certificates/1 200" "/login 200" "/static/css/pages.css 200" "/api/v1/session 200" "/health 200" "/ready 200"; do
+  for want in "/ 200" "/certificates/1 200" "/api/v1/session 200" "/health 200" "/ready 200"; do
     path=${want% *}
     code=$(origin -o /dev/null -w '%{http_code}' "https://$host:$port$path")
     if [[ "$code" != "${want#* }" ]]; then
@@ -64,12 +64,12 @@ running_check() {
       status=1
     fi
   done
-  if ! origin "https://$host:$port/app/" | grep -q '<div id="root">'; then
-    echo "https://$host:$port/app/ is not the SPA shell"
+  if ! origin "https://$host:$port/" | grep -q '<div id="root">'; then
+    echo "https://$host:$port/ is not the SPA shell"
     status=1
   fi
   if [[ $status -eq 0 ]]; then
-    echo "preview: certharbor-control has no host binding, and https://$host:$port serves the SPA under /app/, the server-rendered pages and the API"
+    echo "preview: certharbor-control has no host binding, and https://$host:$port serves the SPA at the root and the API"
   fi
 }
 

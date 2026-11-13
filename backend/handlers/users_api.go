@@ -12,6 +12,10 @@ import (
 	"certharbor/security"
 )
 
+// invalidRoleMsg names the valid roles, because a rejected role is otherwise
+// a silent 400 with no indication of what was expected.
+const invalidRoleMsg = "Role must be one of: viewer, manager, admin"
+
 // ErrSelfTarget reports that an admin user-management operation was aimed at
 // the acting user's own account. DELETE /api/v1/users/{id} and PATCH
 // /api/v1/users/{id} both reject this unconditionally (Section 5.5, Section

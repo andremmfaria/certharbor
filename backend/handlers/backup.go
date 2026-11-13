@@ -203,32 +203,6 @@ func copyFile(src, dest string) error {
 	return err
 }
 
-// AdminBackupGet renders the backup download page.
-func (h *Handler) AdminBackupGet(w http.ResponseWriter, r *http.Request) {
-	h.render(w, "admin_backup", h.base(w, r, "admin_backup"))
-}
-
-// AdminBackupDownload builds a backup bundle and streams it as a .tgz download.
-func (h *Handler) AdminBackupDownload(w http.ResponseWriter, r *http.Request) {
-	if !h.requireCSRF(w, r, "/admin/backup") {
-		return
-	}
-
-	bundle, filename, err := h.buildBackupBundle(r.Context())
-	if err != nil {
-		h.flash(w, r, "err", "Failed to create backup: "+err.Error())
-		http.Redirect(w, r, "/admin/backup", http.StatusSeeOther)
-		return
-	}
-	defer func() { _ = os.RemoveAll(filepath.Dir(bundle)) }()
-
-	w.Header().Set("Content-Type", "application/gzip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	h.auditSecurity(r, "backup.download filename="+filename)
-	http.ServeFile(w, r, bundle)
-}
-
 func (h *Handler) buildBackupBundle(ctx context.Context) (string, string, error) {
 	ts := time.Now().UTC().Format("20060102T150405Z")
 	tmp, err := os.MkdirTemp("", "certharbor-backup-*")

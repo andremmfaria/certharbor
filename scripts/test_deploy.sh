@@ -131,19 +131,10 @@ check "certharbor-control publishes no host port" \
       "test -z \"\$(docker compose port certharbor-control 8443 2>/dev/null)\""
 
 check "HTTPS responds through nginx (any 2xx/3xx)"  \
-      "curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://localhost/login | grep -qE '^(200|302|303)$'"
+      "curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://localhost/ | grep -qE '^(200|302|303)$'"
 
-check "/app/ serves the SPA shell"     \
-      "curl -sk --max-time 5 https://localhost/app/ | grep -q '<div id=\"root\">'"
-
-check "/login serves HTML"            \
-      "curl -sk --max-time 5 https://localhost/login | grep -qi '<form'"
-
-check "/static/css/base.css → 200"    \
-      "curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://localhost/static/css/base.css | grep -q '^200$'"
-
-check "/static/js/datepicker.js → 200" \
-      "curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://localhost/static/js/datepicker.js | grep -q '^200$'"
+check "/ serves the SPA shell"     \
+      "curl -sk --max-time 5 https://localhost/ | grep -q '<div id=\"root\">'"
 
 check "/api/v1/session → 200"          \
       "curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://localhost/api/v1/session | grep -q '^200$'"
@@ -178,7 +169,7 @@ ${G}╔════════════════════════�
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝${X}
 
-  Visit:      https://localhost/app/ (set WEB_HOSTNAME in .env to the name other machines use)
+  Visit:      https://localhost/ (set WEB_HOSTNAME in .env to the name other machines use)
   Credentials: cat $TARGET_DIR/credentials.txt
 
   ${D}To clean up the test deployment:${X}

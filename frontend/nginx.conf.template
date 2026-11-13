@@ -88,24 +88,10 @@ http {
       return 404;
     }
 
-    # PHASE9-DELETE: becomes location /assets/ once the SPA owns the root.
-    location /app/assets/ {
+    location /assets/ {
       include conf.d/doc-headers.conf;
       add_header Cache-Control "public, max-age=31536000, immutable" always;
       try_files $uri =404;
-    }
-
-    # PHASE9-DELETE: becomes location / with try_files $uri /index.html once
-    # the SPA owns the root.
-    location /app/ {
-      include conf.d/doc-headers.conf;
-      add_header Cache-Control "no-store" always;
-      try_files $uri /app/index.html;
-    }
-
-    # PHASE9-DELETE: the SPA's base without its trailing slash.
-    location = /app {
-      return 301 /app/;
     }
 
     # Each entry of frontend/proxy-prefixes.json, the list Vite's dev proxy
@@ -138,27 +124,13 @@ http {
       error_page 502 503 504 = @apidown;
     }
 
-    # PHASE9-DELETE: the backend's server-rendered pages and /static/, which
-    # own every path the SPA does not until Phase 9. /reset-password and the
-    # OIDC callback's landing pages stay at the root here and after the flip,
-    # because the reset link is emailed and the redirect URI is registered with
-    # an IdP: neither may ever point at /app/. The backend sends its own
-    # document CSP on these pages, so doc-headers.conf is not included.
+    # The SPA owns the root: every path the proxied API regex above doesn't
+    # claim is a client-side route, served index.html so React Router (not
+    # nginx) resolves it.
     location / {
-      include conf.d/proxy-headers.conf;
-      add_header X-Content-Type-Options "nosniff" always;
-      proxy_hide_header X-Content-Type-Options;
-      client_max_body_size 8m;
-      proxy_buffering off;
-      set $backend "certharbor-control:8443";
-      proxy_pass https://$backend$request_uri;
-      proxy_ssl_trusted_certificate /etc/certharbor/ssl/root_ca.crt;
-      proxy_ssl_verify on;
-      proxy_ssl_verify_depth 2;
-      proxy_ssl_name certharbor-control;
-      proxy_ssl_server_name on;
-      proxy_ssl_protocols TLSv1.2 TLSv1.3;
-      error_page 502 503 504 = @apidown;
+      include conf.d/doc-headers.conf;
+      add_header Cache-Control "no-store" always;
+      try_files $uri /index.html;
     }
 
     location @apidown {

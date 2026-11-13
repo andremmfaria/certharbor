@@ -10,27 +10,6 @@ export interface IssueRequest {
   duration: "720h" | "4380h" | "8760h" | "87600h";
 }
 
-/** The flash IssuePost writes on success (handlers/certs.go:220). */
-export function issuedFlash(req: IssueRequest): string {
-  return `Certificate ${req.name} for ${req.domain} issued (${req.keyType})!`;
-}
-
-export async function issue(ctx: APIRequestContext, csrfToken: string, req: IssueRequest) {
-  return ctx.post("/issue", {
-    form: {
-      name: req.name,
-      domain: req.domain,
-      template: req.template,
-      key_type: req.keyType,
-      duration: req.duration,
-      csrf_token: csrfToken,
-    },
-    // RSA-4096 keygen plus the CA round trip must not be cut short by the
-    // client, or a WriteTimeout finding presents as a client timeout instead.
-    timeout: 120_000,
-  });
-}
-
 export async function certificateID(name: string): Promise<string> {
   const id = await psql(`SELECT id FROM certificates WHERE name = '${name}' ORDER BY id DESC LIMIT 1`);
   if (!id) throw new Error(`no certificates row for ${name}`);

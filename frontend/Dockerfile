@@ -88,7 +88,7 @@ FROM nginx:1.31-alpine AS runtime-base
 RUN apk upgrade --no-cache \
  && apk add --no-cache curl openssl \
  && rm -f /etc/nginx/conf.d/default.conf \
- && rm -rf /usr/share/nginx/html/* \
+ && find /usr/share/nginx/html -mindepth 1 -delete \
  && mkdir -p /etc/certharbor/ephemeral
 COPY frontend/nginx.conf.template frontend/nginx.waiting.conf.template frontend/conf.d/doc-headers.conf.template /etc/certharbor/
 COPY frontend/conf.d/proxy-headers.conf /etc/nginx/conf.d/
@@ -100,11 +100,9 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
 ENTRYPOINT ["/usr/local/bin/certharbor-console-entrypoint"]
 
 # ── make nginx-lint's fixture: the real config over a placeholder bundle ─────
-# PHASE9-DELETE: both bundles go to /usr/share/nginx/html/ once the SPA owns
-# the root. Until then it lives under /app/, Vite's base.
 FROM runtime-base AS nginx-fixture
-COPY frontend/nginx-lint/fixture-dist/ /usr/share/nginx/html/app/
+COPY frontend/nginx-lint/fixture-dist/ /usr/share/nginx/html/
 
 # ── Final image ──────────────────────────────────────────────────────────────
 FROM runtime-base
-COPY --from=build /src/frontend/dist/ /usr/share/nginx/html/app/
+COPY --from=build /src/frontend/dist/ /usr/share/nginx/html/

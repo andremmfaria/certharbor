@@ -24,7 +24,7 @@ Edit `.env`: set `HOST_IP`, `WEB_HOSTNAME`, `UI_HTTPS_PORT`, `PROVISIONER`, `TZ`
 make up      # docker compose up -d --build
 ```
 
-The UI is then at `https://<WEB_HOSTNAME>:<UI_HTTPS_PORT>/`. The SPA is served under `/app/`, and every other path, including `/login`, `/reset-password`, `/auth/oidc/callback` and `/static/`, is proxied to the backend's server-rendered pages. That split is temporary until the SPA owns the root, except that `/reset-password` and the OIDC callback stay at the root for good, because reset links are emailed and the redirect URI is registered with the IdP.
+The UI is then at `https://<WEB_HOSTNAME>:<UI_HTTPS_PORT>/`. The SPA is served at the root, and `/api/`, `/auth/`, `/health`, `/ready` and `/openapi.json` are proxied to the backend. `/reset-password` and the OIDC callback stay at the root too, because reset links are emailed and the redirect URI is registered with the IdP.
 
 Run `make help` to see every target.
 
@@ -77,7 +77,7 @@ Both are built for `linux/amd64` only, `docker-build.yml` sets no `platforms:` i
 
 `backend/Dockerfile` is a two-stage build: `golang:1.26.10-alpine3.23` compiles a static (`CGO_ENABLED=0`) binary, then `alpine:3.23` runs it as a non-root user (uid/gid `10001`). It declares `EXPOSE 8443`, a `HEALTHCHECK` that curls `https://localhost:8443/health`, `USER certharbor`, and `ENTRYPOINT ["/entrypoint.sh"]`, which builds `DATABASE_URL` from the secret file before exec-ing the Go binary. The runtime image installs `curl`, `openssl`, `ca-certificates`, `netcat-openbsd`, `tzdata` and `postgresql-client` (the last for `pg_dump` in the backup handler), and nothing named `step`: certificate issuance, renewal and revocation go through `github.com/smallstep/certificates/ca` and `.../api` directly. `openssl` stays only because the admin diagnostic console has an `openssl.version` entry.
 
-`frontend/Dockerfile` builds the TypeScript client from the committed `backend/openapi/openapi.json` and then the SPA in a `node:24-alpine3.23` stage, and copies the bundle into `nginx:1.29-alpine` at `/usr/share/nginx/html/app/`. The runtime image contains no Node. Its nginx master runs as root because it reads `web.key`, which the backend writes `0600` as uid `10001`. The root `.dockerignore` keeps `secrets/`, `.env`, `backups/` and every `node_modules/` out of that build context.
+`frontend/Dockerfile` builds the TypeScript client from the committed `backend/openapi/openapi.json` and then the SPA in a `node:24-alpine3.23` stage, and copies the bundle into `nginx:1.29-alpine` at `/usr/share/nginx/html/`. The runtime image contains no Node. Its nginx master runs as root because it reads `web.key`, which the backend writes `0600` as uid `10001`. The root `.dockerignore` keeps `secrets/`, `.env`, `backups/` and every `node_modules/` out of that build context.
 
 ```bash
 docker pull ghcr.io/kantharos-ai/certharbor-control:main

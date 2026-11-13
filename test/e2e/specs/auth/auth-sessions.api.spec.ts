@@ -1,5 +1,5 @@
 import { psql } from "../../helpers/compose.js";
-import { csrfTokenFrom, extractCSRF, loginOrThrow, newJar, sessionCookie } from "../../helpers/session.js";
+import { apiMutation, loginOrThrow, newJar, sessionCookie } from "../../helpers/session.js";
 import { AuthedContext, createUser, disposableName, expect, test } from "../../fixtures/test.js";
 
 async function userID(username: string): Promise<string> {
@@ -8,115 +8,69 @@ async function userID(username: string): Promise<string> {
   return id;
 }
 
-async function adminUserAction(admin: AuthedContext, form: Record<string, string>): Promise<void> {
-  const token = await admin.csrf("/admin/users");
-  const res = await admin.send(() => admin.ctx.post("/admin/users", { form: { ...form, csrf_token: token } }));
-  expect([200, 302, 303], `POST /admin/users ${form["action"]}`).toContain(res.status());
+async function adminPatchUser(admin: AuthedContext, id: string, body: Record<string, unknown>): Promise<void> {
+  const res = await admin.send(() =>
+    apiMutation(admin.ctx, "PATCH", `/api/v1/users/${id}`, body),
+  );
+  expect(res.status()).toBe(200);
 }
 
 test("E2E-AUTH-12: logout revokes a cookie captured before it", async ({ admin }) => {
-  // Its own admin-role subject: POST /logout bumps session_epoch for every
-  // session the acted-on user holds, which would evict the shared fixture.
   const username = disposableName("auth12");
   const password = "Auth12-e2e-Pass1!";
   await createUser(admin, username, password, "admin");
-
-  const jarA = await newJar();
+  const jar = await newJar();
+  const replay = await newJar();
   try {
-    await loginOrThrow(jarA, { username, password });
-    const captured = await sessionCookie(jarA);
+    await loginOrThrow(jar, { username, password });
+    const captured = await sessionCookie(jar);
+    expect((await replay.get("/api/v1/users", { headers: { Cookie: captured } })).status()).toBe(200);
 
-    // Positive control: without it, step 4's rejection is satisfied by a cookie
-    // that never worked in the first place.
-    const replay = await newJar();
-    const before = await replay.get("/admin", { headers: { Cookie: captured } });
-    expect(before.status(), "the captured cookie is a working credential").toBe(200);
-
-    const token = extractCSRF(await (await jarA.get("/")).text(), "inline logout form");
-    const loggedOut = await jarA.post("/logout", { form: { csrf_token: token } });
-    expect(loggedOut.status()).toBe(302);
-
-    // Logout bumps session_epoch, and RequireLogin re-reads the row on every
-    // request and rejects a cookie whose stamped epoch no longer matches.
-    const after = await replay.get("/admin", { headers: { Cookie: captured } });
-    expect(after.status(), "the captured copy is revoked too").toBe(302);
-    expect(after.headers()["location"]).toBe("/login");
-    // rejectSession empties s.Values and Saves, which re-issues the cookie with
-    // the store's normal Max-Age rather than deleting it. The observable is that
-    // the value was overwritten, not that the cookie is gone.
-    const reissued = after.headers()["set-cookie"] ?? "";
-    expect(reissued, "the response overwrites the session cookie").toContain("certharbor=");
-    expect(reissued.includes(captured.split("=").slice(1).join("=")), "with a different value").toBe(false);
-    await replay.dispose();
+    expect((await apiMutation(jar, "DELETE", "/api/v1/session")).status()).toBe(204);
+    const after = await replay.get("/api/v1/users", { headers: { Cookie: captured } });
+    expect(after.status(), "a pre-logout copy is revoked too").toBe(401);
+    const setCookie = after.headers()["set-cookie"] ?? "";
+    expect(setCookie, "the rejected cookie is overwritten").toContain(`${captured.slice(0, captured.indexOf("="))}=`);
   } finally {
-    await jarA.dispose();
+    await replay.dispose();
+    await jar.dispose();
   }
 });
 
-test("E2E-AUTH-14: deactivation, demotion and deletion take effect on the next request", async ({ admin }) => {
+test("E2E-AUTH-14: deactivation, demotion and deletion take effect on the next API request", async ({ admin }) => {
   test.setTimeout(180_000);
-
-  // Each round owns its own manager-role subject: deactivate and delete would
-  // otherwise break every later test that needs manager_user usable.
   for (const round of ["deactivate", "demote", "delete"] as const) {
     const username = disposableName(`auth14-${round}`);
     const password = "Auth14-e2e-Pass1!";
     await createUser(admin, username, password, "manager");
     const uid = await userID(username);
-
-    const jarA = await newJar();
+    const jar = await newJar();
     try {
-      await loginOrThrow(jarA, { username, password });
-      expect((await jarA.get("/issue")).status(), `${round}: the subject starts as a working manager`).toBe(200);
-
+      await loginOrThrow(jar, { username, password });
+      expect((await jar.get("/api/v1/certificates/options")).status()).toBe(200);
       if (round === "deactivate") {
-        await adminUserAction(admin, { action: "toggle_active", uid });
-        const res = await jarA.get("/issue");
-        expect(res.status(), "deactivate ends the session").toBe(302);
-        expect(res.headers()["location"]).toBe("/login");
-        expect(res.headers()["set-cookie"] ?? "", "the session cookie is overwritten").toContain("certharbor=");
-      }
-
-      if (round === "demote") {
-        await adminUserAction(admin, { action: "change_role", uid, role: "viewer" });
-
-        // UpdateUserRole bumps the epoch, so the old session is rejected first.
-        const rejected = await jarA.get("/");
-        expect(rejected.status(), "the pre-demotion session is rejected").toBe(302);
-        expect(rejected.headers()["location"]).toBe("/login");
-
-        // On a new session RequireRole reads the role from the row RequireLogin
-        // cached in the request context, not from the cookie.
-        await loginOrThrow(jarA, { username, password });
-        expect((await jarA.get("/")).status(), "the demoted user can still sign in").toBe(200);
-        const forbidden = await jarA.get("/issue");
-        expect(forbidden.status(), "but no longer reaches a manager route").toBe(403);
-        expect(await forbidden.text()).toBe("403 Forbidden\n");
-      }
-
-      if (round === "delete") {
-        await adminUserAction(admin, { action: "delete", uid });
-        const res = await jarA.get("/issue");
-        // loadUser finds no row, so RequireLogin rejects on the existence check
-        // before the epoch comparison. A 500 here would be the regression.
-        expect(res.status(), "delete ends the session without a 500").toBe(302);
-        expect(res.headers()["location"]).toBe("/login");
-        expect(res.headers()["set-cookie"] ?? "", "the session cookie is overwritten").toContain("certharbor=");
+        await adminPatchUser(admin, uid, { isActive: false });
+        expect((await jar.get("/api/v1/certificates/options")).status()).toBe(401);
+      } else if (round === "demote") {
+        await adminPatchUser(admin, uid, { role: "viewer" });
+        expect((await jar.get("/api/v1/profile")).status()).toBe(401);
+        await loginOrThrow(jar, { username, password });
+        expect((await jar.get("/api/v1/profile")).status()).toBe(200);
+        expect((await jar.get("/api/v1/certificates/options")).status()).toBe(403);
+      } else {
+        expect((await apiMutation(admin.ctx, "DELETE", `/api/v1/users/${uid}`)).status()).toBe(204);
+        expect((await jar.get("/api/v1/certificates/options")).status(), "deletion rejects rather than panics").toBe(401);
       }
     } finally {
-      await jarA.dispose();
+      await jar.dispose();
     }
   }
 });
 
 test("E2E-AUTH-15: a password change evicts other sessions but not the acting one", async ({ admin }) => {
   test.setTimeout(180_000);
-
   const password = "Auth15-e2e-Pass1!";
   const changed = "Auth15-e2e-Changed1!";
-
-  // Round 1: the user changes their own password. Two independent jars, since
-  // the property only holds across two of them.
   const self = disposableName("auth15-self");
   await createUser(admin, self, password, "viewer");
   const jarA = await newJar();
@@ -124,54 +78,28 @@ test("E2E-AUTH-15: a password change evicts other sessions but not the acting on
   try {
     await loginOrThrow(jarA, { username: self, password });
     await loginOrThrow(jarB, { username: self, password });
-    expect((await jarA.get("/")).status()).toBe(200);
-    expect((await jarB.get("/")).status()).toBe(200);
-
-    const token = await csrfTokenFrom(jarA, "/profile");
-    const res = await jarA.post("/profile", {
-      form: {
-        action: "change_password",
-        current_password: password,
-        new_password: changed,
-        confirm_password: changed,
-        csrf_token: token,
-      },
-    });
-    expect([302, 303]).toContain(res.status());
-
-    // The handler re-stamps the acting session with the freshly bumped epoch, so
-    // a user is not thrown out of the page they changed their password on.
-    expect((await jarA.get("/profile")).status(), "the acting session survives").toBe(200);
-
-    const evicted = await jarB.get("/");
-    expect(evicted.status(), "every other session is revoked").toBe(302);
-    expect(evicted.headers()["location"]).toBe("/login");
+    const changedPassword = await apiMutation(jarA, "POST", "/api/v1/profile/password", { currentPassword: password, newPassword: changed });
+    expect(changedPassword.status()).toBe(204);
+    expect((await jarA.get("/api/v1/profile")).status(), "the acting session survives").toBe(200);
+    expect((await jarB.get("/api/v1/profile")).status(), "the other session is evicted").toBe(401);
   } finally {
     await jarA.dispose();
     await jarB.dispose();
   }
 
-  // Round 2: an administrator resets someone else's password. No acting session
-  // to preserve, so every session for the target is revoked.
   const target = disposableName("auth15-reset");
   await createUser(admin, target, password, "viewer");
   const uid = await userID(target);
   const victim = await newJar();
   try {
     await loginOrThrow(victim, { username: target, password });
-    expect((await victim.get("/")).status()).toBe(200);
-
-    await adminUserAction(admin, { action: "reset_password", uid, new_password: changed });
-
-    const res = await victim.get("/");
-    expect(res.status(), "an admin reset evicts the target's sessions").toBe(302);
-    expect(res.headers()["location"]).toBe("/login");
-
+    const reset = await apiMutation(admin.ctx, "POST", `/api/v1/users/${uid}/password-reset`, { newPassword: changed });
+    expect(reset.status()).toBe(200);
+    expect((await victim.get("/api/v1/profile")).status(), "an admin reset evicts target sessions").toBe(401);
     const reauth = await newJar();
-    await loginOrThrow(reauth, { username: target, password: changed });
-    expect((await reauth.get("/")).status(), "and the new password works").toBe(200);
-    await reauth.dispose();
-  } finally {
-    await victim.dispose();
-  }
+    try {
+      await loginOrThrow(reauth, { username: target, password: changed });
+      expect((await reauth.get("/api/v1/profile")).status()).toBe(200);
+    } finally { await reauth.dispose(); }
+  } finally { await victim.dispose(); }
 });

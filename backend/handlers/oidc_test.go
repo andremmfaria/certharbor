@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -119,7 +118,6 @@ func newTestHandlerOIDC(t *testing.T, cfg *config.Config, store *sessions.Cookie
 		db:    nil,
 		cfg:   cfg,
 		store: store,
-		tmpls: make(map[string]*template.Template),
 	}
 	h.oidcOAuth2Config = &oauth2.Config{
 		ClientID:     cfg.OIDCClientID,
@@ -343,7 +341,6 @@ func TestOIDCCallback_ValidStateThenDBError(t *testing.T) {
 		db:    (*sql.DB)(nil),
 		cfg:   cfg,
 		store: store,
-		tmpls: make(map[string]*template.Template),
 	}
 	h.oidcOAuth2Config = &oauth2.Config{
 		ClientID:     clientID,
