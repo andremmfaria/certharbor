@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"encoding/base32"
 	"image/png"
 	"net/http"
 	"strings"
@@ -64,9 +65,22 @@ func (h *Handler) StartMfaEnrollment(userID int) (string, error) {
 // buildTOTPQRPNG renders a TOTP QR code as a PNG, pure of any database
 // access so it can be unit tested without the integration DB (R23: the one
 // genuinely new piece of logic in this batch, the rest is extraction).
+//
+// secret is the base32 string already stored in TOTPPendingSecret/TOTPSecret
+// (itself the output of a prior totp.Generate's key.Secret()). GenerateOpts.Secret
+// takes raw bytes and base32-encodes them itself (pquerna/otp/totp.go), so
+// passing the base32 string's bytes directly double-encodes it: the QR then
+// carries a different secret than the one ConfirmMfaEnrollment/APIVerifyMFA
+// validate against, and no authenticator app scanning it will ever produce a
+// matching code. Decoding back to raw bytes first keeps the QR's secret
+// identical to the one already persisted and verified against.
 func buildTOTPQRPNG(accountName, secret string) ([]byte, error) {
+	raw, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(secret)
+	if err != nil {
+		return nil, err
+	}
 	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer: totpIssuer, AccountName: accountName, Secret: []byte(secret),
+		Issuer: totpIssuer, AccountName: accountName, Secret: raw,
 	})
 	if err != nil {
 		return nil, err

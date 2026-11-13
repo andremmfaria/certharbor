@@ -45,7 +45,19 @@ async function startEnrollmentViaUi(page: Page): Promise<string> {
   return rendered!;
 }
 
-/** Drives the confirm step with a valid code and dismisses the recovery-codes step, landing on the disable form. */
+/**
+ * Drives the confirm step with a valid code and dismisses the recovery-codes
+ * step, landing on the disable form.
+ *
+ * confirmMfaEnrollment's onSuccess invalidates the profile/mfa query (api/mfa.ts),
+ * which refetches GET /api/v1/profile/mfa in the background and re-renders
+ * MfaPage's status-driven form once it resolves. "mfa-disable" is visible as
+ * soon as the optimistic client-side state flips to enabled, before that
+ * refetch lands — filling the form in that window races the refetch's
+ * re-render and the just-typed values are wiped. Waiting for the fetched
+ * status text (not just the testid, which both the optimistic and the
+ * refetched render satisfy) ensures the refetch has already settled.
+ */
 async function confirmEnrollmentViaUi(page: Page, secret: string): Promise<void> {
   const enrollment = page.getByTestId("mfa-enrollment");
   await enrollment.getByLabel("Code from your authenticator app").fill(await totpNow(secret));
@@ -53,6 +65,7 @@ async function confirmEnrollmentViaUi(page: Page, secret: string): Promise<void>
   await expect(page.getByTestId("mfa-recovery-codes")).toBeVisible();
   await page.getByRole("button", { name: "I've saved these codes" }).click();
   await expect(page.getByTestId("mfa-disable")).toBeVisible();
+  await expect(page.getByText("Two-factor authentication is enabled on this account.")).toBeVisible();
 }
 
 test("E2E-MFA-01: enroll, confirm, see recovery codes once, then disable with dual reauth", async ({
@@ -159,6 +172,7 @@ test("E2E-MFA-04: disabling with a wrong password but a fresh code is refused, M
   await confirmEnrollmentViaUi(page, secret);
 
   await page.getByLabel("Current password").fill("not-the-password");
+  await expect(page.getByLabel("Current password")).toHaveValue("not-the-password");
   await page.getByLabel("Authenticator code").fill(await totpNow(secret));
   await page.getByRole("button", { name: "Disable 2FA" }).click();
 
